@@ -16,3 +16,14 @@ vim.opt.scrolloff = 8
 vim.opt.updatetime = 50
 
 vim.opt.colorcolumn = "80"
+
+vim.diagnostic.config({
+    virtual_lines = true,
+    underline = true,
+    severity_sort = true,
+    float = {
+        border = "rounded",
+        source = true,
+        scope = "buffer"
+    }
+})
