@@ -19,16 +19,11 @@ map('n', '<leader>fs', builtin.live_grep, {})
 
 local mark = require("harpoon.mark")
 local ui = require("harpoon.ui")
-map("n", "<leader>a", function() 
+map("n", "<leader>a", function()
     mark.add_file()
     print("Harpooned " .. vim.fn.expand('%:t'))
-end) 
+end)
 map("n", "<C-h>", ui.toggle_quick_menu)
 map("n", "<C-j>", function() ui.nav_file(1) end)
 map("n", "<C-k>", function() ui.nav_file(2) end)
 map("n", "<C-l>", function() ui.nav_file(3) end)
-
--- LSP
-map("n", "K", vim.lsp.buf.hover, {})
-
-
