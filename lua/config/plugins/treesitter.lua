@@ -5,7 +5,7 @@ return {
     build = ":TSUpdate",
     opts = {
 	  -- A list of parser names, or "all" (the listed parsers MUST always be installed)
-	  ensure_installed = { "c", "lua", "vim", "vimdoc", "markdown", "markdown_inline", "typescript", "javascript", "c_sharp"},
+	  ensure_installed = { "c", "lua", "vim", "vimdoc", "markdown", "markdown_inline", "typescript", "javascript", "tsx", "jsx", "c_sharp"},
 
 	  -- Install parsers synchronously (only applied to `ensure_installed`)
 	  sync_install = false,
