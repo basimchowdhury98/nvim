@@ -4,3 +4,4 @@ vim.g.maplocalleader = "\\"
 require("initlazy")
 require("keymaps")
 require("set")
+require("commands")
