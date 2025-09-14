@@ -12,6 +12,7 @@ return {
       "prichrd/netrw.nvim",
       opts = {},
       config = function()
+          require("mini.icons").setup()
           require("netrw").setup({
               use_devicons = true,
               -- other options
