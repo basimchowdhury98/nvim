@@ -30,7 +30,7 @@ map("n", "<C-k>", function() ui.nav_file(2) end)
 map("n", "<C-l>", function() ui.nav_file(3) end)
 
 vim.api.nvim_create_autocmd("LspAttach", {
-    group = vim.api.nvim_create_augroup('UserLspConfig', { clear = true }),
+    group = vim.api.nvim_create_augroup('lsp-keymaps', { clear = true }),
     callback = function(event)
         map("n", "H", vim.lsp.buf.hover, { desc= "Lsp - show hover info", buffer = event.buf })
         map("n", "<leader>gd", vim.lsp.buf.definition, { desc= "Lsp - go to definition", buffer = event.buf })
