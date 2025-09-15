@@ -12,6 +12,7 @@ map("n", "]d", vim.diagnostic.goto_next, { desc = "Next diagnostic" })
 map("n", "[d", vim.diagnostic.goto_prev, { desc = "Previous diagnostic" })
 
 local builtin = require('telescope.builtin')
+local telescope = require('telescope')
 map('n', '<leader>ff', builtin.find_files, { desc = "Find all files" })
 map('n', '<leader>fg', builtin.git_files, { desc = "Find git files" })
 map('n', '<leader>fs', builtin.live_grep, { desc = "Find by regex/live grep" })
@@ -19,6 +20,7 @@ map('n', '<leader>ft', builtin.treesitter, { desc = "Find symbols using treesitt
 map('n', '<leader>fr', builtin.resume, { desc = "Resume last telescope search" })
 map('n', '<leader>fo', builtin.oldfiles, { desc = "Find previously opened files" })
 map('n', '<leader>fk', builtin.keymaps, { desc = "Find keymaps"})
+map('n', '<leader>fp', telescope.extensions.project.project, { desc = "Find projects"})
 
 local mark = require("harpoon.mark")
 local ui = require("harpoon.ui")
