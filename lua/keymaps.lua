@@ -11,6 +11,8 @@ map({ "n", "v" }, "<leader>y", "\"+y", { desc = "Copy to system clipboard" })
 map("n", "]d", vim.diagnostic.goto_next, { desc = "Next diagnostic" })
 map("n", "[d", vim.diagnostic.goto_prev, { desc = "Previous diagnostic" })
 map('t', '<Esc>', '<C-\\><C-n>', { desc = 'Exit terminal mode' })
+map('n', '<leader>cc', 'gcc', { remap = true, desc = 'Comment line' })
+map('v', '<leader>cc', 'gc', { remap = true, desc = 'Comment selection' })
 
 local builtin = require('telescope.builtin')
 local telescope = require('telescope')
