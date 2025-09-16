@@ -13,6 +13,11 @@ map("n", "[d", vim.diagnostic.goto_prev, { desc = "Previous diagnostic" })
 map('t', '<Esc>', '<C-\\><C-n>', { desc = 'Exit terminal mode' })
 map('n', '<leader>cc', 'gcc', { remap = true, desc = 'Comment line' })
 map('v', '<leader>cc', 'gc', { remap = true, desc = 'Comment selection' })
+map('n', '<leader>kp', function()
+  local path = vim.fn.expand('%:p')
+  vim.fn.setreg('+', path)  -- system clipboard
+  vim.fn.setreg('"', path)  -- default yank register
+end, { desc = "Copy current buffer path" } )
 
 local builtin = require('telescope.builtin')
 local telescope = require('telescope')

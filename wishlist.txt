@@ -1,1 +1,6 @@
 * gruvbox-material colorscheme (from the How To Configure Lsp Natively Adin Hanna vid)
+* snippets
+* better file copying/creating
+* dotnet solution explorer
+* omnisharp issues
+* Following the cursor as it moves when switching file (in the roslyn.nvim video)
