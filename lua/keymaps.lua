@@ -14,10 +14,10 @@ map('t', '<Esc>', '<C-\\><C-n>', { desc = 'Exit terminal mode' })
 map('n', '<leader>cc', 'gcc', { remap = true, desc = 'Comment line' })
 map('v', '<leader>cc', 'gc', { remap = true, desc = 'Comment selection' })
 map('n', '<leader>kp', function()
-  local path = vim.fn.expand('%:p')
-  vim.fn.setreg('+', path)  -- system clipboard
-  vim.fn.setreg('"', path)  -- default yank register
-end, { desc = "Copy current buffer path" } )
+    local path = vim.fn.expand('%:p')
+    vim.fn.setreg('+', path) -- system clipboard
+    vim.fn.setreg('"', path) -- default yank register
+end, { desc = "Copy current buffer path" })
 
 local builtin = require('telescope.builtin')
 local telescope = require('telescope')
@@ -27,8 +27,9 @@ map('n', '<leader>fs', builtin.live_grep, { desc = "Find by regex/live grep" })
 map('n', '<leader>ft', builtin.treesitter, { desc = "Find symbols using treesitter" })
 map('n', '<leader>fr', builtin.resume, { desc = "Resume last telescope search" })
 map('n', '<leader>fo', builtin.oldfiles, { desc = "Find previously opened files" })
-map('n', '<leader>fk', builtin.keymaps, { desc = "Find keymaps"})
-map('n', '<leader>fp', telescope.extensions.project.project, { desc = "Find projects"})
+map('n', '<leader>fk', builtin.keymaps, { desc = "Find keymaps" })
+map('n', '<leader>fp', telescope.extensions.project.project, { desc = "Find projects" })
+map('n', '<leader>fb', ':Telescope file_browser<CR>', { desc = "Open telescope file browser" })
 
 local mark = require("harpoon.mark")
 local ui = require("harpoon.ui")
@@ -42,11 +43,12 @@ map("n", "<C-l>", function() ui.nav_file(3) end)
 vim.api.nvim_create_autocmd("LspAttach", {
     group = vim.api.nvim_create_augroup('lsp-keymaps', { clear = true }),
     callback = function(event)
-        map("n", "H", vim.lsp.buf.hover, { desc= "Lsp - show hover info", buffer = event.buf })
-        map("n", "<leader>gd", vim.lsp.buf.definition, { desc= "Lsp - go to definition", buffer = event.buf })
-        map({ "n", "v" }, "<leader>ca", vim.lsp.buf.code_action, { desc= "Lsp - code actions", buffer = event.buf })
-        map({ "n", "v" }, "<leader>cf", vim.lsp.buf.format, { desc= "Lsp - format code in file", buffer = event.buf })
-        map({ "n", "v" }, "<leader>cr", vim.lsp.buf.rename, { desc= "Lsp - rename symbol under cursor", buffer = event.buf })
+        map("n", "H", vim.lsp.buf.hover, { desc = "Lsp - show hover info", buffer = event.buf })
+        map("n", "<leader>gd", vim.lsp.buf.definition, { desc = "Lsp - go to definition", buffer = event.buf })
+        map({ "n", "v" }, "<leader>ca", vim.lsp.buf.code_action, { desc = "Lsp - code actions", buffer = event.buf })
+        map({ "n", "v" }, "<leader>cf", vim.lsp.buf.format, { desc = "Lsp - format code in file", buffer = event.buf })
+        map({ "n", "v" }, "<leader>cr", vim.lsp.buf.rename,
+            { desc = "Lsp - rename symbol under cursor", buffer = event.buf })
     end
 })
 

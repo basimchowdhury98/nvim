@@ -2,7 +2,12 @@ return {
     {
         "mason-org/mason.nvim",
         config = function()
-            require("mason").setup()
+            require("mason").setup({
+                registries = {
+                    "github:mason-org/mason-registry",
+                    "github:Crashdummyy/mason-registry",
+                }
+            })
         end
     },
     {
@@ -11,8 +16,7 @@ return {
             require("mason-lspconfig").setup({
                 ensure_installed = {
                     "lua_ls",
-                    "ts_ls",
-                    "omnisharp"
+                    "ts_ls"
                 },
                 handlers = {
                     function(server_name)
@@ -27,5 +31,13 @@ return {
     },
     {
         "neovim/nvim-lspconfig"
+    },
+    {
+        "seblyng/roslyn.nvim",
+        ---@module 'roslyn.config'
+        ---@type RoslynNvimConfig
+        opts = {
+            -- your configuration comes here; leave empty for default settings
+        },
     }
 }
