@@ -42,3 +42,7 @@ vim.api.nvim_create_autocmd("LspAttach", {
         map({ "n", "v" }, "<leader>cr", vim.lsp.buf.rename, { desc= "Lsp - rename symbol under cursor", buffer = event.buf })
     end
 })
+
+local terminal = require('utils.terminal')
+map('n', '<leader>tt', terminal.toggle, { desc = "Toggle the floating terminal" })
+map('t', '<Esc><Esc>', terminal.close, { desc = "Close the floating terminal" })
