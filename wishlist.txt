@@ -1,0 +1,1 @@
+* gruvbox-material colorscheme (from the How To Configure Lsp Natively Adin Hanna vid)
