@@ -34,7 +34,6 @@ map('n', '<leader>fb', ':Telescope file_browser<CR>', { desc = "Open telescope f
 local mark = require("harpoon.mark")
 local ui = require("harpoon.ui")
 map("n", "<leader>a", mark.add_file, { desc = "Add file to harpoon" })
-map("n", "<leader>A", mark.clear_all, { desc = "Clear all files from harpoon" })
 map("n", "<C-h>", ui.toggle_quick_menu, { desc = "Toggle harpoon menu" })
 map("n", "<C-j>", ui.nav_next, { desc = "Navigate to next/down harpooned mark" })
 map("n", "<C-k>", ui.nav_prev, { desc = "Navigate to prev/up harpooned mark" })
