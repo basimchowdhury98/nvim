@@ -36,9 +36,8 @@ local ui = require("harpoon.ui")
 map("n", "<leader>a", mark.add_file, { desc = "Add file to harpoon" })
 map("n", "<leader>A", mark.clear_all, { desc = "Clear all files from harpoon" })
 map("n", "<C-h>", ui.toggle_quick_menu, { desc = "Toggle harpoon menu" })
-map("n", "<C-j>", function() ui.nav_file(1) end)
-map("n", "<C-k>", function() ui.nav_file(2) end)
-map("n", "<C-l>", function() ui.nav_file(3) end)
+map("n", "<C-j>", ui.nav_next, { desc = "Navigate to next/down harpooned mark" })
+map("n", "<C-k>", ui.nav_prev, { desc = "Navigate to prev/up harpooned mark" })
 
 vim.api.nvim_create_autocmd("LspAttach", {
     group = vim.api.nvim_create_augroup('lsp-keymaps', { clear = true }),
@@ -47,11 +46,11 @@ vim.api.nvim_create_autocmd("LspAttach", {
         map("n", "<leader>gd", vim.lsp.buf.definition, { desc = "Lsp - go to definition", buffer = event.buf })
         map({ "n", "v" }, "<leader>ca", vim.lsp.buf.code_action, { desc = "Lsp - code actions", buffer = event.buf })
         map({ "n", "v" }, "<leader>cf", vim.lsp.buf.format, { desc = "Lsp - format code in file", buffer = event.buf })
-        map({ "n", "v" }, "<leader>cr", vim.lsp.buf.rename,
-            { desc = "Lsp - rename symbol under cursor", buffer = event.buf })
+        map({ "n", "v" }, "<leader>cr", vim.lsp.buf.rename, { desc = "Lsp - rename symbol under cursor", buffer = event.buf })
     end
 })
 
 local terminal = require('utils.terminal')
 map('n', '<leader>tt', terminal.toggle, { desc = "Toggle the floating terminal" })
 map('t', '<Esc><Esc>', terminal.close, { desc = "Close the floating terminal" })
+map('n', '<leader>tk', terminal.kill, { desc = "Kill the floating terminal" })

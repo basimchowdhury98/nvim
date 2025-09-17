@@ -20,7 +20,9 @@ vim.opt.updatetime = 50
 vim.opt.colorcolumn = "120"
 
 vim.diagnostic.config({
-    virtual_lines = true,
+    virtual_lines = {
+        current_line = true
+    },
     underline = true,
     severity_sort = true,
     float = {

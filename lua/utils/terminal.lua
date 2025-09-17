@@ -112,4 +112,18 @@ function M.get_win_id()
   return state.win_id
 end
 
+function M.kill()
+    close_terminal()
+    if state.term_job_id then
+        vim.fn.jobstop(state.term_job_id)
+        state.term_job_id = nil
+    end
+    if state.buf_id and vim.api.nvim_buf_is_valid(state.buf_id) then
+        vim.api.nvim_buf_delete(state.buf_id, { force = true })
+        state.buf_id = nil
+    end
+
+    print("Killed floating terminal")
+end
+
 return M
