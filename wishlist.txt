@@ -4,3 +4,4 @@
 * dotnet solution explorer
 * omnisharp issues
 * Following the cursor as it moves when switching file (in the roslyn.nvim video)
+* Why does it start up so slow?
