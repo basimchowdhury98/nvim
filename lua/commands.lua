@@ -1,4 +1,4 @@
-vim.api.nvim_create_user_command("Nconfig", function()
+vim.api.nvim_create_user_command("NVconfig", function()
     local nvim_path = vim.fn.getenv('NVIM')
     if nvim_path == vim.NIL or nvim_path == '' then
         print("Error: $NVIM environment variable not set!")
