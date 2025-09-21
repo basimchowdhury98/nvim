@@ -1,4 +1,4 @@
-vim.cmd.colorscheme("tokyonight")
+vim.cmd.colorscheme("gruvbox-material")
 
 vim.opt.nu = true
 vim.opt.relativenumber = true
