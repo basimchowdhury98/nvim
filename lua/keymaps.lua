@@ -47,6 +47,7 @@ vim.api.nvim_create_autocmd("LspAttach", {
         map("n", "H", vim.lsp.buf.hover, { desc = "Lsp - show hover info", buffer = event.buf })
         map("n", "<leader>gd", vim.lsp.buf.definition, { desc = "Lsp - go to definition", buffer = event.buf })
         map("n", "<leader>gi", vim.lsp.buf.implementation, { desc = "Lsp - go to definition", buffer = event.buf })
+        map("n", "<leader>gr", vim.lsp.buf.references, { desc = "Lsp - list all references", buffer = event.buf })
         map({ "n", "v" }, "<leader>ca", vim.lsp.buf.code_action, { desc = "Lsp - code actions", buffer = event.buf })
         map({ "n", "v" }, "<leader>cf", vim.lsp.buf.format, { desc = "Lsp - format code in file", buffer = event.buf })
         map({ "n", "v" }, "<leader>cr", vim.lsp.buf.rename, { desc = "Lsp - rename symbol under cursor", buffer = event.buf })
