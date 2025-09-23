@@ -14,11 +14,21 @@ map("n", "<leader>dd", vim.diagnostic.open_float, { desc = "Opens float with all
 map('t', '<Esc>', '<C-\\><C-n>', { desc = 'Exit terminal mode' })
 map('n', '<leader>cc', 'gcc', { remap = true, desc = 'Comment line' })
 map('v', '<leader>cc', 'gc', { remap = true, desc = 'Comment selection' })
+
 map('n', '<leader>kp', function()
     local path = vim.fn.expand('%:p')
     vim.fn.setreg('+', path) -- system clipboard
     vim.fn.setreg('"', path) -- default yank register
 end, { desc = "Copy current buffer path" })
+
+map('n', '<Esc><Esc>', function()
+  for _, win in pairs(vim.api.nvim_list_wins()) do
+    local config = vim.api.nvim_win_get_config(win)
+    if config.relative ~= '' then -- floating window
+      vim.api.nvim_win_close(win, false)
+    end
+  end
+end, { desc = 'Close floating windows' })
 
 local builtin = require('telescope.builtin')
 local telescope = require('telescope')
