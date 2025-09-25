@@ -1,4 +1,3 @@
-* gruvbox-material colorscheme (from the How To Configure Lsp Natively Adin Hanna vid)
 * snippets
 * better file copying/creating
 * dotnet solution explorer

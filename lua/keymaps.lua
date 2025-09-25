@@ -1,8 +1,8 @@
 local map = vim.keymap.set
 
 map("n", "<leader>e", vim.cmd.Ex, { desc = "Open netrw/file explorer" })
-map("v", "J", ":m '>+1<CR>gv=gv", { desc = "Move selected line down" })
-map("v", "K", ":m '<-2<CR>gv=gv", { desc = "Move slected line up" })
+map("v", "D", ":m '>+1<CR>gv=gv", { desc = "Move selected line down" })
+map("v", "U", ":m '<-2<CR>gv=gv", { desc = "Move slected line up" })
 map("n", "<C-d>", "<C-d>zz", { desc = "Scroll down" })
 map("n", "<C-u>", "<C-u>zz", { desc = "Scroll up" })
 map("n", "n", "nzzzv", { desc = "" })
