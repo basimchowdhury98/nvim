@@ -24,6 +24,7 @@ return {
                     { name = 'nvim_lsp' },
                     { name = 'nvim_lua' },
                     { name = 'luasnip' },
+                    { name = 'nvim_lsp_signature_help' }
                 }, {
                     { name = 'buffer' },
                 })
@@ -47,5 +48,8 @@ return {
     },
     {
         "saadparwaiz1/cmp_luasnip"
+    },
+    {
+        "hrsh7th/cmp-nvim-lsp-signature-help"
     }
 }

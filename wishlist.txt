@@ -6,4 +6,3 @@
 * Open terminal from curr buffer path
 * Create c# class templates
 * C-v pasted but should it be visual block?
-* Show method params as im filling it out
