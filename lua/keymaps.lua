@@ -14,6 +14,7 @@ map("n", "<leader>dd", vim.diagnostic.open_float, { desc = "Opens float with all
 map('t', '<Esc>', '<C-\\><C-n>', { desc = 'Exit terminal mode' })
 map('n', '<leader>cc', 'gcc', { remap = true, desc = 'Comment line' })
 map('v', '<leader>cc', 'gc', { remap = true, desc = 'Comment selection' })
+map('v', 'J', 'j', { remap = true, desc = 'Remapped J to j to stop merging line under on accident' })
 
 map('n', '<leader>kp', function()
     local path = vim.fn.expand('%:p')

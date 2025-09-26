@@ -12,3 +12,5 @@ vim.api.nvim_create_user_command("NVIM", function()
 
     vim.cmd("Vexplore " .. nvim_path)
 end, {})
+
+vim.api.nvim_create_user_command('W', 'w', { desc = "W equals w because my fingers are fat" })
