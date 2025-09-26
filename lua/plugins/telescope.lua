@@ -7,28 +7,29 @@ return
     },
     {
         'nvim-telescope/telescope-ui-select.nvim',
-        config = function()
-            require('telescope').setup({
-                extensions = {
-                    ['ui-select'] = {
-                        require('telescope.themes').get_dropdown {
-                        }
-                    }
-                }
-            })
-            require('telescope').load_extension('ui-select')
-        end
     },
     {
         'nvim-telescope/telescope-project.nvim',
         config = function()
+            require('telescope').setup({
+                defaults = {
+                    layout_config = {
+                        width = 0.9,  -- 90% of screen width
+                        height = 0.8, -- 80% of screen height
+                    },
+                },
+                extensions = {
+                    ['ui-select'] = {
+                        require('telescope.themes').get_dropdown {
+                        }
+                    },
+                    file_browser = {
+                        hijack_netrw = true
+                    }
+                }
+            })
+            require('telescope').load_extension('ui-select')
             require('telescope').load_extension('project');
-        end,
-    },
-    {
-        "nvim-telescope/telescope-file-browser.nvim",
-        config = function()
-            require('telescope').load_extension('file_browser');
         end,
     }
 }
