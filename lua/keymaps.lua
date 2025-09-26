@@ -87,3 +87,25 @@ local terminal = require('utils.terminal')
 map('n', '<leader>tt', terminal.toggle, { desc = "Toggle the floating terminal" })
 map({ 't', 'n' }, '<Esc><Esc>', terminal.close, { desc = "Close the floating terminal" })
 map('n', '<leader>tk', terminal.kill, { desc = "Kill the floating terminal" })
+
+
+local ls = require("luasnip")
+
+vim.keymap.set({"i", "s"}, "<C-k>", function() 
+    if ls.expand_or_jumpable() then
+        ls.expand_or_jump()
+    end
+end, {silent = true})
+vim.keymap.set({"i", "s"}, "<C-j>", function()  
+    if ls.jumpable(-1) then
+        ls.jump(-1)
+    end
+end, {silent = true})
+vim.keymap.set({"i", "s"}, "<C-J>", function() 
+    if ls.choice_active() then
+        ls.change_choice(1)
+    end
+end, {silent = true})
+
+-- Load VS Code style snippets
+require("luasnip.loaders.from_vscode").lazy_load()
