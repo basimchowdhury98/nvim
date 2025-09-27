@@ -41,6 +41,7 @@ map('n', '<leader>fk', builtin.keymaps, { desc = "[F]ind [K]eymaps" })
 map('n', '<leader>fp', telescope.extensions.project.project, { desc = "[F]ind [P]roject" })
 map('n', '<leader>fh', builtin.help_tags, { desc = "[F]ind in [H]elp" })
 map('n', '<leader>fo', builtin.buffers, { desc = "[F]ind [O]pen buffers" })
+map('n', '<leader>fc', builtin.colorscheme, { desc = "[F]ind [C]olorscheme" })
 vim.keymap.set('n', '<leader>fj', function()
     -- Setting custom style for searching within a file
     builtin.current_buffer_fuzzy_find(require('telescope.themes').get_dropdown {
