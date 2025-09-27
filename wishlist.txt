@@ -7,4 +7,3 @@
 * Create c# class templates
 * C-v pasted but should it be visual block?
 * Lsp always needs restarts for new files
-* Kickstart stuff like more telescope pickers (help, nvim config)
