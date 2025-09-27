@@ -57,9 +57,9 @@ end, { desc = '[F]ind in [N]eovim config' })
 vim.keymap.set('n', '<leader>fs', function()
     builtin.live_grep {
         grep_open_files = true,
-        prompt_title = '[F]ind by [S]earching open files',
+        prompt_title = 'Grep Open Files',
     }
-end, { desc = '[S]earch [/] in Open Files' })
+end, { desc = '[F]ind by [S]earching open files' })
 
 local mark = require("harpoon.mark")
 local ui = require("harpoon.ui")
@@ -79,8 +79,7 @@ vim.api.nvim_create_autocmd("LspAttach", {
         map("n", "<leader>gr", vim.lsp.buf.references, { desc = "Lsp - list all references", buffer = event.buf })
         map({ "n", "v" }, "<leader>ca", vim.lsp.buf.code_action, { desc = "Lsp - code actions", buffer = event.buf })
         map({ "n", "v" }, "<leader>cf", vim.lsp.buf.format, { desc = "Lsp - format code in file", buffer = event.buf })
-        map({ "n", "v" }, "<leader>cr", vim.lsp.buf.rename,
-            { desc = "Lsp - rename symbol under cursor", buffer = event.buf })
+        map({ "n", "v" }, "<leader>cr", vim.lsp.buf.rename, { desc = "Lsp - rename symbol under cursor", buffer = event.buf })
     end
 })
 
@@ -108,5 +107,3 @@ vim.keymap.set({"i", "s"}, "<C-J>", function()
     end
 end, {silent = true})
 
--- Load VS Code style snippets
-require("luasnip.loaders.from_vscode").lazy_load()
