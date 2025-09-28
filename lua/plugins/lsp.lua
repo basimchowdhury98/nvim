@@ -6,7 +6,6 @@ return {
             "mason-org/mason-lspconfig.nvim",
             "L3MON4D3/LuaSnip",
             "mason-org/mason.nvim",
-            'folke/lazydev.nvim',
             "rafamadriz/friendly-snippets", --premade snippets
             {
                 'saghen/blink.cmp',
@@ -60,5 +59,15 @@ return {
         ---@type RoslynNvimConfig
         opts = {
         },
+    },
+    {
+        'folke/lazydev.nvim',
+        ft = 'lua',
+        opts = {
+            library = {
+                -- Load luvit types when the `vim.uv` word is found
+                { path = '${3rd}/luv/library', words = { 'vim%.uv' } },
+            },
+        }
     }
 }
