@@ -17,7 +17,7 @@ return {
                         nerd_font_variant = 'mono'
                     },
                     sources = {
-                        default = { 'lsp', 'path', 'snippets', 'lazydev' },
+                        default = { 'lsp', 'path', 'snippets', 'lazydev', 'buffer' },
                         providers = {
                             lazydev = { module = 'lazydev.integrations.blink', score_offset = 100 }
                         }

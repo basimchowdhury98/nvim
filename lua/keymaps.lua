@@ -105,4 +105,3 @@ vim.keymap.set({"i", "s"}, "<C-J>", function()
         ls.change_choice(1)
     end
 end, {silent = true})
-

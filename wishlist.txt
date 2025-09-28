@@ -1,9 +1,5 @@
-* snippets
 * better file copying/creating
 * dotnet solution explorer
-* Following the cursor as it moves when switching file (in the roslyn.nvim video)
-* Why does it start up so slow?
 * Open terminal from curr buffer path
-* Create c# class templates
 * C-v pasted but should it be visual block?
 * Lsp always needs restarts for new files
