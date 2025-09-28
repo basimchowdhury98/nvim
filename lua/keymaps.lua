@@ -45,7 +45,6 @@ map('n', '<leader>fc', builtin.colorscheme, { desc = "[F]ind [C]olorscheme" })
 vim.keymap.set('n', '<leader>fj', function()
     -- Setting custom style for searching within a file
     builtin.current_buffer_fuzzy_find(require('telescope.themes').get_dropdown {
-        winblend = 10,
         previewer = false,
     })
 end, { desc = '[F]ind in [J]ust this file' })
