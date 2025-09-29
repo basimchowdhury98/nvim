@@ -54,7 +54,6 @@ local function create_floating_window()
 
   -- Set window options to match Telescope using modern API
   vim.wo[state.win_id].winhighlight = 'Normal:TelescopeNormal,FloatBorder:TelescopeBorder,Title:TelescopeTitle'
-  vim.wo[state.win_id].winblend = 10
 
   -- Start terminal if not already running (this sets buftype automatically)
   if not state.term_job_id then
