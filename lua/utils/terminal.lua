@@ -30,7 +30,7 @@ local function create_floating_window()
   -- Create buffer if it doesn't exist
   if not state.buf_id or not vim.api.nvim_buf_is_valid(state.buf_id) then
     state.buf_id = vim.api.nvim_create_buf(false, true)
-    
+
     -- Set buffer options using modern API
     vim.bo[state.buf_id].bufhidden = 'hide'
     vim.bo[state.buf_id].swapfile = false
@@ -51,10 +51,10 @@ local function create_floating_window()
 
   -- Create the window
   state.win_id = vim.api.nvim_open_win(state.buf_id, true, win_opts)
-  
+
   -- Set window options to match Telescope using modern API
   vim.wo[state.win_id].winhighlight = 'Normal:TelescopeNormal,FloatBorder:TelescopeBorder,Title:TelescopeTitle'
-  vim.wo[state.win_id].winblend = 0
+  vim.wo[state.win_id].winblend = 10
 
   -- Start terminal if not already running (this sets buftype automatically)
   if not state.term_job_id then
