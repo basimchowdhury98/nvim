@@ -1,4 +1,3 @@
-* better file copying/creating
 * dotnet solution explorer
 * Open terminal from curr buffer path
 * C-v pasted but should it be visual block?
