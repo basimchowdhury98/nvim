@@ -11,7 +11,8 @@ return {
                 'saghen/blink.cmp',
                 opts = {
                     keymap = {
-                        preset = 'default'
+                        preset = 'default',
+                        ['<C-k>'] = false
                     },
                     appearance = {
                         nerd_font_variant = 'mono'
@@ -29,7 +30,32 @@ return {
             },
         },
         config = function()
+            local ls = require("luasnip")
+            ls.config.set_config {
+                history = true,
+                updateevents = "TextChanged,TextChangedI"
+            }
+
+            vim.keymap.set({ "i", "s" }, "<C-j>", function()
+                if ls.expand_or_jumpable() then
+                    ls.expand_or_jump()
+                end
+            end, { silent = true, desc = "[J]ump to next node" })
+            vim.keymap.set({ "i", "s" }, "<C-k>", function()
+                if ls.jumpable(-1) then
+                    ls.jump(-1)
+                end
+            end, { silent = true, desc = "[]Jump back(opposite of j=k) to next node" })
+            vim.keymap.set({ "i", "s" }, "<C-l>", function()
+                if ls.choice_active() then
+                    ls.change_choice(1)
+                end
+            end, { silent = true, desc = "[L]ist next choice" })
+
             require("luasnip.loaders.from_vscode").lazy_load()
+            require("luasnip.loaders.from_lua").lazy_load({ paths = { "./lua/snippets" } })
+
+
             require("mason").setup({
                 registries = {
                     "github:mason-org/mason-registry",
