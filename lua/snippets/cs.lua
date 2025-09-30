@@ -1,15 +1,27 @@
 local ls = require('luasnip')
-local snippet = ls.snippet
-local text = ls.text_node
-local ins = ls.insert_node
+local s = ls.snippet
+local t = ls.text_node
+local i = ls.insert_node
 
 return {
-    snippet("propi", {
-        text("public "),
-        ins(1, "string"),
-        text(" "),
-        ins(2, "PropertyName"),
-        text(" { get; init; }"),
-        ins(0)
-    })
+    s("propi", {
+        t("public "),
+        i(1, "string"),
+        t(" "),
+        i(2, "PropertyName"),
+        t(" { get; init; }"),
+        i(0)
+    }),
+   s("funfact", {
+       t("public async Task Given"),
+       i(1),
+       t("_When"),
+       i(2),
+       t("_Then"),
+       i(3),
+       t({ "()", "{", "\t" }),
+       i(4),
+       t({ "", "}" }),
+       i(0)
+   })
 }
