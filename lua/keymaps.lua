@@ -15,6 +15,7 @@ map('t', '<Esc>', '<C-\\><C-n>', { desc = 'Exit terminal mode' })
 map('n', '<leader>cc', 'gcc', { remap = true, desc = 'Comment line' })
 map('v', '<leader>cc', 'gc', { remap = true, desc = 'Comment selection' })
 map('v', 'J', 'j', { remap = true, desc = 'Remapped J to j to stop merging line under on accident' })
+map('x', "<leader>p", "\"_dP", { desc = "Paste without copying whats pasted over" })
 
 map('n', '<leader>kp', function()
     local path = vim.fn.expand('%:p')
@@ -39,19 +40,6 @@ map("n", "<C-j>", function() ui.nav_file(1) end, { desc = "Navigate to file 1" }
 map("n", "<C-k>", function() ui.nav_file(2) end, { desc = "Navigate to file 2" })
 map("n", "<C-n>", function() ui.nav_file(3) end, { desc = "Navigate to file 3" })
 map("n", "<C-m>", function() ui.nav_file(4) end, { desc = "Navigate to file 4" })
-
-vim.api.nvim_create_autocmd("LspAttach", {
-    group = vim.api.nvim_create_augroup('lsp-keymaps', { clear = true }),
-    callback = function(event)
-        map("n", "H", vim.lsp.buf.hover, { desc = "Lsp - show hover info", buffer = event.buf })
-        map("n", "<leader>gd", vim.lsp.buf.definition, { desc = "Lsp - go to definition", buffer = event.buf })
-        map("n", "<leader>gi", vim.lsp.buf.implementation, { desc = "Lsp - go to definition", buffer = event.buf })
-        map("n", "<leader>gr", vim.lsp.buf.references, { desc = "Lsp - list all references", buffer = event.buf })
-        map({ "n", "v" }, "<leader>ca", vim.lsp.buf.code_action, { desc = "Lsp - code actions", buffer = event.buf })
-        map({ "n", "v" }, "<leader>cf", vim.lsp.buf.format, { desc = "Lsp - format code in file", buffer = event.buf })
-        map({ "n", "v" }, "<leader>cr", vim.lsp.buf.rename, { desc = "Lsp - rename symbol under cursor", buffer = event.buf })
-    end
-})
 
 local terminal = require('utils.terminal')
 map('n', '<leader>tt', terminal.toggle, { desc = "Toggle the floating terminal" })

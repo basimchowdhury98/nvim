@@ -2,3 +2,8 @@
 * Open terminal from curr buffer path
 * C-v pasted but should it be visual block?
 * Lsp always needs restarts for new files
+
+
+Plugin ideas:
+* Terminal that works exactly like editting a buffer
+* Fuzzyfind folder dir explorer - telescope

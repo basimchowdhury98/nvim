@@ -13,15 +13,22 @@ return {
         i(0)
     }),
    s("funfact", {
-       t("public async Task Given"),
+       t({ "[Fact]", "public async Task Given" }),
        i(1),
        t("_When"),
        i(2),
        t("_Then"),
        i(3),
        t({ "()", "{", "\t" }),
-       i(4),
+       i(0),
        t({ "", "}" }),
+   }),
+   s("rof", {
+       t("private readonly "),
+       i(1, "type"),
+       t(" _"),
+       i(2, "fieldName"),
+       t(";"),
        i(0)
    })
 }

@@ -41,20 +41,22 @@ return
 
             local builtin = require('telescope.builtin')
             local telescope = require('telescope')
+            local themes = require('telescope.themes')
 
             local map = vim.keymap.set
-            map('n', '<leader>ff', builtin.find_files, { desc = "[F]ind all [F]iles" })
-            map('n', '<leader>fg', builtin.git_files, { desc = "[F]ind [G]it files" })
+            map('n', '<leader>fa', builtin.find_files, { desc = "[F]ind all [F]iles" })
             map('n', '<leader>fS', builtin.live_grep, { desc = "[F]ind by [S]earch(capital) using grep" })
             map('n', '<leader>fr', builtin.resume, { desc = "[F]ind [R]esume" })
             map('n', '<leader>fk', builtin.keymaps, { desc = "[F]ind [K]eymaps" })
             map('n', '<leader>fp', telescope.extensions.project.project, { desc = "[F]ind [P]roject" })
             map('n', '<leader>fh', builtin.help_tags, { desc = "[F]ind in [H]elp" })
-            map('n', '<leader>fo', builtin.buffers, { desc = "[F]ind [O]pen buffers" })
+            map('n', '<leader>fo', function()
+                builtin.buffers({ previewer = false })
+            end, { desc = "[F]ind [O]pen buffers" })
             map('n', '<leader>fc', builtin.colorscheme, { desc = "[F]ind [C]olorscheme" })
             vim.keymap.set('n', '<leader>fj', function()
                 -- Setting custom style for searching within a file
-                builtin.current_buffer_fuzzy_find(require('telescope.themes').get_dropdown {
+                builtin.current_buffer_fuzzy_find(themes.set_dropdown {
                     previewer = false,
                 })
             end, { desc = '[F]ind in [J]ust this file' })
