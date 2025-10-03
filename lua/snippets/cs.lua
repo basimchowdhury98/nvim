@@ -2,6 +2,7 @@ local ls = require('luasnip')
 local s = ls.snippet
 local t = ls.text_node
 local i = ls.insert_node
+local fmt = require('luasnip.extras.fmt').fmt
 
 return {
     s("propi", {
@@ -12,23 +13,13 @@ return {
         t(" { get; init; }"),
         i(0)
     }),
-   s("funfact", {
-       t({ "[Fact]", "public async Task Given" }),
-       i(1),
-       t("_When"),
-       i(2),
-       t("_Then"),
-       i(3),
-       t({ "()", "{", "\t" }),
-       i(0),
-       t({ "", "}" }),
-   }),
-   s("rof", {
-       t("private readonly "),
-       i(1, "type"),
-       t(" _"),
-       i(2, "fieldName"),
-       t(";"),
-       i(0)
-   })
+    s("funfact", fmt("[Fact]\npublic async Task GivenNew{}_When{}_Then{}()\n{{\n\t{}\n}}", { i(1), i(2), i(3), i(0) })),
+    s("rof", {
+        t("private readonly "),
+        i(1, "type"),
+        t(" _"),
+        i(2, "fieldName"),
+        t(";"),
+        i(0)
+    })
 }

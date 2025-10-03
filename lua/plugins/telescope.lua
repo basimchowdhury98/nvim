@@ -44,7 +44,7 @@ return
             local themes = require('telescope.themes')
 
             local map = vim.keymap.set
-            map('n', '<leader>fa', builtin.find_files, { desc = "[F]ind all [F]iles" })
+            map('n', '<leader>fa', builtin.find_files, { desc = "[F]ind [A]ll files" })
             map('n', '<leader>fS', builtin.live_grep, { desc = "[F]ind by [S]earch(capital) using grep" })
             map('n', '<leader>fr', builtin.resume, { desc = "[F]ind [R]esume" })
             map('n', '<leader>fk', builtin.keymaps, { desc = "[F]ind [K]eymaps" })
@@ -54,19 +54,19 @@ return
                 builtin.buffers({ previewer = false })
             end, { desc = "[F]ind [O]pen buffers" })
             map('n', '<leader>fc', builtin.colorscheme, { desc = "[F]ind [C]olorscheme" })
-            vim.keymap.set('n', '<leader>fj', function()
+            map('n', '<leader>fj', function()
                 -- Setting custom style for searching within a file
-                builtin.current_buffer_fuzzy_find(themes.set_dropdown {
+                builtin.current_buffer_fuzzy_find(themes.get_dropdown {
                     previewer = false,
                 })
             end, { desc = '[F]ind in [J]ust this file' })
-            vim.keymap.set('n', '<leader>fn', function()
+            map('n', '<leader>fn', function()
                 builtin.find_files {
                     cwd = vim.fn.stdpath 'config',
                     prompt_title = 'Find in Neovim Config'
                 }
             end, { desc = '[F]ind in [N]eovim config' })
-            vim.keymap.set('n', '<leader>fs', function()
+            map('n', '<leader>fs', function()
                 builtin.live_grep {
                     grep_open_files = true,
                     prompt_title = 'Grep Open Files',
