@@ -5,10 +5,10 @@ return {
         priority = 1000,
         opts = {
             transparent = true,
-            on_highlights = function(hl, c)
-                hl.LineNr = { fg = "#2a3158" }                -- all relative line numbers darker
-                hl.CursorLineNr = { fg = "#7aa2f7", bold = true } -- current line number (keep visible)
-            end
+            styles = {
+                sidebars = "transparent",
+                floats = "transparent",
+            },
         },
     },
     {

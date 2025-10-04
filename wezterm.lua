@@ -1,5 +1,4 @@
 local wezterm = require("wezterm")
-local act = wezterm.action
 
 local config = {}
 if wezterm.config_builder then config = wezterm.config_builder() end
@@ -10,10 +9,25 @@ elseif wezterm.target_triple == "x86_64-apple-darwin" or wezterm.target_triple =
   config.default_prog = { '/bin/zsh' }
 end
 
-config.color_scheme = "Tokyo Night"
-config.window_background_opacity = 0.9
+config.color_scheme = "Gruvbox Material (Gogh)"
 config.window_decorations = "RESIZE"
 config.window_close_confirmation = "AlwaysPrompt"
+config.background = {
+  {
+    source = {
+      File = '/users/basimchowdhury/Pictures/luffy-minimal-5k-pf-2880x1800.jpg',
+    },
+    hsb = { brightness = 0.25 },
+  },
+  {
+    source = {
+      Color = 'rgba(0, 0, 0, 0.6)',  -- overlay to improve text readability
+    },
+    height = '100%',
+    width = '100%',
+  },
+}
+
 
 
 return config
