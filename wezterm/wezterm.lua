@@ -15,7 +15,7 @@ config.window_close_confirmation = "AlwaysPrompt"
 config.background = {
   {
     source = {
-      File = os.getenv("HOME") .. '/Pictures/luffy-minimal-5k-pf-2880x1800.jpg',
+      File = wezterm.config_dir .. '/background/current.jpg',
     },
     hsb = { brightness = 0.25 },
   },
