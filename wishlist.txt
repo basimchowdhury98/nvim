@@ -2,7 +2,7 @@
 * Open terminal from curr buffer path
 * C-v pasted but should it be visual block?
 * Lsp always needs restarts for new files
-
+*!!!! REMAP CAPS LOCK
 
 Plugin ideas:
 * Terminal that works exactly like editting a buffer
