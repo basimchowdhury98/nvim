@@ -35,8 +35,15 @@ config.leader = { key = "`", mods = "ALT", timeout_millisecionds = 2000 }
 config.keys = {
     {
         mods = "LEADER",
-        key = "t",
+        key = "p",
         action = project.pick_projects()
+    },
+    {
+        mods = "LEADER",
+        key = "w",
+        action = wezterm.action.ShowLauncherArgs {
+            flags = 'FUZZY|WORKSPACES'
+        }
     },
     {
         mods = "LEADER",
@@ -47,16 +54,6 @@ config.keys = {
         mods = "LEADER",
         key = ";",
         action = wezterm.action.CloseCurrentPane { confirm = true }
-    },
-    {
-        mods = "LEADER",
-        key = "p",
-        action = wezterm.action.ActivateTabRelative(-1)
-    },
-    {
-        mods = "LEADER",
-        key = "n",
-        action = wezterm.action.ActivateTabRelative(1)
     },
     {
         mods = "LEADER",
@@ -143,6 +140,11 @@ wezterm.on("update-right-status", function (window, _)
     window:set_left_status(wezterm.format {
         { Text = text }
     })
+end)
+
+wezterm.on('gui-startup', function (cmd)
+   local _, _, window = wezterm.mux.spawn_window(cmd or {})
+   window:gui_window():toggle_fullscreen()
 end)
 
 return config

@@ -2,11 +2,14 @@ local wezterm = require("wezterm")
 local M = {}
 
 local projects = {}
-table.insert(projects, { label = os.getenv('NVIM') })
+local nvim_path = os.getenv('NVIM')
+if nvim_path then
+    table.insert(projects, { label = nvim_path })
+end
 
 local function get_project_dirs()
     return {
-        wezterm.home_dir .. '\\Projects'
+        wezterm.home_dir .. '/Projects'
     }
 end
 
@@ -25,12 +28,12 @@ function M.pick_projects()
         action = wezterm.action_callback(function(child_window, child_pane, _, label)
             if not label then return end
 
-            child_window:perform_action(wezterm.action.SwitchToWorkspace {
-                name = label:match("([^/]+)$"),
-                spawn = { cwd = label }
-            }, child_pane)
-
-            wezterm.log_warn('Got project: ' .. wezterm.json_encode(projects, true))
+            -- Check if Windows (PowerShell) or Unix (bash/zsh)
+            if wezterm.target_triple:find("windows") then
+                child_pane:send_text('cd "' .. label .. '"; if ($?) { nvim . }\r')
+            else
+                child_pane:send_text('cd "' .. label .. '" && nvim .\n')
+            end
         end)
     }
 end
