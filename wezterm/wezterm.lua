@@ -1,4 +1,5 @@
 local wezterm = require("wezterm")
+package.path = package.path .. ';' .. wezterm.config_dir .. '/?.lua'
 
 local config = {}
 if wezterm.config_builder then config = wezterm.config_builder() end
@@ -29,9 +30,14 @@ config.background = {
   },
 }
 
-
+local project = require('projects')
 config.leader = { key = "`", mods = "ALT", timeout_millisecionds = 2000 }
 config.keys = {
+    {
+        mods = "LEADER",
+        key = "t",
+        action = project.pick_projects()
+    },
     {
         mods = "LEADER",
         key = "i",
