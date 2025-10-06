@@ -13,8 +13,6 @@ vim.opt.colorcolumn = "120"
 vim.opt.ignorecase = true
 vim.opt.smartcase = true
 vim.opt.nu = true
-vim.opt.updatetime = 250
-vim.opt.timeoutlen = 300
 vim.opt.confirm = true
 vim.diagnostic.config({
     virtual_lines = {
@@ -28,3 +26,21 @@ vim.diagnostic.config({
         scope = "buffer"
     }
 })
+
+-- Visual
+vim.opt.cursorline = true
+
+
+-- File handling
+vim.opt.backup = false
+vim.opt.writebackup = false
+vim.opt.swapfile = false
+vim.opt.updatetime = 250
+vim.opt.timeoutlen = 500
+vim.opt.ttimeoutlen = 0
+vim.opt.autoread = true
+vim.opt.autowrite = false
+
+
+-- Behavior
+vim.opt.clipboard:append("unnamedplus")
