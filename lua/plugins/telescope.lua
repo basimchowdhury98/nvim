@@ -58,6 +58,11 @@ return
                 -- Setting custom style for searching within a file
                 builtin.current_buffer_fuzzy_find(themes.get_dropdown {
                     previewer = false,
+                    layout_config = {
+                        width = 0.9,  -- 90% of screen width
+                        height = 0.8, -- 80% of screen height
+                    },
+                    
                 })
             end, { desc = '[F]ind in [J]ust this file' })
             map('n', '<leader>fn', function()
