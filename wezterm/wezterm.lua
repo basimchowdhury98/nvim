@@ -14,24 +14,50 @@ config.color_scheme = "Gruvbox Material (Gogh)"
 config.font = wezterm.font('JetBrains Mono', { italic = true })
 config.window_decorations = "RESIZE"
 config.window_close_confirmation = "AlwaysPrompt"
-config.background = {
+local bg =
+{
     {
         source = {
             File = wezterm.config_dir .. '/background/current.jpg',
         },
+        vertical_align = "Middle",
         hsb = { brightness = 0.25 },
-    },
-    {
-        source = {
-            Color = 'rgba(0, 0, 0, 0.6)', -- overlay to improve text readability
-        },
-        height = '100%',
-        width = '100%',
     },
 }
 
+local bgBlacked = false
+local blackbg =
+{
+    {
+        source = {
+            Color = 'rgba(0, 0, 0, 1)',
+        },
+        height = '100%',
+        width = '100%',
+    }
+}
+
+config.background = bg
+
 config.leader = { key = "`", mods = "ALT", timeout_millisecionds = 2000 }
 config.keys = {
+    {
+        mods = "LEADER",
+        key = "b",
+        action = wezterm.action_callback(function(win, _)
+            local overrides = win:get_config_overrides() or {}
+            if bgBlacked then
+                overrides.background = bg
+                bgBlacked = false
+            else
+                overrides.background = blackbg
+                bgBlacked = true
+            end
+
+            win:set_config_overrides(overrides)
+        end
+        )
+    },
     {
         mods = "LEADER",
         key = "i",
@@ -135,7 +161,7 @@ wezterm.on('gui-startup', function(cmd)
     if wezterm.target_triple:find('darwin') then
         nvim_path = '/opt/homebrew/bin/nvim' -- macOS
     elseif wezterm.target_triple:find('windows') then
-        nvim_path = 'nvim.exe'           -- Windows (assumes nvim is in PATH there)
+        nvim_path = 'nvim.exe'               -- Windows (assumes nvim is in PATH there)
     end
 
     local _, _, window = wezterm.mux.spawn_window(cmd or {
