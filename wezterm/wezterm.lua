@@ -65,7 +65,7 @@ config.keys = {
     },
     {
         mods = "LEADER",
-        key = ";",
+        key = "q",
         action = wezterm.action.CloseCurrentPane { confirm = true }
     },
     {
