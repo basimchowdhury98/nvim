@@ -130,7 +130,7 @@ config.keys = {
                 end
             end
         end)
-    },
+    }
 }
 
 for i = 1, 9 do

@@ -44,3 +44,9 @@ local terminal = require('utils.terminal')
 map('n', '<leader>tt', terminal.toggle, { desc = "Toggle the floating terminal" })
 map({ 't', 'n' }, '<Esc><Esc>', terminal.close, { desc = "Close the floating terminal" })
 map('n', '<leader>tk', terminal.kill, { desc = "Kill the floating terminal" })
+
+map("i", "<C-l>", "<Esc>la", { desc = "Move one char left in insert mode" })
+map("i", "<S-CR>", "<Esc>$o", { desc = "From anywhere in line enter into a new line in insert mode" })
+
+-- Quick fix
+map("n", "<leader>qc", ":cclose<CR>", { desc = "Close quickfix" })
