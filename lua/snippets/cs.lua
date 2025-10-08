@@ -36,6 +36,6 @@ end
 
 return {
     s("propi", fmt("public {} {} {{ get; init; }}{}", { i(1, "string"), i(2, "PropertyName"), i(0) })),
-    s("funfact", fmt("[Fact]\npublic async Task GivenNew{}_When{}_Then{}()\n{{\n\t{}\n}}", { i(1), i(2), i(3), i(0) })),
+    s("funfact", fmt("[Fact]\npublic async Task Given{}_When{}_Then{}()\n{{\n\t{}\n}}", { i(1), i(2), i(3), i(0) })),
     s("dif", fmt("private readonly {} _{};", { i(1, "type"), difName(1) }))
 }
