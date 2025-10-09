@@ -78,9 +78,9 @@ return
             map('n', '<leader>fk', builtin.keymaps, { desc = "[F]ind [K]eymaps" })
             map('n', '<leader>fp', telescope.extensions.project.project, { desc = "[F]ind [P]roject" })
             map('n', '<leader>fh', builtin.help_tags, { desc = "[F]ind in [H]elp" })
-            map('n', '<leader>fo', function()
+            map('n', '<leader>fb', function()
                 builtin.buffers({ previewer = false })
-            end, { desc = "[F]ind [O]pen buffers" })
+            end, { desc = "[F]ind [B]uffers(open)" })
             map('n', '<leader>fc', builtin.colorscheme, { desc = "[F]ind [C]olorscheme" })
             map('n', '<leader>fj', function()
                 -- Setting custom style for searching within a file
@@ -105,6 +105,16 @@ return
                     prompt_title = 'Grep Open Files',
                 }
             end, { desc = '[F]ind by [L]uck (grep in open files)' })
+            map('n', '<leader>fo', function()
+                builtin.lsp_document_symbols({
+                    sorting_strategy = "ascending",
+                    layout_config = {
+                        width = 0.9,
+                        height = 0.8,
+                        prompt_position = "top"
+                    },
+                })
+            end)
         end,
     }
 }

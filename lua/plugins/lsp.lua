@@ -93,15 +93,16 @@ return {
                 }
             })
 
+            local telescope = require("telescope.builtin")
             vim.api.nvim_create_autocmd("LspAttach", {
                 group = vim.api.nvim_create_augroup('lsp-keymaps', { clear = true }),
                 callback = function(event)
                     map("n", "H", vim.lsp.buf.hover, { desc = "Lsp - show hover info", buffer = event.buf })
                     map("n", "<leader>gd", vim.lsp.buf.definition,
                         { desc = "Lsp - go to definition", buffer = event.buf })
-                    map("n", "<leader>gi", vim.lsp.buf.implementation,
-                        { desc = "Lsp - go to definition", buffer = event.buf })
-                    map("n", "<leader>gr", vim.lsp.buf.references,
+                    map("n", "<leader>gi", telescope.lsp_implementations,
+                        { desc = "Lsp - go to implementation", buffer = event.buf })
+                    map("n", "<leader>gr", telescope.lsp_references,
                         { desc = "Lsp - list all references", buffer = event.buf })
                     map({ "n", "v" }, "<leader>ca", vim.lsp.buf.code_action,
                         { desc = "Lsp - code actions", buffer = event.buf })
