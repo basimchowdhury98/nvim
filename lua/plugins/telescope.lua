@@ -37,6 +37,9 @@ return
                         }
                     },
                     project = {
+                        base_dirs = {
+                            "C:/Users/bchowdhury/source/repos"
+                        },
                         on_project_selected = function(prompt_bufnr)
                             local harpoon = require('harpoon.ui')
                             local mark = require('harpoon.mark')
@@ -70,7 +73,7 @@ return
 
             local map = vim.keymap.set
             map('n', '<leader>fa', builtin.find_files, { desc = "[F]ind [A]ll files" })
-            map('n', '<leader>fS', builtin.live_grep, { desc = "[F]ind by [S]earch(capital) using grep" })
+            map('n', '<leader>fs', builtin.live_grep, { desc = "[F]ind by [S]earching using using grep" })
             map('n', '<leader>fr', builtin.resume, { desc = "[F]ind [R]esume" })
             map('n', '<leader>fk', builtin.keymaps, { desc = "[F]ind [K]eymaps" })
             map('n', '<leader>fp', telescope.extensions.project.project, { desc = "[F]ind [P]roject" })
@@ -96,12 +99,12 @@ return
                     prompt_title = 'Find in Neovim Config'
                 }
             end, { desc = '[F]ind in [N]eovim config' })
-            map('n', '<leader>fs', function()
+            map('n', '<leader>fl', function()
                 builtin.live_grep {
                     grep_open_files = true,
                     prompt_title = 'Grep Open Files',
                 }
-            end, { desc = '[F]ind by [S]earching open files' })
+            end, { desc = '[F]ind by [L]uck (grep in open files)' })
         end,
     }
 }
