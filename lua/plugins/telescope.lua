@@ -14,13 +14,15 @@ return
         config = function()
             local action_layout = require("telescope.actions.layout")
             local actions = require("telescope.actions")
+            local project_actions = require("telescope._extensions.project.actions")
             require('telescope').setup({
                 defaults = {
                     mappings = {
                         i = {
                             ["<esc>"] = actions.close,
                             ["<M-p>"] = action_layout.toggle_preview,
-                            ["<C-y>"] = actions.select_default
+                            ["<C-y>"] = actions.select_default,
+                            ["<C-\\>"] = actions.select_vertical,
                         }
                     },
                     layout_config = {
@@ -34,6 +36,18 @@ return
                         require('telescope.themes').get_dropdown {
                         }
                     },
+                    project = {
+                        on_project_selected = function(prompt_bufnr)
+                            local harpoon = require('harpoon.ui')
+                            local mark = require('harpoon.mark')
+                            project_actions.change_working_directory(prompt_bufnr, false)
+                            if mark.valid_index(1) then
+                                harpoon.nav_file(1)
+                                return
+                            end
+                            vim.cmd('edit . ')
+                        end
+                    }
                 }
             })
             require('telescope').load_extension('ui-select')
@@ -62,7 +76,7 @@ return
                         width = 0.9,  -- 90% of screen width
                         height = 0.8, -- 80% of screen height
                     },
-                    
+
                 })
             end, { desc = '[F]ind in [J]ust this file' })
             map('n', '<leader>fn', function()
