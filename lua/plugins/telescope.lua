@@ -22,7 +22,7 @@ return
                             ["<esc>"] = actions.close,
                             ["<M-p>"] = action_layout.toggle_preview,
                             ["<C-y>"] = actions.select_default,
-                            ["<C-\\>"] = actions.select_vertical,
+                            ["<C-\\>"] = actions.select_vertical
                         }
                     },
                     layout_config = {
@@ -46,7 +46,18 @@ return
                                 return
                             end
                             vim.cmd('edit . ')
-                        end
+                        end,
+                        mappings = {
+                            i = {
+                                ["<C-\\>"] = function(prompt_bufnr)
+                                    local action_state = require("telescope.actions.state")
+                                    local selection = action_state.get_selected_entry()
+
+                                    actions.select_vertical(prompt_bufnr)
+                                    vim.cmd('lcd ' .. selection.value)
+                                end
+                            }
+                        }
                     }
                 }
             })

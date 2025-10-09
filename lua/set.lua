@@ -44,3 +44,4 @@ vim.opt.autowrite = false
 
 -- Behavior
 vim.opt.clipboard:append("unnamedplus")
+vim.opt.splitright = true
