@@ -31,15 +31,6 @@ map('n', '<Esc><Esc>', function()
     end
 end, { desc = 'Close floating windows' })
 
-local mark = require("harpoon.mark")
-local ui = require("harpoon.ui")
-map("n", "<leader>a", mark.add_file, { desc = "Add file to harpoon" })
-map("n", "<C-h>", ui.toggle_quick_menu, { desc = "Toggle harpoon menu" })
-map("n", "<C-j>", function() ui.nav_file(1) end, { desc = "Navigate to file 1" })
-map("n", "<C-k>", function() ui.nav_file(2) end, { desc = "Navigate to file 2" })
-map("n", "<C-n>", function() ui.nav_file(3) end, { desc = "Navigate to file 3" })
-map("n", "<C-m>", function() ui.nav_file(4) end, { desc = "Navigate to file 4" })
-
 local terminal = require('utils.terminal')
 map('n', '<leader>tt', terminal.toggle, { desc = "Toggle the floating terminal" })
 map({ 't', 'n' }, '<Esc><Esc>', terminal.close, { desc = "Close the floating terminal" })
@@ -50,3 +41,9 @@ map("i", "<S-CR>", "<Esc>$o", { desc = "From anywhere in line enter into a new l
 
 -- Quick fix
 map("n", "<leader>qc", ":cclose<CR>", { desc = "Close quickfix" })
+
+-- Splits
+map("n", "<C-h>", "<C-w>h", { desc = "Nav to left split" })
+map("n", "<C-j>", "<C-w>j", { desc = "Nav to down split" })
+map("n", "<C-k>", "<C-w>k", { desc = "Nav to up split" })
+map("n", "<C-l>", "<C-w>l", { desc = "Nav to right split" })

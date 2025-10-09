@@ -130,6 +130,11 @@ config.keys = {
                 end
             end
         end)
+    }, 
+    {
+        key = 'v',
+        mods = 'CTRL',
+        action = wezterm.action.DisableDefaultAssignment,
     }
 }
 

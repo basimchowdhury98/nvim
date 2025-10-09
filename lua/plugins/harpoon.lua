@@ -15,5 +15,14 @@ return {
             vim.hl.range(0, ns_id, 'Visual', 'w0', 'w$', { inclusive = true, timeout = 100 })
             return ret
         end
+
+        local map = vim.keymap.set
+        local ui = require("harpoon.ui")
+        map("n", "<leader>ha", mark.add_file, { desc = "Add file to harpoon" })
+        map("n", "<leader>ht", ui.toggle_quick_menu, { desc = "Toggle harpoon menu" })
+        map("n", "<M-1>", function() ui.nav_file(1) end, { desc = "Navigate to file 1" })
+        map("n", "<M-2>", function() ui.nav_file(2) end, { desc = "Navigate to file 2" })
+        map("n", "<M-3>", function() ui.nav_file(3) end, { desc = "Navigate to file 3" })
+        map("n", "<M-0>", function() ui.nav_file(4) end, { desc = "Navigate to file 4" })
     end
 }
