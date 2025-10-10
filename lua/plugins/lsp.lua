@@ -56,12 +56,12 @@ return {
                 if ls.expand_or_jumpable() then
                     ls.expand_or_jump()
                 end
-            end, { silent = true, desc = "[J]ump to next node" })
+            end, { silent = true, desc = "Snips - [] Jump to next node" })
             map({ "i", "s" }, "<C-j>", function()
                 if ls.jumpable(-1) then
                     ls.jump(-1)
                 end
-            end, { silent = true, desc = "[]Jump back(opposite of j=k) to next node" })
+            end, { silent = true, desc = "Snips - [] Jump back to previous node" })
             map({ "i", "s" }, "<C-l>", function()
                 if ls.choice_active() then
                     ls.change_choice(1)
@@ -113,12 +113,47 @@ return {
                 end
             })
 
-            -- Starting semantics token so treesitter can color better
             vim.api.nvim_create_autocmd("LspAttach", {
-                callback = function(args)
-                    local client = vim.lsp.get_client_by_id(args.data.client_id)
+                group = vim.api.nvim_create_augroup("lsp-presentation", { clear = true }),
+                callback = function(event)
+                    local function client_supports_method(client, method, bufnr)
+                        if vim.fn.has 'nvim-0.11' == 1 then
+                            return client:supports_method(method, bufnr)
+                        else
+                            return client.supports_method(method, { bufnr = bufnr })
+                        end
+                    end
+
+                    -- Starting semantics token so treesitter can color better
+                    local client = vim.lsp.get_client_by_id(event.data.client_id)
                     if client and client.server_capabilities.semanticTokensProvider then
-                        vim.lsp.semantic_tokens.start(args.buf, client.id)
+                        vim.lsp.semantic_tokens.start(event.buf, client.id)
+                    end
+
+                    if client and client_supports_method(client, vim.lsp.protocol.Methods.textDocument_documentHighlight, event.buf) then
+                        local highlight_augroup = vim.api.nvim_create_augroup('lsp-highlight', { clear = false })
+
+                        -- When cursor stops moving: Highlights all instances of the symbol under the cursor
+                        -- When cursor moves: Clears the highlighting
+                        vim.api.nvim_create_autocmd({ 'CursorHold', 'CursorHoldI' }, {
+                            buffer = event.buf,
+                            group = highlight_augroup,
+                            callback = vim.lsp.buf.document_highlight,
+                        })
+                        vim.api.nvim_create_autocmd({ 'CursorMoved', 'CursorMovedI' }, {
+                            buffer = event.buf,
+                            group = highlight_augroup,
+                            callback = vim.lsp.buf.clear_references,
+                        })
+
+                        -- When LSP detaches: Clears the highlighting
+                        vim.api.nvim_create_autocmd('LspDetach', {
+                            group = vim.api.nvim_create_augroup('lsp-detach', { clear = true }),
+                            callback = function(event2)
+                                vim.lsp.buf.clear_references()
+                                vim.api.nvim_clear_autocmds { group = 'lsp-highlight', buffer = event2.buf }
+                            end,
+                        })
                     end
                 end,
             })
