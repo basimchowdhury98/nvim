@@ -112,6 +112,16 @@ return {
                         { desc = "Lsp - rename symbol under cursor", buffer = event.buf })
                 end
             })
+
+            -- Starting semantics token so treesitter can color better
+            vim.api.nvim_create_autocmd("LspAttach", {
+                callback = function(args)
+                    local client = vim.lsp.get_client_by_id(args.data.client_id)
+                    if client and client.server_capabilities.semanticTokensProvider then
+                        vim.lsp.semantic_tokens.start(args.buf, client.id)
+                    end
+                end,
+            })
         end
     },
     {
