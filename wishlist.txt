@@ -1,6 +1,5 @@
 * dotnet solution explorer
 * Open terminal from curr buffer path
-* C-v pasted but should it be visual block?
 * Lsp always needs restarts for new files
 
 Plugin ideas:
