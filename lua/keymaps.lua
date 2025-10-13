@@ -1,6 +1,5 @@
 local map = vim.keymap.set
 
-map("n", "<leader>e", vim.cmd.Ex, { desc = "Open netrw/file explorer" })
 map("v", "D", ":m '>+1<CR>gv=gv", { desc = "Move selected line down" })
 map("v", "U", ":m '<-2<CR>gv=gv", { desc = "Move slected line up" })
 map("n", "<C-d>", "<C-d>zz", { desc = "Scroll down" })
@@ -47,3 +46,5 @@ map("n", "<C-h>", "<C-w>h", { desc = "Nav to left split" })
 map("n", "<C-j>", "<C-w>j", { desc = "Nav to down split" })
 map("n", "<C-k>", "<C-w>k", { desc = "Nav to up split" })
 map("n", "<C-l>", "<C-w>l", { desc = "Nav to right split" })
+map("n", "<M-\\>", ":vsplit<CR>", { desc = "Open vertical split" })
+map("n", "<M-->", ":split<CR>", { desc = "Open horizontal split" })
