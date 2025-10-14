@@ -31,9 +31,14 @@ local function window_is_open()
     return state.win_id and vim.api.nvim_win_is_valid(state.win_id)
 end
 
-local function open_window()
+local function refresh_window()
     if window_is_open() then
         vim.api.nvim_win_set_buf(state.win_id, state.current_term.buf_id)
+        return
+    end
+
+    if state.current_term == nil then
+        vim.notify("No current term set")
         return
     end
 
@@ -85,9 +90,10 @@ function M.open_new_terminal()
     local term = create_terminal_buffer()
     state.current_term = term
 
-    open_window()
+    refresh_window()
 
     term.term_job_id = vim.fn.termopen(vim.o.shell)
+    vim.cmd('startinsert')
 end
 
 -- Open the floating terminal
@@ -98,7 +104,7 @@ function M.open()
     if state.current_term == nil then
         M.open_new_terminal()
     else
-        open_window()
+        refresh_window()
     end
     vim.cmd('startinsert')
 end
@@ -122,6 +128,47 @@ function M.kill()
     terms = {}
 
     print("Killed floating terminal")
+end
+
+function M.next()
+    if #terms == 0 then
+        vim.notify("No terminals spawned")
+    end
+
+    local nextTerm = -1
+    for index, term in ipairs(terms) do
+        if index == #terms then
+            nextTerm = 1
+            break
+        end
+        if state.current_term.buf_id == term.buf_id then
+            nextTerm = index + 1
+            break
+        end
+    end
+    state.current_term = terms[nextTerm]
+    refresh_window()
+end
+
+function M.prev()
+    if #terms == 0 then
+        vim.notify("No terminals spawned")
+    end
+
+    local nextTerm = -1
+    for i = #terms, 1, -1 do
+        if i == 1 then
+            nextTerm = #terms
+            break
+        end
+        local term = terms[i]
+        if state.current_term.buf_id == term.buf_id then
+            nextTerm = i - 1
+            break
+        end
+    end
+    state.current_term = terms[nextTerm]
+    refresh_window()
 end
 
 function M.debug()
