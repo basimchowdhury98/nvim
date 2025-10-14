@@ -26,6 +26,19 @@ return {
             vim.g.gruvbox_material_cursor = 'auto'
         end
     },
+    { 
+        'rockerBOO/boo-colorscheme-nvim',
+        lazy = false,
+        config = function ()
+            if vim.fn.has("termguicolors") then
+                vim.opt.termguicolors = true
+            end
+            require("boo-colorscheme").use({
+                italic = true, -- toggle italics
+                theme = "boo"
+            })
+        end
+    },
     { 'nvim-mini/mini.icons', version = false },
     {
         "prichrd/netrw.nvim",
