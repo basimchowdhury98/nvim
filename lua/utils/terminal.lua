@@ -9,6 +9,11 @@
 
 local M = {}
 
+vim.opt.shell = "powershell"
+vim.opt.shellcmdflag = "-command"
+vim.opt.shellquote = "\""
+vim.opt.shellxquote = ""
+
 -- Configuration
 local config = {
     width_ratio = 0.8,

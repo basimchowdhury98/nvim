@@ -22,7 +22,7 @@ return
                             ["<esc>"] = actions.close,
                             ["<M-p>"] = action_layout.toggle_preview,
                             ["<C-y>"] = actions.select_default,
-                            ["<C-\\>"] = actions.select_vertical
+                            ["<M-\\>"] = actions.select_vertical
                         }
                     },
                     layout_config = {

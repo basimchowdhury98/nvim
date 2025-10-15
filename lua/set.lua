@@ -30,7 +30,6 @@ vim.diagnostic.config({
 -- Visual
 vim.opt.cursorline = true
 
-
 -- File handling
 vim.opt.backup = false
 vim.opt.writebackup = false

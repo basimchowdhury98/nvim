@@ -36,12 +36,15 @@ map({ 't', 'n' }, '<Esc><Esc>', terminal.close, { desc = "Close the floating ter
 map('n', '<leader>tk', terminal.kill, { desc = "Kill the floating terminal" })
 map('n', '<leader>tn', terminal.open_new_terminal, { desc = "Open a new terminal" })
 map('n', '<leader>td', terminal.debug, { desc = "Debug" })
-map('t', '<C-t>', terminal.open_new_terminal, { desc = "Open a new terminal" })
-map('t', '<C-.>', terminal.next, { desc = "Next terminal" })
-map('t', '<C-,>', terminal.prev, { desc = "Next terminal" })
+map('t', '<M-o>', terminal.open_new_terminal, { desc = "Open a new terminal" })
+map('t', '<M-n>', terminal.next, { desc = "Next terminal" })
+map('t', '<M-p>', terminal.prev, { desc = "Next terminal" })
 
 map("i", "<C-l>", "<Esc>la", { desc = "Move one char left in insert mode" })
 map("i", "<S-CR>", "<Esc>$o", { desc = "From anywhere in line enter into a new line in insert mode" })
+
+-- Buffer
+map("i", "jk", "<Esc>", { desc = "Switch from insert to normal mode" })
 
 -- Quick fix
 map("n", "<leader>qc", ":cclose<CR>", { desc = "Close quickfix" })
