@@ -1,7 +1,6 @@
-* dotnet solution explorer
 * Open terminal from curr buffer path
 * Lsp always needs restarts for new files
+* AngularLS needed
 
 Plugin ideas:
 * Terminal that works exactly like editting a buffer
-* Fuzzyfind folder dir explorer - telescope

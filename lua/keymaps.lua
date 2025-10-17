@@ -44,7 +44,7 @@ map("i", "<C-l>", "<Esc>la", { desc = "Move one char left in insert mode" })
 map("i", "<S-CR>", "<Esc>$o", { desc = "From anywhere in line enter into a new line in insert mode" })
 
 -- Buffer
-map("i", "jk", "<Esc>", { desc = "Switch from insert to normal mode" })
+map({ "i", "t" }, "jk", "<Esc>", { desc = "Switch from insert/terminal to normal mode", remap = true })
 
 -- Quick fix
 map("n", "<leader>qc", ":cclose<CR>", { desc = "Close quickfix" })
