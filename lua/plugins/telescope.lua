@@ -39,6 +39,7 @@ return
                     project = {
                         base_dirs = {
                             "C:/Users/bchowdhury/source/repos",
+                            "C:/Users/basim/Projects",
                             "/Users/basimchowdhury/Projects"
                         },
                         on_project_selected = function(prompt_bufnr)
