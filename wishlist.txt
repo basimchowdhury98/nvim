@@ -1,6 +1,7 @@
 * Open terminal from curr buffer path
 * Lsp always needs restarts for new files
 * AngularLS needed
+* See if i can get roslyn to output to fidget
 
 Plugin ideas:
 * Terminal that works exactly like editting a buffer
