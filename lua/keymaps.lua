@@ -45,7 +45,8 @@ map("i", "<S-CR>", "<Esc>$o", { desc = "From anywhere in line enter into a new l
 
 -- Buffer
 map({ "i", "t" }, "jke", "<C-c>", { desc = "[E]xit from insert/terminal to normal mode", remap = true })
-map({ "i", "t" }, "jka", "<C-c>A", { desc = "[A]ppend to end of line"})
+map({ "i" }, "jka", "<C-c>A", { desc = "[A]ppend to end of line"})
+map({ "i" }, "jko", "<C-c>O", { desc = "[] New line above ie Shift+o"})
 
 -- Quick fix
 map("n", "<leader>qc", ":cclose<CR>", { desc = "Close quickfix" })

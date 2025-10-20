@@ -5,7 +5,7 @@ local i = ls.insert_node
 local f = ls.function_node
 local fmt = require('luasnip.extras.fmt').fmt
 
-local difName = function(index)
+local fieldName = function(index)
     return f(function(arg)
         local input = arg[1][1]
         if input == nil then
@@ -37,5 +37,5 @@ end
 return {
     s("propi", fmt("public {} {} {{ get; init; }}{}", { i(1, "string"), i(2, "PropertyName"), i(0) })),
     s("funfact", fmt("[Fact]\npublic async Task Given{}_When{}_Then{}()\n{{\n\t{}\n}}", { i(1), i(2), i(3), i(0) })),
-    s("dif", fmt("private readonly {} _{};", { i(1, "type"), difName(1) }))
+    s("dif", fmt("private readonly {} _{};", { i(1, "type"), fieldName(1) }))
 }
