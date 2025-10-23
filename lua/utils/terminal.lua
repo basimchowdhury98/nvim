@@ -9,11 +9,17 @@
 
 local M = {}
 
-vim.opt.shell = "powershell"
-vim.opt.shellcmdflag = "-command"
-vim.opt.shellquote = "\""
-vim.opt.shellxquote = ""
-
+if vim.fn.has("mac") == 1 then
+  vim.opt.shell = "/bin/zsh"
+  vim.opt.shellcmdflag = "-c"
+  vim.opt.shellquote = ""
+  vim.opt.shellxquote = ""
+else
+  vim.opt.shell = "powershell"
+  vim.opt.shellcmdflag = "-command"
+  vim.opt.shellquote = "\""
+  vim.opt.shellxquote = ""
+end
 -- Configuration
 local config = {
     width_ratio = 0.8,
