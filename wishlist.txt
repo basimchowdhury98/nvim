@@ -2,6 +2,9 @@
 * Lsp always needs restarts for new files
 * AngularLS needed
 * See if i can get roslyn to output to fidget
+* Fterminal save common paths and select
+* Fterminal fidger integration - show running processes + result of terminating processes like tests
+* Fterminal sessions per project
 
 Plugin ideas:
 * Terminal that works exactly like editting a buffer

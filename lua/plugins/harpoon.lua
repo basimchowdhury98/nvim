@@ -20,9 +20,9 @@ return {
         local ui = require("harpoon.ui")
         map("n", "<leader>ha", mark.add_file, { desc = "Add file to harpoon" })
         map("n", "<leader>ht", ui.toggle_quick_menu, { desc = "Toggle harpoon menu" })
-        map("n", "<M-1>", function() ui.nav_file(1) end, { desc = "Navigate to file 1" })
-        map("n", "<M-2>", function() ui.nav_file(2) end, { desc = "Navigate to file 2" })
-        map("n", "<M-3>", function() ui.nav_file(3) end, { desc = "Navigate to file 3" })
-        map("n", "<M-0>", function() ui.nav_file(4) end, { desc = "Navigate to file 4" })
+        map("n", "<leader>hq", function() ui.nav_file(1) end, { desc = "Navigate to file 1" })
+        map("n", "<leader>hw", function() ui.nav_file(2) end, { desc = "Navigate to file 2" })
+        map("n", "<leader>he", function() ui.nav_file(3) end, { desc = "Navigate to file 3" })
+        map("n", "<leader>hr", function() ui.nav_file(4) end, { desc = "Navigate to file 4" })
     end
 }
