@@ -155,17 +155,18 @@ return {
                             end,
                         })
                     end
+
                 end,
             })
+
         end
     },
     {
         "seblyng/roslyn.nvim",
         ft = { "cs" },
-        ---@module 'roslyn.config'
-        ---@type RoslynNvimConfig
-        opts = {
-        },
+        config = function ()
+            require("plugins.lsp.fidget_spinner"):init()
+        end
     },
     {
         'folke/lazydev.nvim',
