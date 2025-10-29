@@ -15,7 +15,6 @@
   "mini.ai": { "branch": "main", "commit": "e0d00c227112e942ed2789dd4c21d651002831c0" },
   "mini.files": { "branch": "main", "commit": "51db5ded1b7ac4dd8ca4c22c66f156dac5309304" },
   "mini.icons": { "branch": "main", "commit": "f9a177c11daa7829389b7b6eaaec8b8a5c47052d" },
-  "mini.indentscope": { "branch": "main", "commit": "8af2569a7d7fd37300dfa760e44e71efbbf322fd" },
   "netrw.nvim": { "branch": "master", "commit": "90501c62b9b816ed3ed1e912ae9db9af5671a1b2" },
   "nvim-lspconfig": { "branch": "master", "commit": "c8b90ae5cbe21d547b342b05c9266dcb8ca0de8f" },
   "nvim-treesitter": { "branch": "master", "commit": "42fc28ba918343ebfd5565147a42a26580579482" },
