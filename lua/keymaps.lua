@@ -44,10 +44,10 @@ map("i", "<C-l>", "<Esc>la", { desc = "Move one char left in insert mode" })
 map("i", "<S-CR>", "<Esc>$o", { desc = "From anywhere in line enter into a new line in insert mode" })
 
 -- Buffer
-map({ "i" }, "jke", "<C-c>", { desc = "[E]xit from insert to normal mode", remap = true })
-map({ "t" }, "jke", "<Esc>", { desc = "[E]xit from terminal to normal mode", remap = true })
-map({ "i" }, "jka", "<C-c>A", { desc = "[A]ppend to end of line"})
-map({ "i" }, "jko", "<C-c>O", { desc = "[] New line above ie Shift+o"})
+map({ "i" }, "jk", "<C-c>", { desc = "[E]xit from insert to normal mode", remap = true })
+map({ "t" }, "jk", "<Esc>", { desc = "[E]xit from terminal to normal mode", remap = true })
+map({ "i" }, "JK", "<C-c>", { desc = "[E]xit from insert to normal mode", remap = true })
+map({ "t" }, "JK", "<Esc>", { desc = "[E]xit from terminal to normal mode", remap = true })
 
 -- Quick fix
 map("n", "<leader>qc", ":cclose<CR>", { desc = "Close quickfix" })
