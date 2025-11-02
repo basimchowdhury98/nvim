@@ -1,12 +1,12 @@
 * Open terminal from curr buffer path
 * Lsp always needs restarts for new files
 * AngularLS needed
-* See if i can get roslyn to output to fidget
 * Fterminal save common paths and select
 * Fterminal fidger integration - show running processes + result of terminating processes like tests
 * Fterminal sessions per project
 * Fterminal automatically starts up pwd session on project load
 * Caps lock press for Esc, hold for ctrl
+* Output test startup and running to fidget
 * Inline git - gitsigns
 
 Plugin ideas:
