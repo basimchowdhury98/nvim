@@ -6,6 +6,7 @@
 * Fterminal fidger integration - show running processes + result of terminating processes like tests
 * Fterminal sessions per project
 * Caps lock press for Esc, hold for ctrl
+* Inline git - gitsigns
 
 Plugin ideas:
 * Terminal that works exactly like editting a buffer
