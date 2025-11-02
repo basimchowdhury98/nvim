@@ -5,6 +5,7 @@
 * Fterminal save common paths and select
 * Fterminal fidger integration - show running processes + result of terminating processes like tests
 * Fterminal sessions per project
+* Fterminal automatically starts up pwd session on project load
 * Caps lock press for Esc, hold for ctrl
 * Inline git - gitsigns
 

@@ -5,14 +5,12 @@ return {
             "rcarriga/nvim-dap-ui",
             "theHamsta/nvim-dap-virtual-text",
             "nvim-neotest/nvim-nio",
-            "ramboe/ramboe-dotnet-utils"
         },
         config = function()
             local mason_path = vim.fn.stdpath("data") .. "/mason/packages/netcoredbg/netcoredbg/netcoredbg"
             local dap = require("dap")
             local dap_utils = require("dap.utils")
             local dapui = require("dapui")
-            dapui.setup()
             require("nvim-dap-virtual-text").setup({})
 
             local adapter = {
@@ -24,14 +22,6 @@ return {
             dap.adapters.netcoredbg = adapter
 
             dap.configurations.cs = {
-                {
-                    type = "coreclr",
-                    name = "LAUNCH directly from nvim",
-                    request = "launch",
-                    program = function()
-                        return require("dap-dll-autopicker").build_dll_path()
-                    end
-                },
                 {
                     type = "coreclr",
                     name = "Attach",
@@ -88,6 +78,54 @@ return {
             dap.listeners.before.event_exited.dapui_config = function()
                 uiClose()
             end
+
+            -- UI
+            vim.fn.sign_define('DapBreakpoint',
+                {
+                    text = '⚪',
+                    texthl = 'DapBreakpointSymbol',
+                    linehl = 'DapBreakpoint',
+                    numhl = 'DapBreakpoint'
+                })
+
+            vim.fn.sign_define('DapStopped',
+                {
+                    text = '🔴',
+                    texthl = 'yellow',
+                    linehl = 'DapBreakpoint',
+                    numhl = 'DapBreakpoint'
+                })
+            vim.fn.sign_define('DapBreakpointRejected',
+                {
+                    text = '⭕',
+                    texthl = 'DapStoppedSymbol',
+                    linehl = 'DapBreakpoint',
+                    numhl = 'DapBreakpoint'
+                })
+
+            -- more minimal ui
+            dapui.setup({
+                expand_lines = true,
+                controls = { enabled = false }, -- no extra play/step buttons
+                floating = { border = "rounded" },
+
+                -- Set dapui window
+                render = {
+                    max_type_length = 60,
+                    max_value_lines = 200,
+                },
+
+                -- Only one layout: just the "scopes" (variables) list at the bottom
+                layouts = {
+                    {
+                        elements = {
+                            { id = "scopes", size = 1.0 }, -- 100% of this panel is scopes
+                        },
+                        size = 15,     -- height in lines (adjust to taste)
+                        position = "bottom", -- "left", "right", "top", "bottom"
+                    },
+                },
+            })
         end
     }
 }
