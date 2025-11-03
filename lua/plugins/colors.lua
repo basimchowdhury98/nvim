@@ -26,7 +26,7 @@ return {
             vim.g.gruvbox_material_cursor = 'auto'
         end
     },
-    { 
+    {
         'rockerBOO/boo-colorscheme-nvim',
         lazy = false,
         config = function ()

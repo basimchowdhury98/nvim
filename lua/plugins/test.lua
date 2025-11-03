@@ -15,9 +15,13 @@ return {
                 }
             })
 
+            vim.keymap.set("n", "<leader>rl", test.summary.toggle, { desc = "[R]un test summary wind to right [l]" })
             vim.keymap.set("n", "<leader>dh", function ()
                 test.run.run({ strategy = "dap" })
-            end, { desc = "[D]ebug current test" } )
+            end, { desc = "[D]ebug [H](ere)/current test" } )
+            vim.keymap.set("n", "<leader>rj", function ()
+                test.run.run(vim.fn.expand("%"))
+            end, { desc = "[R]un test [J](for down the file)" } )
         end
     }
 }

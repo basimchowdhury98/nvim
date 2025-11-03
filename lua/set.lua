@@ -29,6 +29,8 @@ vim.diagnostic.config({
 
 -- Visual
 vim.opt.cursorline = true
+vim.opt.list = true
+vim.opt.listchars = { leadmultispace = "│   ", trail = "-" }
 
 -- File handling
 vim.opt.backup = false
@@ -39,7 +41,6 @@ vim.opt.timeoutlen = 500
 vim.opt.ttimeoutlen = 0
 vim.opt.autoread = true
 vim.opt.autowrite = false
-
 
 -- Behavior
 vim.opt.clipboard:append("unnamedplus")
