@@ -8,6 +8,7 @@
 * Caps lock press for Esc, hold for ctrl
 * Output test startup and running to fidget
 * Inline git - gitsigns
+* Telescope picker of copied/yanked texts
 
 Plugin ideas:
 * Terminal that works exactly like editting a buffer
