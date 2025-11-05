@@ -156,6 +156,7 @@ function M.kill()
         end
     end
     state.proj_current_term = nil
+    state.proj_current_term = {}
     projTerms = {}
 
     print("Killed floating terminal")
@@ -219,7 +220,7 @@ function M.prev()
 end
 
 function M.debug()
-    print(vim.inspect(projTerms))
+    print("Proj terms: " .. vim.inspect(projTerms))
     print("State: " .. vim.inspect(state))
 end
 
