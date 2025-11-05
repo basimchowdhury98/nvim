@@ -10,17 +10,17 @@
 local M = {}
 
 if vim.fn.has("mac") == 1 then
-  vim.opt.shell = "/bin/zsh"
-  vim.opt.shellcmdflag = "-c"
-  vim.opt.shellquote = ""
-  vim.opt.shellxquote = ""
+    vim.opt.shell = "/bin/zsh"
+    vim.opt.shellcmdflag = "-c"
+    vim.opt.shellquote = ""
+    vim.opt.shellxquote = ""
 else
-  vim.opt.shell = "powershell"
-  vim.opt.shellcmdflag = "-command"
-  vim.opt.shellquote = "\""
-  vim.opt.shellxquote = ""
+    vim.opt.shell = "powershell"
+    vim.opt.shellcmdflag = "-command"
+    vim.opt.shellquote = "\""
+    vim.opt.shellxquote = ""
 end
--- Configuration
+
 local config = {
     width_ratio = 0.8,
     height_ratio = 0.8,
@@ -29,27 +29,53 @@ local config = {
     prompt_title = ' Command ',
 }
 
--- State
 local state = {
     win_id = nil,
-    current_term = nil,
+    proj_current_term = {},
 }
 
-local terms = {
+local projTerms = {
 }
+
+local function get_curr_proj()
+    return vim.fn.getcwd()
+end
 
 local function window_is_open()
     return state.win_id and vim.api.nvim_win_is_valid(state.win_id)
 end
 
-local function refresh_window()
-    if window_is_open() then
-        vim.api.nvim_win_set_buf(state.win_id, state.current_term.buf_id)
-        return
-    end
+local function create_terminal_buffer()
+    local buf_id = vim.api.nvim_create_buf(false, true)
+    -- Set buffer options using modern API
+    vim.bo[buf_id].bufhidden = 'hide'
+    vim.bo[buf_id].swapfile = false
 
-    if state.current_term == nil then
-        vim.notify("No current term set")
+    local projPath = get_curr_proj()
+
+    local terms = projTerms[projPath]
+    if terms == nil then
+        terms = {}
+        projTerms[projPath] = terms
+    end
+    local term = {
+        buf_id = buf_id
+    }
+    table.insert(terms, term)
+    return term
+end
+
+local function refresh_window()
+    local curr_proj = get_curr_proj();
+
+    if window_is_open() then
+        if state.proj_current_term[curr_proj] == nil then
+            local term = create_terminal_buffer()
+            term.term_job_id = vim.fn.termopen(vim.o.shell)
+            state.proj_current_term[curr_proj] = term
+        end
+
+        vim.api.nvim_win_set_buf(state.win_id, state.proj_current_term[curr_proj].buf_id)
         return
     end
 
@@ -70,7 +96,7 @@ local function refresh_window()
         title = config.title,
         title_pos = 'center',
     }
-    state.win_id = vim.api.nvim_open_win(state.current_term.buf_id, true, win_opts)
+    state.win_id = vim.api.nvim_open_win(state.proj_current_term[curr_proj].buf_id, true, win_opts)
 
     -- Set window options to match Telescope using modern API
     vim.wo[state.win_id].winhighlight = 'Normal:TelescopeNormal,FloatBorder:TelescopeBorder,Title:TelescopeTitle'
@@ -85,21 +111,11 @@ local function close_window()
     end
 end
 
-local function create_terminal_buffer()
-    local buf_id = vim.api.nvim_create_buf(false, true)
-    -- Set buffer options using modern API
-    vim.bo[buf_id].bufhidden = 'hide'
-    vim.bo[buf_id].swapfile = false
-    local term = {
-        buf_id = buf_id
-    }
-    table.insert(terms, term)
-    return term
-end
-
 function M.open_new_terminal()
+    local curr_proj = get_curr_proj();
+
     local term = create_terminal_buffer()
-    state.current_term = term
+    state.proj_current_term[curr_proj] = term
 
     refresh_window()
 
@@ -109,10 +125,12 @@ end
 
 -- Open the floating terminal
 function M.open()
+    local curr_proj = get_curr_proj();
+
     if window_is_open() then
         return
     end
-    if state.current_term == nil then
+    if state.proj_current_term[curr_proj] == nil then
         M.open_new_terminal()
     else
         refresh_window()
@@ -127,23 +145,33 @@ end
 
 function M.kill()
     close_window()
-    for _, term in ipairs(terms) do
-        if term.term_job_id then
-            vim.fn.jobstop(term.term_job_id)
-        end
-        if term.buf_id and vim.api.nvim_buf_is_valid(term.buf_id) then
-            vim.api.nvim_buf_delete(term.buf_id, { force = true })
+    for _, terms in pairs(projTerms) do
+        for _, term in ipairs(terms) do
+            if term.term_job_id then
+                vim.fn.jobstop(term.term_job_id)
+            end
+            if term.buf_id and vim.api.nvim_buf_is_valid(term.buf_id) then
+                vim.api.nvim_buf_delete(term.buf_id, { force = true })
+            end
         end
     end
-    state.current_term = nil
-    terms = {}
+    state.proj_current_term = nil
+    projTerms = {}
 
     print("Killed floating terminal")
 end
 
 function M.next()
-    if #terms == 0 then
+    if next(projTerms) == nil then
         vim.notify("No terminals spawned")
+        return
+    end
+    local proj = get_curr_proj()
+
+    local terms = projTerms[proj]
+    if #terms == 0 then
+        vim.notify("No terminals for this project spawned")
+        return
     end
 
     local nextTerm = -1
@@ -152,18 +180,26 @@ function M.next()
             nextTerm = 1
             break
         end
-        if state.current_term.buf_id == term.buf_id then
+        if state.proj_current_term[proj].buf_id == term.buf_id then
             nextTerm = index + 1
             break
         end
     end
-    state.current_term = terms[nextTerm]
+    state.proj_current_term[proj] = terms[nextTerm]
     refresh_window()
 end
 
 function M.prev()
-    if #terms == 0 then
+    if next(projTerms) == nil then
         vim.notify("No terminals spawned")
+        return
+    end
+    local proj = get_curr_proj()
+
+    local terms = projTerms[proj]
+    if #terms == 0 then
+        vim.notify("No terminals for this project spawned")
+        return
     end
 
     local nextTerm = -1
@@ -173,18 +209,17 @@ function M.prev()
             break
         end
         local term = terms[i]
-        if state.current_term.buf_id == term.buf_id then
+        if state.proj_current_term[proj].buf_id == term.buf_id then
             nextTerm = i - 1
             break
         end
     end
-    state.current_term = terms[nextTerm]
+    state.proj_current_term[proj] = terms[nextTerm]
     refresh_window()
 end
 
 function M.debug()
-    print("Term count: " .. #terms)
-    print(vim.inspect(terms))
+    print(vim.inspect(projTerms))
     print("State: " .. vim.inspect(state))
 end
 
