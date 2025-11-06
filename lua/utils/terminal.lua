@@ -1,11 +1,11 @@
 -- floating-terminal.lua
--- A floating terminal that mimics Telescope's UI design
--- EPIC: Multiple term tabs - when open fterm and no term, show a list of term paths (pwd always default)
--- Can save commonly used paths in list of term paths
--- When there are terms open open the last opened term and show tabs of the other terms
--- Can switch back and forth between term tabs
+-- a floating terminal that mimics telescope's ui design
+-- epic: multiple term tabs - when open fterm and no term, show a list of term paths (pwd always default)
+-- can save commonly used paths in list of term paths
+-- when there are terms open open the last opened term and show tabs of the other terms
+-- can switch back and forth between term tabs
 --
--- MVP: open new terminal instance and switch between the two (within the fterm)
+-- mvp: open new terminal instance and switch between the two (within the fterm)
 
 local M = {}
 
@@ -128,7 +128,7 @@ function M.open()
     local curr_proj = get_curr_proj();
 
     if window_is_open() then
-        return
+        return state.win_id
     end
     if state.proj_current_term[curr_proj] == nil then
         M.open_new_terminal()
@@ -136,6 +136,7 @@ function M.open()
         refresh_window()
     end
     vim.cmd('startinsert')
+    return state.win_id
 end
 
 -- Close the floating terminal
