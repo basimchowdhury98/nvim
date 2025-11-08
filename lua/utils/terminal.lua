@@ -121,6 +121,8 @@ function M.open_new_terminal()
 
     term.term_job_id = vim.fn.termopen(vim.o.shell)
     vim.cmd('startinsert')
+
+    return state.win_id
 end
 
 -- Open the floating terminal
