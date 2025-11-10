@@ -23,6 +23,8 @@ function gc {
     git commit -m $message
 }
 
+Set-Alias dn dotnet
+
 Remove-PSReadLineKeyHandler -Chord 'Ctrl+v'
 
 oh-my-posh init pwsh --config 'gruvbox' | Invoke-Expression
