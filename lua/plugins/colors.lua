@@ -29,7 +29,7 @@ return {
     {
         'rockerBOO/boo-colorscheme-nvim',
         lazy = false,
-        config = function ()
+        config = function()
             if vim.fn.has("termguicolors") then
                 vim.opt.termguicolors = true
             end

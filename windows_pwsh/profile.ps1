@@ -8,22 +8,45 @@ function dc {
     docker container @args
 }
 
+function dcu {
+    docker compose up
+}
+
 Set-Alias g git
 
 function gs {
     git status
 }
 
+# j and k for down/up = pull/push
+function gj {
+    git pull
+}
+function gk {
+    git push
+}
+
 function gap {
     git add -p
 }
 
+function ga. {
+    git add .
+}
+
 function gc {
-    param([string]$message)
-    git commit -m $message
+    git commit @args
 }
 
 Set-Alias dn dotnet
+
+function dnt {
+    dotnet test
+}
+
+function dnb {
+    dotnet build
+}
 
 Remove-PSReadLineKeyHandler -Chord 'Ctrl+v'
 
