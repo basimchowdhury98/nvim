@@ -48,6 +48,10 @@ function dnb {
     dotnet build
 }
 
+function dnr {
+    dotnet run
+}
+
 Remove-PSReadLineKeyHandler -Chord 'Ctrl+v'
 
 oh-my-posh init pwsh --config 'gruvbox' | Invoke-Expression
