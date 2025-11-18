@@ -37,6 +37,9 @@ local state = {
 local projTerms = {
 }
 
+local preloadedTerms = {
+}
+
 local function get_curr_proj()
     return vim.fn.getcwd()
 end
@@ -114,6 +117,21 @@ end
 function M.open_new_terminal()
     local curr_proj = get_curr_proj();
 
+    local preloaded = preloadedTerms[curr_proj]
+    if preloaded ~= nil then
+        state.proj_current_term[curr_proj] = preloaded
+        local terms = projTerms[curr_proj]
+        if terms == nil then
+            terms = {}
+            projTerms[curr_proj] = terms
+        end
+
+        table.insert(terms, preloaded)
+        preloadedTerms[curr_proj] = nil
+        refresh_window()
+        return
+    end
+
     local term = create_terminal_buffer()
     state.proj_current_term[curr_proj] = term
 
@@ -123,6 +141,25 @@ function M.open_new_terminal()
     vim.cmd('startinsert')
 
     return state.win_id
+end
+
+function M.preload()
+    local curr_proj = get_curr_proj()
+
+    local buf_id = vim.api.nvim_create_buf(false, true)
+    -- Set buffer options using modern API
+    vim.bo[buf_id].bufhidden = 'hide'
+    vim.bo[buf_id].swapfile = false
+
+    local term = {
+        buf_id = buf_id
+    }
+    vim.api.nvim_buf_call(buf_id, function()
+        term.term_job_id = vim.fn.termopen(vim.o.shell)
+    end)
+
+    preloadedTerms[curr_proj] = term
+    return buf_id
 end
 
 -- Open the floating terminal
@@ -158,9 +195,19 @@ function M.kill()
             end
         end
     end
+    for _, term in pairs(preloadedTerms) do
+        if term.term_job_id then
+            vim.fn.jobstop(term.term_job_id)
+        end
+        if term.buf_id and vim.api.nvim_buf_is_valid(term.buf_id) then
+            vim.api.nvim_buf_delete(term.buf_id, { force = true })
+        end
+    end
+
     state.proj_current_term = nil
     state.proj_current_term = {}
     projTerms = {}
+    preloadedTerms = {}
 
     print("Killed floating terminal")
 end
@@ -225,6 +272,7 @@ end
 function M.debug()
     print("Proj terms: " .. vim.inspect(projTerms))
     print("State: " .. vim.inspect(state))
+    print("Preloaded: " .. vim.inspect(preloadedTerms))
 end
 
 return M

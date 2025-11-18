@@ -222,8 +222,22 @@ describe("Floating terminal", function()
         assert(curr_buf_id ~= diff_proj_buf_id)
     end)
 
+    it("preloads a terminal", function ()
+        local win_count_before = #vim.api.nvim_list_wins()
+
+        local preloaded_buf_id = term.preload()
+        local win_count_after_preload = #vim.api.nvim_list_wins()
+        local win_id = term.open()
+
+        assert(preloaded_buf_id > 0)
+        eq(win_count_before, win_count_after_preload, "No window opened from preload")
+        local win_buf_id = vim.api.nvim_win_get_buf(win_id)
+        eq(win_buf_id, preloaded_buf_id, "Should be the preloaded buf")
+    end)
+
     it("kills terminals", function ()
         local initial_bufs = #vim.api.nvim_list_bufs()
+        term.preload()
         term.open_new_terminal()
         term.open_new_terminal()
         vim.fn.getcwd = function() return "/stub/diffproj" end
