@@ -13,7 +13,8 @@ return {
                     keymap = {
                         preset = 'default',
                         ['<C-k>'] = false,
-                        ['<C-s>'] = { 'show_signature', 'hide_signature' }
+                        ['<C-s>'] = { 'show_signature', 'hide_signature' },
+                        ['<CR>'] = { 'select_and_accept', 'fallback' }
                     },
                     appearance = {
                         nerd_font_variant = 'mono'
