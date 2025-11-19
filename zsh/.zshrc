@@ -25,8 +25,11 @@ gap() {
 ga.() {
     git add .
 }
-gc() {
-    git commit "$@"
+gcom() {
+    git commit -m "$*"
+}
+gcoma() {
+    git commit --amend
 }
 alias dn='dotnet'
 dnt() {
