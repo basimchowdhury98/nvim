@@ -34,8 +34,12 @@ function ga. {
     git add .
 }
 
-function gc {
-    git commit @args
+function gcom {
+    git commit -m "$args"
+}
+
+function gcoma {
+    git commit --amend
 }
 
 Set-Alias dn dotnet
