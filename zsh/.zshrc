@@ -31,6 +31,9 @@ gcom() {
 gcoma() {
     git commit --amend
 }
+gst() {
+    git stash --include-untracked
+}
 alias dn='dotnet'
 dnt() {
     dotnet test

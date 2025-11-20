@@ -42,6 +42,10 @@ function gcoma {
     git commit --amend
 }
 
+function gst {
+    git stash --include-untracked
+}
+
 Set-Alias dn dotnet
 
 function dnt {
