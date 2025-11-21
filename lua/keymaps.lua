@@ -36,7 +36,7 @@ map({ 't', 'n' }, '<Esc><Esc>', terminal.close, { desc = "Close the floating ter
 map('n', '<leader>tk', terminal.kill, { desc = "Kill the floating terminal" })
 map('n', '<leader>tn', terminal.open_new_terminal, { desc = "Open a new terminal" })
 map('n', '<leader>td', terminal.debug, { desc = "Debug" })
-map('t', '<leader>to', terminal.open_new_terminal, { desc = "Open a new terminal" })
+map('t', '<C-o>', terminal.open_new_terminal, { desc = "Open a new terminal" })
 map('t', '<C-n>', terminal.next, { desc = "Next terminal" })
 map('t', '<C-p>', terminal.prev, { desc = "Next terminal" })
 
