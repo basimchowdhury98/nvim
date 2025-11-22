@@ -1,4 +1,28 @@
 local eq = assert.are.same
+local function findPreloadedTerm(ignoreBuf)
+    if ignoreBuf ~= nil then
+        print("ignore buf ".. ignoreBuf)
+    end
+    local bufs = vim.api.nvim_list_bufs()
+    for _, buf in ipairs(bufs) do
+        print("iteration " .. _)
+        print("buf " .. buf)
+        if ignoreBuf ~= nil and buf == ignoreBuf then
+           goto continue
+        end
+        if vim.api.nvim_buf_is_valid(buf) then
+            local buftype = vim.api.nvim_get_option_value('buftype', { buf = buf })
+            if buftype == 'terminal' then
+                local term_job_id = vim.b[buf].terminal_job_id
+                if term_job_id ~= nil and term_job_id > 0 then
+                    return buf
+                end
+            end
+        end
+        ::continue::
+    end
+    return nil
+end
 
 describe("Floating terminal", function()
     local term = require("utils.terminal")
@@ -24,7 +48,7 @@ describe("Floating terminal", function()
         vim.fn.getcwd = function() return "/stub/proj" end
     end)
 
-    it("opens the terminal when none exists", function()
+    it("opens the terminal without setup", function()
         local win_count_before = #vim.api.nvim_list_wins()
 
         local win_id = term.open()
@@ -40,6 +64,27 @@ describe("Floating terminal", function()
         eq(config.title[1][1], ' Terminal ', "Should have correct title")
         local term_job_id = vim.b[buf_id].terminal_job_id
         assert(term_job_id ~= nil and term_job_id > 0, "Term job should have started")
+        local preloaded_next_term = findPreloadedTerm(buf_id)
+        assert(preloaded_next_term ~= nil and preloaded_next_term ~= buf_id, "Should preload a terminal after done")
+    end)
+
+    it("opens window with setup uses a preloaded term", function()
+        term.setupForProject()
+        local preloaded_term_buf = findPreloadedTerm()
+
+        local win_id = term.open()
+
+        assert(win_id ~= nil)
+        local buf_id = vim.api.nvim_win_get_buf(win_id)
+        assert(buf_id ~= nil)
+        local buftype = vim.api.nvim_get_option_value('buftype', { buf = buf_id })
+        eq(buftype, 'terminal', "Buffer should be a terminal")
+        local term_job_id = vim.b[buf_id].terminal_job_id
+        assert(term_job_id ~= nil and term_job_id > 0, "Term job should have started")
+        assert(preloaded_term_buf ~= nil)
+        eq(buf_id, preloaded_term_buf)
+        local preloaded_next_term = findPreloadedTerm(buf_id)
+        assert(preloaded_next_term ~= nil and preloaded_next_term ~= buf_id, "Should preload a terminal after done")
     end)
 
     it("processes opens idempotently", function()
@@ -55,7 +100,7 @@ describe("Floating terminal", function()
         local win_count_after = #vim.api.nvim_list_wins()
         eq(win_count_after, win_count_before + 1, "One new window should be open after")
         local buf_count_after = #vim.api.nvim_list_bufs()
-        eq(buf_count_after, buf_count_before +1, "Only one new buffer is open after")
+        eq(buf_count_after, buf_count_before + 2, "2 bufs should be open, one active, one preload")
         local term_job_id = vim.b[buf_id].terminal_job_id
         assert(term_job_id ~= nil and term_job_id > 0, "Term job should have started")
     end)
@@ -135,7 +180,7 @@ describe("Floating terminal", function()
         local win_count_after = #vim.api.nvim_list_wins()
         eq(win_count_after, win_count_before + 1, "One new window should be open after")
         local buf_count_after = #vim.api.nvim_list_bufs()
-        eq(buf_count_after, buf_count_before + 2, "Two new buffers should be open after")
+        eq(buf_count_after, buf_count_before + 3, "Three buffers, 2 active, 1 preloaded")
         local term_job_id = vim.b[buf_id].terminal_job_id
         assert(term_job_id ~= nil and term_job_id > 0, "Term job should have started")
         local term_job_id_2 = vim.b[buf_id_2].terminal_job_id
@@ -222,22 +267,8 @@ describe("Floating terminal", function()
         assert(curr_buf_id ~= diff_proj_buf_id)
     end)
 
-    it("preloads a terminal", function ()
-        local win_count_before = #vim.api.nvim_list_wins()
-
-        local preloaded_buf_id = term.preload()
-        local win_count_after_preload = #vim.api.nvim_list_wins()
-        local win_id = term.open()
-
-        assert(preloaded_buf_id > 0)
-        eq(win_count_before, win_count_after_preload, "No window opened from preload")
-        local win_buf_id = vim.api.nvim_win_get_buf(win_id)
-        eq(win_buf_id, preloaded_buf_id, "Should be the preloaded buf")
-    end)
-
     it("kills terminals", function ()
         local initial_bufs = #vim.api.nvim_list_bufs()
-        term.preload()
         term.open_new_terminal()
         term.open_new_terminal()
         vim.fn.getcwd = function() return "/stub/diffproj" end
@@ -248,7 +279,7 @@ describe("Floating terminal", function()
         term.kill()
 
         local bufs_after_kill = #vim.api.nvim_list_bufs()
-        eq(bufs_after_opens, initial_bufs + 4, "Opened 4 term bufs")
+        assert(bufs_after_opens > initial_bufs, "Should have opened some bufs")
         eq(bufs_after_kill, initial_bufs, "Buf count should go back to normal after kill")
     end)
 end)

@@ -114,6 +114,28 @@ local function close_window()
     end
 end
 
+local function preload()
+    local curr_proj = get_curr_proj()
+    local existing = preloadedTerms[curr_proj]
+    if existing ~= nil then
+        return
+    end
+
+    local buf_id = vim.api.nvim_create_buf(false, true)
+    -- Set buffer options using modern API
+    vim.bo[buf_id].bufhidden = 'hide'
+    vim.bo[buf_id].swapfile = false
+
+    local term = {
+        buf_id = buf_id
+    }
+    vim.api.nvim_buf_call(buf_id, function()
+        term.term_job_id = vim.fn.termopen(vim.o.shell)
+    end)
+
+    preloadedTerms[curr_proj] = term
+end
+
 function M.open_new_terminal()
     local curr_proj = get_curr_proj();
 
@@ -129,13 +151,15 @@ function M.open_new_terminal()
         table.insert(terms, preloaded)
         preloadedTerms[curr_proj] = nil
         refresh_window()
-        return
+        preload()
+        return state.win_id
     end
 
     local term = create_terminal_buffer()
     state.proj_current_term[curr_proj] = term
 
     refresh_window()
+    preload()
 
     term.term_job_id = vim.fn.termopen(vim.o.shell)
     vim.cmd('startinsert')
@@ -143,23 +167,8 @@ function M.open_new_terminal()
     return state.win_id
 end
 
-function M.preload()
-    local curr_proj = get_curr_proj()
-
-    local buf_id = vim.api.nvim_create_buf(false, true)
-    -- Set buffer options using modern API
-    vim.bo[buf_id].bufhidden = 'hide'
-    vim.bo[buf_id].swapfile = false
-
-    local term = {
-        buf_id = buf_id
-    }
-    vim.api.nvim_buf_call(buf_id, function()
-        term.term_job_id = vim.fn.termopen(vim.o.shell)
-    end)
-
-    preloadedTerms[curr_proj] = term
-    return buf_id
+function M.setupForProject()
+    preload()
 end
 
 -- Open the floating terminal

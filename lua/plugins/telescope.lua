@@ -46,7 +46,7 @@ return
                             local harpoon = require('harpoon.ui')
                             local mark = require('harpoon.mark')
                             project_actions.change_working_directory(prompt_bufnr, false)
-                            require("utils.terminal").preload()
+                            require("utils.terminal").setupForProject()
                             if mark.valid_index(1) then
                                 harpoon.nav_file(1)
                                 return
