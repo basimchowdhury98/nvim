@@ -173,13 +173,13 @@ binding_modes:
 keybindings:
   # Shift focus in a given direction.
   - commands: ['focus --direction left']
-    bindings: ['alt+h', 'alt+left']
+    bindings: ['alt+h']
   - commands: ['focus --direction right']
-    bindings: ['alt+l', 'alt+right']
+    bindings: ['alt+l']
   - commands: ['focus --direction up']
-    bindings: ['alt+k', 'alt+up']
+    bindings: ['alt+k']
   - commands: ['focus --direction down']
-    bindings: ['alt+j', 'alt+down']
+    bindings: ['alt+j']
 
   # Move focused window in a given direction.
   - commands: ['move --direction left']
@@ -193,13 +193,13 @@ keybindings:
 
   # Resize focused window by a percentage or pixel amount.
   - commands: ['resize --width -2%']
-    bindings: ['alt+u']
+    bindings: ['alt+left']
   - commands: ['resize --width +2%']
-    bindings: ['alt+p']
+    bindings: ['alt+right']
   - commands: ['resize --height +2%']
-    bindings: ['alt+o']
+    bindings: ['alt+up']
   - commands: ['resize --height -2%']
-    bindings: ['alt+i']
+    bindings: ['alt+down']
 
   # As an alternative to the resize keybindings above, resize mode enables
   # resizing via arrow keys or HJKL. The binding mode is defined above with
