@@ -284,4 +284,26 @@ function M.debug()
     print("Preloaded: " .. vim.inspect(preloadedTerms))
 end
 
+function M.open_at_path(path)
+    local curr_proj = get_curr_proj();
+
+    local normalized_path = vim.fn.fnamemodify(path, ':p')
+    local normalized_proj = vim.fn.fnamemodify(curr_proj, ':p')
+    if not vim.startswith(normalized_path, normalized_proj) then
+        vim.notify(
+            string.format("Path '%s' is not within project '%s'", path, curr_proj),
+            vim.log.levels.WARN
+        )
+        return
+    end
+
+    local term = create_terminal_buffer()
+    state.proj_current_term[curr_proj] = term
+    refresh_window()
+    vim.fn.termopen(vim.o.shell, { cwd = path })
+    vim.cmd('startinsert')
+
+    return state.win_id
+end
+
 return M

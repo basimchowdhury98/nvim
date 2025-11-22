@@ -1,4 +1,5 @@
 local eq = assert.are.same
+local original_temropen = vim.fn.termopen
 local function findPreloadedTerm(ignoreBuf)
     local bufs = vim.api.nvim_list_bufs()
     for _, buf in ipairs(bufs) do
@@ -20,6 +21,7 @@ local function findPreloadedTerm(ignoreBuf)
 end
 
 describe("Floating terminal", function()
+    vim.fn.termopen = original_temropen
     local term = require("utils.terminal")
 
     before_each(function()
@@ -276,5 +278,33 @@ describe("Floating terminal", function()
         local bufs_after_kill = #vim.api.nvim_list_bufs()
         assert(bufs_after_opens > initial_bufs, "Should have opened some bufs")
         eq(bufs_after_kill, initial_bufs, "Buf count should go back to normal after kill")
+    end)
+
+    it("opens terminal at specified path", function ()
+        local specificPath = "/stub/proj/specific"
+        local optSpy
+        vim.fn.termopen = function (_, opt)
+            optSpy = opt
+        end
+
+        local win_id = term.open_at_path(specificPath)
+
+        assert(win_id ~= nil)
+        local buf_id = vim.api.nvim_win_get_buf(win_id)
+        assert(buf_id ~= nil)
+        assert(optSpy ~= nil and optSpy.cwd == specificPath, "Should open specific path")
+    end)
+
+    it("vim notifies when attempt to open specific path outside of project", function ()
+        local outsideOfProj = "stub/diffproj/specific"
+        local optSpy
+        vim.fn.termopen = function (_, opt)
+            optSpy = opt
+        end
+
+        local win_id = term.open_at_path(outsideOfProj)
+
+        assert(win_id == nil, "No window should be open")
+        assert(optSpy == nil, "No terminal should be spawned")
     end)
 end)
