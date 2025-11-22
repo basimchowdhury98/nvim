@@ -1,12 +1,7 @@
 local eq = assert.are.same
 local function findPreloadedTerm(ignoreBuf)
-    if ignoreBuf ~= nil then
-        print("ignore buf ".. ignoreBuf)
-    end
     local bufs = vim.api.nvim_list_bufs()
     for _, buf in ipairs(bufs) do
-        print("iteration " .. _)
-        print("buf " .. buf)
         if ignoreBuf ~= nil and buf == ignoreBuf then
            goto continue
         end
