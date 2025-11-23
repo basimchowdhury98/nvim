@@ -1,11 +1,5 @@
 -- floating-terminal.lua
 -- a floating terminal that mimics telescope's ui design
--- epic: multiple term tabs - when open fterm and no term, show a list of term paths (pwd always default)
--- can save commonly used paths in list of term paths
--- when there are terms open open the last opened term and show tabs of the other terms
--- can switch back and forth between term tabs
---
--- mvp: open new terminal instance and switch between the two (within the fterm)
 
 local M = {}
 
@@ -34,10 +28,10 @@ local state = {
     proj_current_term = {},
 }
 
-local projTerms = {
+local proj_terms = {
 }
 
-local preloadedTerms = {
+local preloaded_terms = {
 }
 
 local function get_curr_proj()
@@ -48,24 +42,35 @@ local function window_is_open()
     return state.win_id and vim.api.nvim_win_is_valid(state.win_id)
 end
 
-local function create_terminal_buffer()
+local function create_terminal_buffer(path)
     local buf_id = vim.api.nvim_create_buf(false, true)
-    -- Set buffer options using modern API
     vim.bo[buf_id].bufhidden = 'hide'
     vim.bo[buf_id].swapfile = false
 
-    local projPath = get_curr_proj()
-
-    local terms = projTerms[projPath]
-    if terms == nil then
-        terms = {}
-        projTerms[projPath] = terms
-    end
     local term = {
         buf_id = buf_id
     }
-    table.insert(terms, term)
+    vim.api.nvim_buf_call(buf_id, function()
+        if path == nil then
+            term.term_job_id = vim.fn.termopen(vim.o.shell)
+            return
+        end
+        term.term_job_id = vim.fn.termopen(vim.o.shell, { cwd = path })
+    end)
+
     return term
+end
+
+local function attach_term(term)
+    local curr_proj = get_curr_proj()
+    local terms = proj_terms[curr_proj]
+    if terms == nil then
+        terms = {}
+        proj_terms[curr_proj] = terms
+    end
+
+    table.insert(terms, term)
+    state.proj_current_term[curr_proj] = term
 end
 
 local function refresh_window()
@@ -74,8 +79,7 @@ local function refresh_window()
     if window_is_open() then
         if state.proj_current_term[curr_proj] == nil then
             local term = create_terminal_buffer()
-            term.term_job_id = vim.fn.termopen(vim.o.shell)
-            state.proj_current_term[curr_proj] = term
+            attach_term(term)
         end
 
         vim.api.nvim_win_set_buf(state.win_id, state.proj_current_term[curr_proj].buf_id)
@@ -103,10 +107,10 @@ local function refresh_window()
 
     -- Set window options to match Telescope using modern API
     vim.wo[state.win_id].winhighlight = 'Normal:TelescopeNormal,FloatBorder:TelescopeBorder,Title:TelescopeTitle'
+    vim.cmd('startinsert')
 end
 
 
--- Close the floating terminal
 local function close_window()
     if window_is_open() then
         vim.api.nvim_win_close(state.win_id, false)
@@ -116,53 +120,30 @@ end
 
 local function preload()
     local curr_proj = get_curr_proj()
-    local existing = preloadedTerms[curr_proj]
+    local existing = preloaded_terms[curr_proj]
     if existing ~= nil then
         return
     end
 
-    local buf_id = vim.api.nvim_create_buf(false, true)
-    -- Set buffer options using modern API
-    vim.bo[buf_id].bufhidden = 'hide'
-    vim.bo[buf_id].swapfile = false
-
-    local term = {
-        buf_id = buf_id
-    }
-    vim.api.nvim_buf_call(buf_id, function()
-        term.term_job_id = vim.fn.termopen(vim.o.shell)
-    end)
-
-    preloadedTerms[curr_proj] = term
+    local term = create_terminal_buffer()
+    preloaded_terms[curr_proj] = term
 end
 
 function M.open_new_terminal()
     local curr_proj = get_curr_proj();
 
-    local preloaded = preloadedTerms[curr_proj]
-    if preloaded ~= nil then
-        state.proj_current_term[curr_proj] = preloaded
-        local terms = projTerms[curr_proj]
-        if terms == nil then
-            terms = {}
-            projTerms[curr_proj] = terms
-        end
-
-        table.insert(terms, preloaded)
-        preloadedTerms[curr_proj] = nil
-        refresh_window()
-        preload()
-        return state.win_id
+    local term
+    if preloaded_terms[curr_proj] ~= nil then
+        term = preloaded_terms[curr_proj]
+        preloaded_terms[curr_proj] = nil
+    else
+        term = create_terminal_buffer()
     end
 
-    local term = create_terminal_buffer()
-    state.proj_current_term[curr_proj] = term
+    attach_term(term)
 
     refresh_window()
     preload()
-
-    term.term_job_id = vim.fn.termopen(vim.o.shell)
-    vim.cmd('startinsert')
 
     return state.win_id
 end
@@ -171,7 +152,6 @@ function M.setupForProject()
     preload()
 end
 
--- Open the floating terminal
 function M.open()
     local curr_proj = get_curr_proj();
 
@@ -183,18 +163,16 @@ function M.open()
     else
         refresh_window()
     end
-    vim.cmd('startinsert')
     return state.win_id
 end
 
--- Close the floating terminal
 function M.close()
     close_window()
 end
 
 function M.kill()
     close_window()
-    for _, terms in pairs(projTerms) do
+    for _, terms in pairs(proj_terms) do
         for _, term in ipairs(terms) do
             if term.term_job_id then
                 vim.fn.jobstop(term.term_job_id)
@@ -204,7 +182,7 @@ function M.kill()
             end
         end
     end
-    for _, term in pairs(preloadedTerms) do
+    for _, term in pairs(preloaded_terms) do
         if term.term_job_id then
             vim.fn.jobstop(term.term_job_id)
         end
@@ -215,20 +193,20 @@ function M.kill()
 
     state.proj_current_term = nil
     state.proj_current_term = {}
-    projTerms = {}
-    preloadedTerms = {}
+    proj_terms = {}
+    preloaded_terms = {}
 
-    print("Killed floating terminal")
+    vim.notify("Killed floating terminal")
 end
 
 function M.next()
-    if next(projTerms) == nil then
+    if next(proj_terms) == nil then
         vim.notify("No terminals spawned")
         return
     end
     local proj = get_curr_proj()
 
-    local terms = projTerms[proj]
+    local terms = proj_terms[proj]
     if #terms == 0 then
         vim.notify("No terminals for this project spawned")
         return
@@ -250,13 +228,13 @@ function M.next()
 end
 
 function M.prev()
-    if next(projTerms) == nil then
+    if next(proj_terms) == nil then
         vim.notify("No terminals spawned")
         return
     end
     local proj = get_curr_proj()
 
-    local terms = projTerms[proj]
+    local terms = proj_terms[proj]
     if #terms == 0 then
         vim.notify("No terminals for this project spawned")
         return
@@ -279,9 +257,9 @@ function M.prev()
 end
 
 function M.debug()
-    print("Proj terms: " .. vim.inspect(projTerms))
+    print("Proj terms: " .. vim.inspect(proj_terms))
     print("State: " .. vim.inspect(state))
-    print("Preloaded: " .. vim.inspect(preloadedTerms))
+    print("Preloaded: " .. vim.inspect(preloaded_terms))
 end
 
 function M.open_at_path(path)
@@ -297,11 +275,9 @@ function M.open_at_path(path)
         return
     end
 
-    local term = create_terminal_buffer()
-    state.proj_current_term[curr_proj] = term
+    local term = create_terminal_buffer(path)
+    attach_term(term)
     refresh_window()
-    vim.fn.termopen(vim.o.shell, { cwd = path })
-    vim.cmd('startinsert')
 
     return state.win_id
 end
