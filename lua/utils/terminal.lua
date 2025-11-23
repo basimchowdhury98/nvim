@@ -291,7 +291,7 @@ function M.open_at_path(path)
     local normalized_proj = vim.fn.fnamemodify(curr_proj, ':p')
     if not vim.startswith(normalized_path, normalized_proj) then
         vim.notify(
-            string.format("Path '%s' is not within project '%s'", path, curr_proj),
+            string.format("Path '%s' is not within project '%s'", normalized_path, normalized_proj),
             vim.log.levels.WARN
         )
         return
