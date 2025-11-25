@@ -1,5 +1,6 @@
 -- floating-terminal.lua
 -- a floating terminal that mimics telescope's ui design
+-- EPIC: display term info somewhere
 
 local M = {}
 
