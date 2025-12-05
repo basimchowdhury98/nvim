@@ -3,5 +3,6 @@
 * AngularLS needed
 * Telescope picker of copied/yanked texts
 * Show ! in c# as not - look into treesitter to help
+* SUPERMAVEN!!
 
 Plugin ideas:
