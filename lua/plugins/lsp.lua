@@ -165,7 +165,6 @@ return {
         "seblyng/roslyn.nvim",
         ft = { "cs" },
         config = function ()
-            require("plugins.lsp.fidget_spinner"):init()
         end
     },
     {

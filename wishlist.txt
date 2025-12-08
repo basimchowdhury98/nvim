@@ -1,8 +1,6 @@
-* Open terminal from curr buffer path
 * Lsp always needs restarts for new files
 * AngularLS needed
 * Telescope picker of copied/yanked texts
 * Show ! in c# as not - look into treesitter to help
-* SUPERMAVEN!!
 
 Plugin ideas:
