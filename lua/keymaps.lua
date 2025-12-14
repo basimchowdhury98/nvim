@@ -52,7 +52,7 @@ map({ "t" }, "jk", "<Esc>", { desc = "[E]xit from terminal to normal mode", rema
 map({ "i" }, "JK", "<C-c>", { desc = "[E]xit from insert to normal mode", remap = true })
 map({ "t" }, "JK", "<Esc>", { desc = "[E]xit from terminal to normal mode", remap = true })
 map({ "n" }, "<C-s>", ":w<CR>", { desc = "[S]ave file/write buffer" })
-map({ "n" }, "<C-a>", "ggVG", { desc = "[A]ll select" })
+map({ "n" }, "<leader>a", "ggVG", { desc = "[A]ll select" })
 
 -- Quick fix
 map("n", "<leader>qc", ":cclose<CR>", { desc = "Close quickfix" })
