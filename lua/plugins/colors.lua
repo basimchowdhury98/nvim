@@ -27,6 +27,10 @@ return {
         end
     },
     {
+        "ribru17/bamboo.nvim",
+        priority = 1000,
+    },
+    {
         'rockerBOO/boo-colorscheme-nvim',
         lazy = false,
         config = function()

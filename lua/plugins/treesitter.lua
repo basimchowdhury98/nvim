@@ -4,7 +4,6 @@ return {
         branch = 'master',
         lazy = false,
         build = ":TSUpdate",
-        main = 'nvim-treesitter.configs',
         opts = {
             ensure_installed = { "c", "lua", "vim", "vimdoc", "markdown", "markdown_inline", "typescript", "javascript", "tsx", "c_sharp", "angular" },
 

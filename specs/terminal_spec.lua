@@ -281,7 +281,7 @@ describe("Floating terminal", function()
     end)
 
     it("opens terminal at specified path", function()
-        local specific_path = test_proj .. "\\specific"
+        local specific_path = vim.fs.joinpath(test_proj, "specific")
         setup_path(specific_path)
 
         local win_id = term.open_at_path(specific_path)
@@ -291,7 +291,7 @@ describe("Floating terminal", function()
     end)
 
     it("vim notifies when attempt to open specific path outside of project", function()
-        local outside_proj_path = test_proj_2 .. "\\specific"
+        local outside_proj_path = vim.fs.joinpath(test_proj_2, "specific")
 
         local win_id = term.open_at_path(outside_proj_path)
 

@@ -9,6 +9,11 @@ if vim.fn.has("mac") == 1 then
     vim.opt.shellcmdflag = "-c"
     vim.opt.shellquote = ""
     vim.opt.shellxquote = ""
+elseif vim.fn.has("linux") == 1 then
+    vim.opt.shell = "/bin/bash"
+    vim.opt.shellcmdflag = "-c"
+    vim.opt.shellquote = ""
+    vim.opt.shellxquote = ""
 else
     vim.opt.shell = "powershell"
     vim.opt.shellcmdflag = "-command"
