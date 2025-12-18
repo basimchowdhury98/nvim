@@ -49,7 +49,7 @@ function gst {
 Set-Alias dn dotnet
 
 function dnt {
-    dotnet test
+    dotnet test @args
 }
 
 function dnb {
