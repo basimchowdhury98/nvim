@@ -41,6 +41,6 @@ dnt() {
 dnb() {
     dotnet build
 }
-
-# Oh My Posh (if installed on macOS)
-eval "$(oh-my-posh init zsh --config 'gruvbox')"
+dnr() {
+    dotnet run
+}
