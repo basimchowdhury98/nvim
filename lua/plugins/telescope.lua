@@ -40,7 +40,8 @@ return
                         base_dirs = {
                             "C:/Users/bchowdhury/source/repos",
                             "C:/Users/basim/Projects",
-                            "/Users/basimchowdhury/Projects"
+                            "/Users/basimchowdhury/Projects",
+                            "/home/bchowdhury/Projects"
                         },
                         on_project_selected = function(prompt_bufnr)
                             local harpoon = require('harpoon.ui')
