@@ -29,8 +29,8 @@ vim.diagnostic.config({
 
 -- Visual
 vim.opt.cursorline = true
-vim.opt.list = true
-vim.opt.listchars = { leadmultispace = "│   ", trail = "-" }
+vim.opt.list = false
+vim.opt.listchars = {  trail = "-" }
 vim.api.nvim_set_hl(0, 'Visual', { bg = '#5a3500' })  -- Bright orange visaul selection
 
 -- File handling
