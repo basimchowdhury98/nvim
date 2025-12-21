@@ -135,6 +135,34 @@ local function preload()
     preloaded_terms[curr_proj] = term
 end
 
+local function rotate_next()
+    if next(proj_terms) == nil then
+        vim.notify("No terminals spawned")
+        return
+    end
+    local proj = get_curr_proj()
+
+    local terms = proj_terms[proj]
+    if #terms == 0 then
+        vim.notify("No terminals for this project spawned")
+        return
+    end
+
+    local nextTerm = -1
+    for index, term in ipairs(terms) do
+        if index == #terms then
+            nextTerm = 1
+            break
+        end
+        if state.proj_current_term[proj].buf_id == term.buf_id then
+            nextTerm = index + 1
+            break
+        end
+    end
+    state.proj_current_term[proj] = terms[nextTerm]
+    refresh_window()
+end
+
 function M.open_new_terminal()
     local curr_proj = get_curr_proj();
 
@@ -176,6 +204,36 @@ function M.close()
     close_window()
 end
 
+function M.delete_curr()
+    local curr_proj = get_curr_proj()
+    local terms = proj_terms[curr_proj]
+    local curr_term = state.proj_current_term[curr_proj]
+
+    if (terms == nil or #terms == 0) then
+        return
+    elseif (#terms == 1) then
+        state.proj_current_term[curr_proj] = nil
+        close_window()
+    else
+        rotate_next()
+    end
+
+    for i,v in ipairs(terms) do
+        if v == curr_term then
+            table.remove(terms, i)
+            break
+        end
+    end
+
+    if curr_term.term_job_id then
+        vim.fn.jobstop(curr_term.term_job_id)
+    end
+    if curr_term.buf_id and vim.api.nvim_buf_is_valid(curr_term.buf_id) then
+        vim.api.nvim_buf_delete(curr_term.buf_id, { force = true })
+    end
+
+end
+
 function M.kill()
     close_window()
     for _, terms in pairs(proj_terms) do
@@ -206,31 +264,7 @@ function M.kill()
 end
 
 function M.next()
-    if next(proj_terms) == nil then
-        vim.notify("No terminals spawned")
-        return
-    end
-    local proj = get_curr_proj()
-
-    local terms = proj_terms[proj]
-    if #terms == 0 then
-        vim.notify("No terminals for this project spawned")
-        return
-    end
-
-    local nextTerm = -1
-    for index, term in ipairs(terms) do
-        if index == #terms then
-            nextTerm = 1
-            break
-        end
-        if state.proj_current_term[proj].buf_id == term.buf_id then
-            nextTerm = index + 1
-            break
-        end
-    end
-    state.proj_current_term[proj] = terms[nextTerm]
-    refresh_window()
+    rotate_next()
 end
 
 function M.prev()

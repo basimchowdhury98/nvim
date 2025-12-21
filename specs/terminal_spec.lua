@@ -298,4 +298,34 @@ describe("Floating terminal", function()
         assert(win_id == nil, "A window was opened when it shouldnt")
         assert(notifySpy, string.format("Path '%s' is not within project '%s'", outside_proj_path, test_proj))
     end)
+
+    it("deletes curr terminal and closes the window if one term is open", function ()
+        local win_count_start = #vim.api.nvim_list_wins()
+        local win_id = term.open_new_terminal()
+
+        term.delete_curr()
+
+        eq(vim.api.nvim_win_is_valid(win_id), false, "The opened buf didnt delete")
+        local win_count_after = #vim.api.nvim_list_wins()
+        eq(win_count_after, win_count_start, "The window wasnt closed")
+    end)
+
+    it("deletes curr terminal and attaches next term if multiple terms are open", function ()
+        local win_id = term.open_new_terminal()
+        local _ = term.open_new_terminal()
+        term.prev() -- Going back to the first term
+        local curr_term_buf_id = vim.api.nvim_win_get_buf(win_id)
+
+        term.delete_curr()
+
+        eq(vim.api.nvim_win_is_valid(win_id), true, "The win wasnt valid but should be")
+        eq(vim.api.nvim_buf_is_valid(curr_term_buf_id), false, "The current term buffer wasnt deleted")
+        local updated_buf_id = vim.api.nvim_win_get_buf(win_id)
+        assert(updated_buf_id ~= curr_term_buf_id, "The next term wasnt attached")
+        eq(vim.api.nvim_buf_is_valid(updated_buf_id), true, "The next term buffer isnt valid")
+    end)
+
+    it("delete curr terminal when nothing is loaded does nothing", function ()
+        term.delete_curr()
+    end)
 end)
