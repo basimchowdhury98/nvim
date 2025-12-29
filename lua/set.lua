@@ -5,7 +5,7 @@ vim.opt.softtabstop = 4
 vim.opt.shiftwidth = 4
 vim.opt.expandtab = true
 vim.opt.wrap = false
-vim.opt.hlsearch = false
+vim.opt.hlsearch = true
 vim.opt.incsearch = true
 vim.opt.scrolloff = 8
 vim.opt.updatetime = 50
@@ -14,6 +14,7 @@ vim.opt.ignorecase = true
 vim.opt.smartcase = true
 vim.opt.nu = true
 vim.opt.confirm = true
+vim.opt.termguicolors = true
 vim.diagnostic.config({
     virtual_lines = {
         current_line = true

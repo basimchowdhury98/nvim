@@ -47,13 +47,19 @@ map('t', '<C-d>', terminal.delete_curr, { desc = "Delete current terminal" })
 map("i", "<C-l>", "<Esc>la", { desc = "Move one char left in insert mode" })
 map("i", "<S-CR>", "<Esc>$o", { desc = "From anywhere in line enter into a new line in insert mode" })
 
--- Buffer
+-- Modes
 map({ "i" }, "jk", "<C-c>", { desc = "[E]xit from insert to normal mode", remap = true })
 map({ "t" }, "jk", "<Esc>", { desc = "[E]xit from terminal to normal mode", remap = true })
 map({ "i" }, "JK", "<C-c>", { desc = "[E]xit from insert to normal mode", remap = true })
 map({ "t" }, "JK", "<Esc>", { desc = "[E]xit from terminal to normal mode", remap = true })
+
+-- Buffer Edit
 map({ "n" }, "<C-s>", ":w<CR>", { desc = "[S]ave file/write buffer" })
+
+-- Buffer nav
 map({ "n" }, "<leader>a", "ggVG", { desc = "[A]ll select" })
+map({ "n" }, "<leader>/", ":noh<CR>", { desc = "Clear hl" })
+
 
 -- Quick fix
 map("n", "<leader>qc", ":cclose<CR>", { desc = "Close quickfix" })
