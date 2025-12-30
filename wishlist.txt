@@ -2,5 +2,6 @@
 * AngularLS needed
 * Telescope picker of copied/yanked texts
 * Show ! in c# as not - look into treesitter to help
+* c+n + p in term while in normal mode acts weird
 
 Plugin ideas:
