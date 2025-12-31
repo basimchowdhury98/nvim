@@ -163,6 +163,35 @@ local function rotate_next()
     refresh_window()
 end
 
+local function rotate_prev()
+    if next(proj_terms) == nil then
+        vim.notify("No terminals spawned")
+        return
+    end
+    local proj = get_curr_proj()
+
+    local terms = proj_terms[proj]
+    if #terms == 0 then
+        vim.notify("No terminals for this project spawned")
+        return
+    end
+
+    local nextTerm = -1
+    for i = #terms, 1, -1 do
+        if i == 1 then
+            nextTerm = #terms
+            break
+        end
+        local term = terms[i]
+        if state.proj_current_term[proj].buf_id == term.buf_id then
+            nextTerm = i - 1
+            break
+        end
+    end
+    state.proj_current_term[proj] = terms[nextTerm]
+    refresh_window()
+end
+
 function M.open_new_terminal()
     local curr_proj = get_curr_proj();
 
@@ -173,6 +202,8 @@ function M.open_new_terminal()
     else
         term = create_terminal_buffer()
     end
+    vim.keymap.set({ 't', 'n' }, '<C-l>', rotate_next, { buffer = term.buf_id })
+    vim.keymap.set({ 't', 'n' }, '<C-h>', rotate_prev, { buffer = term.buf_id })
 
     attach_term(term)
 
@@ -268,32 +299,7 @@ function M.next()
 end
 
 function M.prev()
-    if next(proj_terms) == nil then
-        vim.notify("No terminals spawned")
-        return
-    end
-    local proj = get_curr_proj()
-
-    local terms = proj_terms[proj]
-    if #terms == 0 then
-        vim.notify("No terminals for this project spawned")
-        return
-    end
-
-    local nextTerm = -1
-    for i = #terms, 1, -1 do
-        if i == 1 then
-            nextTerm = #terms
-            break
-        end
-        local term = terms[i]
-        if state.proj_current_term[proj].buf_id == term.buf_id then
-            nextTerm = i - 1
-            break
-        end
-    end
-    state.proj_current_term[proj] = terms[nextTerm]
-    refresh_window()
+    rotate_prev()
 end
 
 function M.debug()

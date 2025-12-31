@@ -40,8 +40,6 @@ map('n', '<leader>tj', function()
     require('utils.terminal').open_at_path(file_dir)
 end, { desc = 'Open terminal at file directory' })
 map('t', '<C-o>', terminal.open_new_terminal, { desc = "Open a new terminal" })
-map('t', '<C-n>', terminal.next, { desc = "Next terminal" })
-map('t', '<C-p>', terminal.prev, { desc = "Next terminal" })
 map('t', '<C-d>', terminal.delete_curr, { desc = "Delete current terminal" })
 
 map("i", "<C-l>", "<Esc>la", { desc = "Move one char left in insert mode" })
