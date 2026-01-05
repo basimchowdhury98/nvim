@@ -44,6 +44,8 @@ map('t', '<C-d>', terminal.delete_curr, { desc = "Delete current terminal" })
 
 map("i", "<C-l>", "<Esc>la", { desc = "Move one char left in insert mode" })
 map("i", "<S-CR>", "<Esc>$o", { desc = "From anywhere in line enter into a new line in insert mode" })
+map("t", "<C-p>", "<Up>", { desc = "[P]revious terminal command" })
+map("t", "<C-n>", "<Down>", { desc = "[N]ext terminal command" })
 
 -- Modes
 map({ "i" }, "jk", "<C-c>", { desc = "[E]xit from insert to normal mode", remap = true })
