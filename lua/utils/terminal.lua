@@ -80,17 +80,20 @@ local function attach_term(term)
 end
 
 local function refresh_window()
-    local curr_proj = get_curr_proj();
-
-    if window_is_open() then
-        if state.proj_current_term[curr_proj] == nil then
-            local term = create_terminal_buffer()
-            attach_term(term)
-        end
-
-        vim.api.nvim_win_set_buf(state.win_id, state.proj_current_term[curr_proj].buf_id)
+    if not window_is_open() then
         return
     end
+
+    local curr_proj = get_curr_proj();
+    vim.api.nvim_win_set_buf(state.win_id, state.proj_current_term[curr_proj].buf_id)
+end
+
+local function open_window()
+    if window_is_open() then
+        return
+    end
+
+    local curr_proj = get_curr_proj();
 
     local width = math.floor(vim.o.columns * config.width_ratio)
     local height = math.floor(vim.o.lines * config.height_ratio)
@@ -118,24 +121,19 @@ end
 
 
 local function close_window()
-    if window_is_open() then
-        vim.api.nvim_win_close(state.win_id, false)
-        state.win_id = nil
-    end
-end
-
-local function preload()
-    local curr_proj = get_curr_proj()
-    local existing = preloaded_terms[curr_proj]
-    if existing ~= nil then
+    if not window_is_open() then
         return
     end
 
-    local term = create_terminal_buffer()
-    preloaded_terms[curr_proj] = term
+    vim.api.nvim_win_close(state.win_id, false)
+    state.win_id = nil
 end
 
 local function rotate_next()
+    if not window_is_open() then
+        return
+    end
+
     if next(proj_terms) == nil then
         vim.notify("No terminals spawned")
         return
@@ -164,6 +162,10 @@ local function rotate_next()
 end
 
 local function rotate_prev()
+    if not window_is_open() then
+        return
+    end
+
     if next(proj_terms) == nil then
         vim.notify("No terminals spawned")
         return
@@ -192,6 +194,24 @@ local function rotate_prev()
     refresh_window()
 end
 
+local function set_term_keymaps(term)
+    vim.keymap.set({ 't', 'n' }, '<C-l>', rotate_next, { buffer = term.buf_id })
+    vim.keymap.set({ 't', 'n' }, '<C-h>', rotate_prev, { buffer = term.buf_id })
+
+end
+
+local function preload()
+    local curr_proj = get_curr_proj()
+    local existing = preloaded_terms[curr_proj]
+    if existing ~= nil then
+        return
+    end
+
+    local term = create_terminal_buffer()
+    set_term_keymaps(term)
+    preloaded_terms[curr_proj] = term
+end
+
 function M.open_new_terminal()
     local curr_proj = get_curr_proj();
 
@@ -201,13 +221,17 @@ function M.open_new_terminal()
         preloaded_terms[curr_proj] = nil
     else
         term = create_terminal_buffer()
+        set_term_keymaps(term)
     end
-    vim.keymap.set({ 't', 'n' }, '<C-l>', rotate_next, { buffer = term.buf_id })
-    vim.keymap.set({ 't', 'n' }, '<C-h>', rotate_prev, { buffer = term.buf_id })
 
     attach_term(term)
 
-    refresh_window()
+    if window_is_open() then
+        refresh_window()
+    else
+        open_window()
+    end
+
     preload()
 
     return state.win_id
@@ -226,7 +250,7 @@ function M.open()
     if state.proj_current_term[curr_proj] == nil then
         M.open_new_terminal()
     else
-        refresh_window()
+        open_window()
     end
     return state.win_id
 end
@@ -249,7 +273,7 @@ function M.delete_curr()
         rotate_next()
     end
 
-    for i,v in ipairs(terms) do
+    for i, v in ipairs(terms) do
         if v == curr_term then
             table.remove(terms, i)
             break
@@ -262,7 +286,6 @@ function M.delete_curr()
     if curr_term.buf_id and vim.api.nvim_buf_is_valid(curr_term.buf_id) then
         vim.api.nvim_buf_delete(curr_term.buf_id, { force = true })
     end
-
 end
 
 function M.kill()
@@ -322,8 +345,9 @@ function M.open_at_path(path)
     end
 
     local term = create_terminal_buffer(path)
+    set_term_keymaps(term)
     attach_term(term)
-    refresh_window()
+    open_window()
 
     return state.win_id
 end
