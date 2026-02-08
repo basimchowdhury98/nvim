@@ -18,6 +18,7 @@ end
 
 --- Open a popup input window near the cursor
 --- @param on_submit fun(text: string) Called with the message text when user presses <CR>
+--- @return number buf_id The buffer id of the input popup
 function M.open(on_submit)
     local buf = vim.api.nvim_create_buf(false, true)
     vim.bo[buf].buftype = "nofile"
@@ -89,6 +90,8 @@ function M.open(on_submit)
         vim.cmd("stopinsert")
         vim.schedule(cancel)
     end, { buffer = buf, desc = "AI: Cancel input" })
+
+    return buf
 end
 
 return M

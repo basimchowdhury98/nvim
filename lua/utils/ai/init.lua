@@ -113,8 +113,9 @@ local function send_message(text)
 end
 
 --- Open the input popup and send the message on submit
+--- @return number buf_id The buffer id of the input popup
 function M.prompt()
-    input.open(function(text)
+    return input.open(function(text)
         send_message(text)
     end)
 end

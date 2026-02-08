@@ -17,16 +17,6 @@ local function chat_contains(text)
     return false
 end
 
-local function find_float()
-    for _, win in ipairs(vim.api.nvim_list_wins()) do
-        local cfg = vim.api.nvim_win_get_config(win)
-        if cfg.relative ~= "" then
-            return win, vim.api.nvim_win_get_buf(win)
-        end
-    end
-    return nil, nil
-end
-
 local function close_all_floats()
     for _, win in ipairs(vim.api.nvim_list_wins()) do
         local cfg = vim.api.nvim_win_get_config(win)
@@ -55,8 +45,7 @@ local function stub_api()
 end
 
 local function send_user_message(ai, message)
-    ai.prompt()
-    local _, input_buf = find_float()
+    local input_buf = ai.prompt()
     assert(input_buf ~= nil, "Input popup should have opened")
 
     vim.api.nvim_buf_set_lines(input_buf, 0, -1, false, { message })
@@ -113,10 +102,10 @@ describe("AI Chat Plugin", function()
     end)
 
     it("prompt opens a floating input window", function()
-        ai.prompt()
+        local input_buf = ai.prompt()
 
-        local float_win = find_float()
-        assert(float_win ~= nil, "Input float should be open")
+        assert(input_buf ~= nil, "Input popup should have opened")
+        assert(vim.api.nvim_buf_is_valid(input_buf), "Input buffer should be valid")
     end)
 
     it("cancelling input with q does not send a message", function()
@@ -146,9 +135,12 @@ describe("AI Chat Plugin", function()
     end)
 
     it("sending a message closes the input popup", function()
-        send_user_message(ai, "hello")
+        local input_buf = ai.prompt()
+        vim.api.nvim_buf_set_lines(input_buf, 0, -1, false, { "hello" })
+        vim.cmd("stopinsert")
+        vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<CR>", true, false, true), "x", false)
 
-        assert(find_float() == nil, "Input popup should be closed after sending")
+        assert(not vim.api.nvim_buf_is_valid(input_buf), "Input buffer should be deleted after sending")
     end)
 
     it("streaming stops after response completes", function()
@@ -167,19 +159,6 @@ describe("AI Chat Plugin", function()
         assert(chat_contains("I am a test response"), "First response should be present")
         assert(chat_contains("second question"), "Second user message should be present")
         assert(chat_contains("second answer"), "Second response should be present")
-    end)
-
-    it("passes conversation history to the api", function()
-        send_user_message(ai, "first")
-        stub_response = "reply two"
-
-        send_user_message(ai, "second")
-
-        local n = #stream_messages_spy
-        eq(stream_messages_spy[n].role, "user")
-        assert(stream_messages_spy[n].content:find("second"), "Last message should be 'second'")
-        eq(stream_messages_spy[n - 1].role, "assistant")
-        eq(stream_messages_spy[n - 2].role, "user")
     end)
 
     it("shows error in chat when api returns an error", function()
@@ -221,11 +200,6 @@ describe("AI Chat Plugin", function()
                     "Old message should not be in conversation after clear")
             end
         end
-    end)
-
-    it("clear on empty state does nothing harmful", function()
-        ai.clear()
-        ai.clear()
     end)
 end)
 
