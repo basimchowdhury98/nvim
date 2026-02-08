@@ -3,6 +3,7 @@
 
 local M = {}
 local debug = require("utils.ai.debug")
+local chat = require("utils.ai.chat")
 
 local default_config = {
     -- Anthropic direct API settings (used when AI_WORK is set)
@@ -83,9 +84,9 @@ local function stream_opencode(messages, on_delta, on_done, on_error)
     -- Use cmd.exe /c to handle piping on Windows
     local shell_cmd
     if vim.fn.has("win32") == 1 then
-        shell_cmd = { "cmd", "/c", "type " .. tmp .. " | opencode run --format json" }
+        shell_cmd = { "cmd", "/c", "type " .. tmp .. " | opencode run --format json --title nvim-ai" }
     else
-        shell_cmd = { "sh", "-c", "cat " .. tmp .. " | opencode run --format json" }
+        shell_cmd = { "sh", "-c", "cat " .. tmp .. " | opencode run --format json --title nvim-ai" }
     end
 
     debug.log("Starting opencode job...")
@@ -110,13 +111,24 @@ local function stream_opencode(messages, on_delta, on_done, on_error)
                     vim.schedule(function()
                         on_delta(event.part.text)
                     end)
-                elseif event.type == "step_finish" then
-                    debug.log("step_finish received")
+                elseif event.type == "tool_use" and event.part then
+                    local tool = event.part.tool or "unknown"
+                    debug.log("tool_use: " .. tool)
                     vim.schedule(function()
-                        on_done()
-                        os.remove(tmp)
+                        on_delta("\n\n*Using tool: " .. tool .. "...*\n\n")
+                        chat.show_spinner()
                     end)
-                    return
+                elseif event.type == "step_finish" then
+                    local reason = event.part and event.part.reason or "unknown"
+                    debug.log("step_finish received, reason: " .. reason)
+                    -- Only finish on "stop", not "tool-calls" (intermediate step)
+                    if reason == "stop" then
+                        vim.schedule(function()
+                            on_done()
+                            os.remove(tmp)
+                        end)
+                        return
+                    end
                 end
 
                 ::continue::
@@ -137,6 +149,12 @@ local function stream_opencode(messages, on_delta, on_done, on_error)
                 vim.schedule(function()
                     local stderr_msg = table.concat(stderr_chunks, "\n")
                     on_error("opencode exited with code " .. exit_code .. ": " .. stderr_msg)
+                end)
+            else
+                -- Fallback: if process exits cleanly but we never got a
+                -- step_finish with reason "stop", finish gracefully
+                vim.schedule(function()
+                    on_done()
                 end)
             end
         end,
