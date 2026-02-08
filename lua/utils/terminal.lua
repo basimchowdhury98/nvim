@@ -334,8 +334,11 @@ end
 function M.open_at_path(path)
     local curr_proj = get_curr_proj();
 
-    local normalized_path = vim.fn.fnamemodify(path, ':p')
-    local normalized_proj = vim.fn.fnamemodify(curr_proj, ':p')
+    local normalized_path = vim.fs.normalize(vim.fn.fnamemodify(path, ':p'))
+    local normalized_proj = vim.fs.normalize(vim.fn.fnamemodify(curr_proj, ':p'))
+    if not vim.endswith(normalized_proj, '/') then
+        normalized_proj = normalized_proj .. '/'
+    end
     if not vim.startswith(normalized_path, normalized_proj) then
         vim.notify(
             string.format("Path '%s' is not within project '%s'", normalized_path, normalized_proj),

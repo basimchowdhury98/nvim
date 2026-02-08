@@ -71,8 +71,8 @@ end
 
 describe("Floating terminal", function()
     local term = require("utils.terminal")
-    local test_proj = vim.fn.stdpath("cache") .. "\\terminal-test"
-    local test_proj_2 = vim.fn.stdpath("cache") .. "\\terminal-test-2"
+    local test_proj = vim.fs.joinpath(vim.fn.stdpath("cache"), "terminal-test")
+    local test_proj_2 = vim.fs.joinpath(vim.fn.stdpath("cache"), "terminal-test-2")
     setup_path(test_proj)
     setup_path(test_proj_2)
     spyOnTermOpen()
@@ -287,7 +287,9 @@ describe("Floating terminal", function()
         local win_id = term.open_at_path(specific_path)
 
         local buf_id = assert_terminal_opened(win_id)
-        assert(term_opt_spy[buf_id] ~= nil and term_opt_spy[buf_id] == specific_path, "Specific path wasnt opened")
+        local captured_path = term_opt_spy[buf_id]
+        assert(captured_path ~= nil, "Path spy didnt capture terminal cwd")
+        eq(vim.fs.normalize(captured_path), vim.fs.normalize(specific_path), "Specific path wasnt opened")
     end)
 
     it("vim notifies when attempt to open specific path outside of project", function()
