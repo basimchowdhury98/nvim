@@ -34,6 +34,12 @@ local tracked_bufs = {}
 -- Autocmd group ID for BufEnter tracking (nil when no session)
 local tracking_augroup = nil
 
+-- Patterns to exclude from buffer tracking (matched against filename, case-insensitive)
+local exclude_patterns = {
+    "appsettings",
+    "env",
+}
+
 --- Check whether a buffer should be tracked (real file, not chat/input)
 --- @param buf number
 --- @return boolean
@@ -50,6 +56,13 @@ local function is_trackable(buf)
     -- Skip special buffers (chat panel, popups, terminals, etc.)
     if bt ~= "" then
         return false
+    end
+    -- Check exclusion patterns
+    local name_lower = name:lower()
+    for _, pattern in ipairs(exclude_patterns) do
+        if name_lower:find(pattern, 1, true) then
+            return false
+        end
     end
     return true
 end

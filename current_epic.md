@@ -93,3 +93,16 @@ searches per request). Added `content_block_start` event handling in the SSE par
 input deltas are not leaked into the chat buffer.
 
 Files: `lua/utils/ai/api.lua`, `current_epic.md`
+
+## User Story 7: Exclusion patterns for buffer tracking
+
+As a user, I want sensitive files like `.env` and `appsettings.json` to be
+automatically excluded from buffer tracking, so that secrets and credentials
+are never sent to the LLM.
+
+Added a case-insensitive exclusion list (`exclude_patterns`) to the buffer
+tracking logic. Filenames containing "appsettings" or "env" are now rejected
+by `is_trackable()`. Added a test that verifies excluded buffers are not
+included in the context while normal files still are.
+
+Files: `lua/utils/ai/init.lua`, `specs/ai_chat_spec.lua`

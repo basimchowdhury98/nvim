@@ -350,6 +350,30 @@ describe("AI Chat Buffer Tracking", function()
         eq(second_user_msg.content, "second",
             "Non-first user messages should not have context injected")
     end)
+
+    it("excludes buffers with sensitive patterns from tracking", function()
+        local env_buf = create_named_buf("/tmp/.env", "sh", { "SECRET_KEY=abc123" })
+        local appsettings_buf = create_named_buf("/tmp/appsettings.json", "json", { '{"password": "secret"}' })
+        local normal_buf = create_named_buf("/tmp/app.lua", "lua", { "safe content" })
+        table.insert(test_bufs, env_buf)
+        table.insert(test_bufs, appsettings_buf)
+        table.insert(test_bufs, normal_buf)
+        vim.api.nvim_set_current_buf(env_buf)
+        vim.api.nvim_exec_autocmds("BufEnter", { buffer = env_buf })
+        vim.api.nvim_set_current_buf(appsettings_buf)
+        vim.api.nvim_exec_autocmds("BufEnter", { buffer = appsettings_buf })
+        vim.api.nvim_set_current_buf(normal_buf)
+
+        send_user_message(ai, "check my code")
+
+        local first_msg = stream_messages_spy[1]
+        assert(not first_msg.content:find("SECRET_KEY", 1, true),
+            "Env file content should not be in context")
+        assert(not first_msg.content:find("password", 1, true),
+            "Appsettings content should not be in context")
+        assert(first_msg.content:find("safe content", 1, true),
+            "Normal file content should be in context")
+    end)
 end)
 
 describe("AI Debug", function()
