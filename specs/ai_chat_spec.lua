@@ -26,6 +26,16 @@ local function close_all_floats()
     end
 end
 
+--- Create a scratch buffer with a name and filetype so it looks like a real file
+local function create_named_buf(name, ft, lines)
+    local buf = vim.api.nvim_create_buf(true, false)
+    vim.api.nvim_buf_set_name(buf, name)
+    vim.bo[buf].filetype = ft
+    vim.bo[buf].buftype = ""
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+    return buf
+end
+
 local api = require("utils.ai.api")
 local stub_response = "I am a test response"
 local stub_error = nil
@@ -200,6 +210,145 @@ describe("AI Chat Plugin", function()
                     "Old message should not be in conversation after clear")
             end
         end
+    end)
+end)
+
+describe("AI Chat Buffer Tracking", function()
+    local ai = require("utils.ai")
+    ai.setup()
+    stub_api()
+    vim.notify = function() end
+
+    local test_bufs = {}
+
+    before_each(function()
+        -- Ensure we're in a safe window before clearing (avoids E444)
+        vim.cmd("enew")
+        ai.clear()
+        for _, buf in ipairs(test_bufs) do
+            if vim.api.nvim_buf_is_valid(buf) then
+                vim.api.nvim_buf_delete(buf, { force = true })
+            end
+        end
+        test_bufs = {}
+        stub_response = "I am a test response"
+        stub_error = nil
+        stream_messages_spy = nil
+    end)
+
+    after_each(function()
+        close_all_floats()
+    end)
+
+    it("includes the current buffer content in the first API message", function()
+        local buf = create_named_buf("/tmp/test_track.lua", "lua", { "local x = 1" })
+        table.insert(test_bufs, buf)
+        vim.api.nvim_set_current_buf(buf)
+
+        send_user_message(ai, "explain this")
+
+        local first_msg = stream_messages_spy[1]
+        assert(first_msg.content:find("test_track.lua", 1, true),
+            "First API message should contain the tracked filename")
+        assert(first_msg.content:find("local x = 1", 1, true),
+            "First API message should contain the buffer content")
+        assert(first_msg.content:find("explain this", 1, true),
+            "First API message should contain the user text")
+    end)
+
+    it("tracks a new buffer visited after the first message", function()
+        local buf_a = create_named_buf("/tmp/file_a.lua", "lua", { "aaa" })
+        local buf_b = create_named_buf("/tmp/file_b.py", "python", { "bbb" })
+        table.insert(test_bufs, buf_a)
+        table.insert(test_bufs, buf_b)
+        vim.api.nvim_set_current_buf(buf_a)
+        send_user_message(ai, "first")
+        vim.api.nvim_exec_autocmds("BufEnter", { buffer = buf_b })
+
+        send_user_message(ai, "second")
+
+        local first_msg = stream_messages_spy[1]
+        assert(first_msg.content:find("file_a.lua", 1, true),
+            "Context should contain first file")
+        assert(first_msg.content:find("file_b.py", 1, true),
+            "Context should contain second file after visiting it")
+    end)
+
+    it("sends updated buffer content on subsequent messages", function()
+        local buf = create_named_buf("/tmp/evolving.lua", "lua", { "version 1" })
+        table.insert(test_bufs, buf)
+        vim.api.nvim_set_current_buf(buf)
+        send_user_message(ai, "first")
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "version 2" })
+
+        send_user_message(ai, "second")
+
+        local first_msg = stream_messages_spy[1]
+        assert(first_msg.content:find("version 2", 1, true),
+            "Context should contain the updated content")
+        assert(not first_msg.content:find("version 1", 1, true),
+            "Context should not contain the stale content")
+    end)
+
+    it("does not track buffers with no name or filetype", function()
+        local scratch = vim.api.nvim_create_buf(false, true)
+        table.insert(test_bufs, scratch)
+        vim.api.nvim_set_current_buf(scratch)
+
+        send_user_message(ai, "hello")
+
+        local first_msg = stream_messages_spy[1]
+        eq(first_msg.content, "hello", "Message should have no context prefix for unnamed buffers")
+    end)
+
+    it("does not duplicate a buffer visited multiple times", function()
+        local buf = create_named_buf("/tmp/once.lua", "lua", { "content" })
+        table.insert(test_bufs, buf)
+        vim.api.nvim_set_current_buf(buf)
+
+        send_user_message(ai, "first")
+
+        vim.api.nvim_exec_autocmds("BufEnter", { buffer = buf })
+        vim.api.nvim_exec_autocmds("BufEnter", { buffer = buf })
+
+        send_user_message(ai, "second")
+
+        local first_msg = stream_messages_spy[1]
+        local _, count = first_msg.content:gsub("once.lua", "")
+        eq(count, 1, "Filename should appear exactly once in context")
+    end)
+
+    it("clear resets tracked buffers so next session starts fresh", function()
+        local buf_a = create_named_buf("/tmp/old_file.lua", "lua", { "old" })
+        table.insert(test_bufs, buf_a)
+        vim.api.nvim_set_current_buf(buf_a)
+        send_user_message(ai, "first session")
+        ai.clear()
+
+        local buf_b = create_named_buf("/tmp/new_file.lua", "lua", { "new" })
+        table.insert(test_bufs, buf_b)
+        vim.api.nvim_set_current_buf(buf_b)
+        send_user_message(ai, "second session")
+
+        local first_msg = stream_messages_spy[1]
+        assert(not first_msg.content:find("old_file.lua", 1, true),
+            "Old file should not appear after clear")
+        assert(first_msg.content:find("new_file.lua", 1, true),
+            "New file should appear in fresh session")
+    end)
+
+    it("only injects context into the first user message in the API payload", function()
+        local buf = create_named_buf("/tmp/ctx_check.lua", "lua", { "ctx content" })
+        table.insert(test_bufs, buf)
+        vim.api.nvim_set_current_buf(buf)
+
+        send_user_message(ai, "first")
+        send_user_message(ai, "second")
+
+        local second_user_msg = stream_messages_spy[3]
+        eq(second_user_msg.role, "user", "Third message should be user")
+        eq(second_user_msg.content, "second",
+            "Non-first user messages should not have context injected")
     end)
 end)
 

@@ -14,7 +14,7 @@ local default_config = {
     input = {},
     keymaps = {
         toggle = "<leader>ii",
-        send = "<leader>is",
+        send = "<leader>ia",
         clear = "<leader>iq",
         debug = "<leader>id",
     },
@@ -22,18 +22,84 @@ local default_config = {
 
 local config = vim.deepcopy(default_config)
 
--- Conversation history for the current session
+-- Conversation history for the current session (stores raw user/assistant text)
 local conversation = {}
 
 -- Handle to cancel in-flight requests
 local cancel_request = nil
 
---- Build context about the current file to include in the system prompt
-local function get_file_context()
-    local buf = vim.api.nvim_get_current_buf()
+-- Ordered list of tracked buffer IDs for the current session
+local tracked_bufs = {}
+
+-- Autocmd group ID for BufEnter tracking (nil when no session)
+local tracking_augroup = nil
+
+--- Check whether a buffer should be tracked (real file, not chat/input)
+--- @param buf number
+--- @return boolean
+local function is_trackable(buf)
+    if not vim.api.nvim_buf_is_valid(buf) then
+        return false
+    end
     local name = vim.api.nvim_buf_get_name(buf)
     local ft = vim.bo[buf].filetype
+    local bt = vim.bo[buf].buftype
+    if name == "" or ft == "" then
+        return false
+    end
+    -- Skip special buffers (chat panel, popups, terminals, etc.)
+    if bt ~= "" then
+        return false
+    end
+    return true
+end
 
+--- Add a buffer to the tracked set if not already present
+--- @param buf number
+local function track_buf(buf)
+    if not is_trackable(buf) then
+        return
+    end
+    for _, id in ipairs(tracked_bufs) do
+        if id == buf then
+            return
+        end
+    end
+    table.insert(tracked_bufs, buf)
+    debug.log("Tracking buffer: " .. vim.api.nvim_buf_get_name(buf))
+end
+
+--- Start the BufEnter autocmd that tracks visited buffers
+local function start_tracking()
+    if tracking_augroup then
+        return
+    end
+    tracking_augroup = vim.api.nvim_create_augroup("AiChatBufTrack", { clear = true })
+    vim.api.nvim_create_autocmd("BufEnter", {
+        group = tracking_augroup,
+        callback = function(ev)
+            track_buf(ev.buf)
+        end,
+    })
+end
+
+--- Stop the BufEnter autocmd
+local function stop_tracking()
+    if tracking_augroup then
+        vim.api.nvim_del_augroup_by_id(tracking_augroup)
+        tracking_augroup = nil
+    end
+end
+
+--- Read the current content of a buffer and format it as a context block
+--- @param buf number
+--- @return string|nil
+local function read_buf_context(buf)
+    if not vim.api.nvim_buf_is_valid(buf) then
+        return nil
+    end
+    local name = vim.api.nvim_buf_get_name(buf)
+    local ft = vim.bo[buf].filetype
     if name == "" or ft == "" then
         return nil
     end
@@ -41,15 +107,45 @@ local function get_file_context()
     local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
     local content = table.concat(lines, "\n")
 
-    -- Don't include massive files
     if #content > 50000 then
         content = content:sub(1, 50000) .. "\n... (truncated)"
     end
 
-    return string.format(
-        "The user is currently editing this file:\nFilename: %s\nLanguage: %s\n\n```%s\n%s\n```",
-        name, ft, ft, content
-    )
+    return string.format("Filename: %s\nLanguage: %s\n\n```%s\n%s\n```", name, ft, ft, content)
+end
+
+--- Build a context block from all tracked buffers (reads live content)
+--- @return string|nil
+local function build_context_block()
+    local parts = {}
+    for _, buf in ipairs(tracked_bufs) do
+        local ctx = read_buf_context(buf)
+        if ctx then
+            table.insert(parts, ctx)
+        end
+    end
+    if #parts == 0 then
+        return nil
+    end
+    return "The user has the following files open:\n\n" .. table.concat(parts, "\n\n")
+end
+
+--- Build the messages array to send to the API.
+--- Injects the latest buffer context into the first user message.
+--- @return table[]
+local function build_api_messages()
+    local ctx = build_context_block()
+    local messages = {}
+    local context_injected = false
+    for _, msg in ipairs(conversation) do
+        if not context_injected and msg.role == "user" and ctx then
+            table.insert(messages, { role = "user", content = ctx .. "\n\n" .. msg.content })
+            context_injected = true
+        else
+            table.insert(messages, { role = msg.role, content = msg.content })
+        end
+    end
+    return messages
 end
 
 --- Send a user message and stream the AI response
@@ -62,24 +158,22 @@ local function send_message(text)
         return
     end
 
+    -- Track the current buffer and start the BufEnter autocmd
+    track_buf(vim.api.nvim_get_current_buf())
+    start_tracking()
+
     -- Make sure chat panel is open
     if not chat.is_open() then
         chat.open()
     end
 
-    -- Add file context to the first message if available
-    local user_content = text
-    if #conversation == 0 then
-        local ctx = get_file_context()
-        if ctx then
-            user_content = ctx .. "\n\n" .. text
-        end
-    end
+    -- Store raw user message (no context baked in)
+    table.insert(conversation, { role = "user", content = text })
 
-    -- Add to conversation history
-    table.insert(conversation, { role = "user", content = user_content })
+    -- Build the full messages array with fresh buffer context
+    local api_messages = build_api_messages()
 
-    -- Show user message in chat (display the raw text, not the context-augmented version)
+    -- Show user message in chat
     chat.append_user_message(text)
 
     -- Start assistant block
@@ -89,7 +183,7 @@ local function send_message(text)
     local response_chunks = {}
 
     cancel_request = api.stream(
-        conversation,
+        api_messages,
         -- on_delta
         function(delta)
             table.insert(response_chunks, delta)
@@ -133,6 +227,8 @@ function M.clear()
     end
     chat.clear()
     conversation = {}
+    tracked_bufs = {}
+    stop_tracking()
     chat.close()
     vim.notify("AI: Conversation cleared")
 end
@@ -160,6 +256,20 @@ function M.setup(opts)
     map("n", config.keymaps.send, M.prompt, { desc = "AI: Send message" })
     map("n", config.keymaps.clear, M.clear, { desc = "AI: Clear conversation" })
     map("n", config.keymaps.debug, debug.toggle, { desc = "AI: Toggle debug mode" })
+
+    vim.api.nvim_create_user_command("AIFiles", function()
+        if #tracked_bufs == 0 then
+            vim.notify("AI: No files tracked")
+            return
+        end
+        local names = {}
+        for _, buf in ipairs(tracked_bufs) do
+            if vim.api.nvim_buf_is_valid(buf) then
+                table.insert(names, vim.api.nvim_buf_get_name(buf))
+            end
+        end
+        vim.notify("AI tracked files:\n" .. table.concat(names, "\n"))
+    end, { desc = "AI: List tracked files" })
 end
 
 return M
