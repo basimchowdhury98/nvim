@@ -202,6 +202,13 @@ local function stream_anthropic(messages, on_delta, on_done, on_error)
         system = config.system_prompt,
         stream = true,
         messages = messages,
+        tools = {
+            {
+                type = "web_search_20250305",
+                name = "web_search",
+                max_uses = 5,
+            },
+        },
     })
 
     debug.log("Request body length: " .. #body)
@@ -255,9 +262,24 @@ local function stream_anthropic(messages, on_delta, on_done, on_error)
 
                 debug.log("event type: " .. tostring(event.type))
 
-                if event.type == "content_block_delta" then
+                if event.type == "content_block_start" then
+                    local block = event.content_block
+                    if block and block.type == "server_tool_use" then
+                        local tool = block.name or "unknown"
+                        debug.log("server_tool_use: " .. tool)
+                        vim.schedule(function()
+                            on_delta("\n\n*Searching the web...*\n\n")
+                            chat.show_spinner()
+                        end)
+                    elseif block and block.type == "web_search_tool_result" then
+                        debug.log("web_search_tool_result received")
+                        vim.schedule(function()
+                            chat.hide_spinner()
+                        end)
+                    end
+                elseif event.type == "content_block_delta" then
                     local delta = event.delta
-                    if delta and delta.text then
+                    if delta and delta.type == "text_delta" and delta.text then
                         vim.schedule(function()
                             on_delta(delta.text)
                         end)

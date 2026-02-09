@@ -78,3 +78,18 @@ for debugging. Changed send keymap from `<leader>is` to `<leader>ia`. Added 7 te
 covering buffer tracking, live content updates, deduplication, and session reset.
 
 Files: `lua/utils/ai/init.lua`, `specs/ai_chat_spec.lua`, `current_epic.md`
+
+## User Story 6: Web search support for Anthropic provider
+
+As a user, I want the AI chat to be able to search the web when using the Anthropic
+API, with a spinner indicating when a search is in progress, so that I can get
+up-to-date answers without leaving the editor.
+
+Added the `web_search_20250305` server tool to the Anthropic request body (max 5
+searches per request). Added `content_block_start` event handling in the SSE parser:
+`server_tool_use` blocks show a "Searching the web..." message and start the spinner,
+`web_search_tool_result` blocks hide the spinner when results arrive. Tightened the
+`content_block_delta` handler to only process `text_delta` types so tool-use JSON
+input deltas are not leaked into the chat buffer.
+
+Files: `lua/utils/ai/api.lua`, `current_epic.md`
