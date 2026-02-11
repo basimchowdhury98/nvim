@@ -14,9 +14,9 @@ local default_config = {
     chat = {},
     input = {},
     keymaps = {
-        toggle = "<leader>ii",
+        toggle = "<leader>io",
         send = "<leader>ia",
-        clear = "<leader>iq",
+        clear = "<leader>ic",
         debug = "<leader>id",
     },
 }

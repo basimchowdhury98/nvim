@@ -66,6 +66,7 @@ end
 local function stream_opencode(messages, on_delta, on_done, on_error)
     debug.log("using opencode provider")
 
+    local opencode_cli_name = "7619b34b-opencode-d0a72d8a"
     local prompt = build_opencode_prompt(messages)
     debug.log("opencode prompt length: " .. #prompt)
 
@@ -84,9 +85,9 @@ local function stream_opencode(messages, on_delta, on_done, on_error)
     -- Use cmd.exe /c to handle piping on Windows
     local shell_cmd
     if vim.fn.has("win32") == 1 then
-        shell_cmd = { "cmd", "/c", "type " .. tmp .. " | opencode run --format json --title nvim-ai" }
+        shell_cmd = { "cmd", "/c", "type " .. tmp .. " | " .. opencode_cli_name .. " run --format json --title nvim-ai" }
     else
-        shell_cmd = { "sh", "-c", "cat " .. tmp .. " | opencode run --format json --title nvim-ai" }
+        shell_cmd = { "sh", "-c", "cat " .. tmp .. " | " .. opencode_cli_name .. " run --format json --title nvim-ai" }
     end
 
     debug.log("Starting opencode job...")
