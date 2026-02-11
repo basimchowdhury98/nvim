@@ -5,6 +5,7 @@ local api = require("utils.ai.api")
 local chat = require("utils.ai.chat")
 local input = require("utils.ai.input")
 local debug = require("utils.ai.debug")
+local inline = require("utils.ai.inline")
 
 local M = {}
 
@@ -219,12 +220,61 @@ local function send_message(text)
     )
 end
 
+--- Capture the current visual selection range and text
+--- @return table|nil {buf, start_row, start_col, end_row, end_col, text} or nil if not in visual mode
+local function get_visual_selection()
+    local mode = vim.fn.mode()
+    if mode ~= "v" and mode ~= "V" and mode ~= "\22" then
+        return nil
+    end
+
+    -- Exit visual mode to set '< and '> marks
+    vim.cmd('normal! "vy')
+
+    local buf = vim.api.nvim_get_current_buf()
+    local start_pos = vim.fn.getpos("'<")
+    local end_pos = vim.fn.getpos("'>")
+    local start_row = start_pos[2] - 1 -- 0-indexed
+    local start_col = start_pos[3] - 1
+    local end_row = end_pos[2] - 1
+    local end_col = end_pos[3]
+
+    -- For linewise visual mode, select entire lines
+    if mode == "V" then
+        start_col = 0
+        end_col = #vim.api.nvim_buf_get_lines(buf, end_row, end_row + 1, false)[1]
+    end
+
+    local lines = vim.api.nvim_buf_get_text(buf, start_row, start_col, end_row, end_col, {})
+    local text = table.concat(lines, "\n")
+
+    return {
+        buf = buf,
+        start_row = start_row,
+        start_col = start_col,
+        end_row = end_row,
+        end_col = end_col,
+        text = text,
+    }
+end
+
 --- Open the input popup and send the message on submit
+--- If called from visual mode, opens inline mode instead
 --- @return number buf_id The buffer id of the input popup
 function M.prompt()
-    return input.open(function(text)
-        send_message(text)
-    end)
+    local selection = get_visual_selection()
+
+    if selection then
+        -- Visual mode: inline agentic coding
+        return input.open(function(instruction)
+            inline.execute(selection, instruction, build_context_block(), conversation)
+        end, { title = " Inline Edit " })
+    else
+        -- Normal mode: regular chat
+        return input.open(function(text)
+            send_message(text)
+        end)
+    end
 end
 
 --- Toggle the chat panel
@@ -267,6 +317,7 @@ function M.setup(opts)
 
     map("n", config.keymaps.toggle, M.toggle, { desc = "AI: Toggle chat panel" })
     map("n", config.keymaps.send, M.prompt, { desc = "AI: Send message" })
+    map("v", config.keymaps.send, M.prompt, { desc = "AI: Inline edit" })
     map("n", config.keymaps.clear, M.clear, { desc = "AI: Clear conversation" })
     map("n", config.keymaps.debug, debug.toggle, { desc = "AI: Toggle debug mode" })
 

@@ -18,8 +18,10 @@ end
 
 --- Open a popup input window near the cursor
 --- @param on_submit fun(text: string) Called with the message text when user presses <CR>
+--- @param opts table|nil Optional overrides {title: string}
 --- @return number buf_id The buffer id of the input popup
-function M.open(on_submit)
+function M.open(on_submit, opts)
+    opts = opts or {}
     local buf = vim.api.nvim_create_buf(false, true)
     vim.bo[buf].buftype = "nofile"
     vim.bo[buf].filetype = "markdown"
@@ -33,7 +35,7 @@ function M.open(on_submit)
         col = 0,
         style = "minimal",
         border = config.border,
-        title = config.title,
+        title = opts.title or config.title,
         title_pos = "center",
     }
 

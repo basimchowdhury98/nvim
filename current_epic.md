@@ -106,3 +106,28 @@ by `is_trackable()`. Added a test that verifies excluded buffers are not
 included in the context while normal files still are.
 
 Files: `lua/utils/ai/init.lua`, `specs/ai_chat_spec.lua`
+
+## User Story 8: Inline agentic coding
+
+As a user, I want to highlight a section of code in visual mode, press `<leader>ia`,
+type an instruction, and have the AI stream replacement code directly into my buffer,
+so that I can make targeted edits without leaving my editor or using the chat panel.
+
+Added inline agentic coding mode that activates when `<leader>ia` is pressed in visual
+mode. The highlighted region becomes a constrained "sandbox" — the AI can only replace
+that exact selection. The flow: detect visual mode in `prompt()`, capture selection
+range/text via `get_visual_selection()`, open input popup with "Inline Edit" title,
+send to new `api.inline_stream()` with specialized system prompt that outputs raw code
+only (no markdown fences). The `inline.lua` module streams the response directly into
+the buffer, replacing the selection character-by-character. A spinner with virtual
+lines above and below the selection shows "thinking..." during the request. If the AI
+determines the instruction isn't asking for code, it returns a sentinel
+(`__NO_INLINE_CODE_PROMPT__`) which triggers a `vim.notify` warning instead of buffer
+modification. Inline edits read the full chat context (conversation history + tracked
+buffers) but don't write to it — the inline request and response are not recorded in
+history, so they won't appear in future chat messages. Added 10 tests covering
+replacement, context passing, history passing, sentinel handling, multiline/partial-line
+edits, error handling, and spinner cleanup.
+
+Files: `lua/utils/ai/init.lua`, `lua/utils/ai/api.lua`, `lua/utils/ai/input.lua`,
+`lua/utils/ai/inline.lua`, `specs/ai_chat_spec.lua`

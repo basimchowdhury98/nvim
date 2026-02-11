@@ -342,8 +342,328 @@ local function stream_anthropic(messages, on_delta, on_done, on_error)
 end
 
 -- ============================================================
+-- Provider: Anthropic API for inline editing (no tools, specialized prompt)
+-- ============================================================
+
+local inline_system_prompt = [[You are an inline code editor. You will receive:
+1. A section of code that the user has highlighted (the "editable region")
+2. The user's instruction for what to write or change
+3. Optional context about other open files
+
+Your task is to output ONLY the replacement code for the highlighted region.
+
+CRITICAL RULES:
+- Output ONLY raw code - your entire response will be inserted directly into the source file
+- NEVER wrap output in markdown code fences (```) - this will break the code
+- NEVER include explanations, comments about what you did, or any other text
+- Be smart about what to preserve (e.g., keep a method signature if asked to implement the body)
+- Match the existing code style (indentation, naming conventions, etc.)
+
+If the user's instruction is not asking you to write or modify code (e.g., they're asking a question, requesting an explanation, or the instruction doesn't make sense as a code edit), output exactly this sentinel and nothing else:
+__NO_INLINE_CODE_PROMPT__
+
+Your response is directly inserted into code. No markdown. No fences. No explanation. Just code.]]
+
+--- @param selected_text string The highlighted code region
+--- @param instruction string The user's instruction
+--- @param context string|nil Optional buffer context
+--- @param history table|nil Optional conversation history
+--- @param on_delta fun(text: string) Called with each text chunk
+--- @param on_done fun() Called when complete
+--- @param on_error fun(err: string) Called on error
+--- @return fun()|nil cancel
+local function stream_inline_anthropic(selected_text, instruction, context, history, on_delta, on_done, on_error)
+    debug.log("using anthropic provider for inline edit")
+
+    local api_key = get_api_key()
+    if not api_key then
+        debug.log("API key not found!")
+        on_error("API key not found")
+        return nil
+    end
+
+    -- Build the user message with inline-specific content
+    local user_content = "## Highlighted Code (editable region)\n```\n" .. selected_text .. "\n```\n\n"
+    user_content = user_content .. "## Instruction\n" .. instruction
+
+    if context then
+        user_content = user_content .. "\n\n## Context (other open files)\n" .. context
+    end
+
+    -- Build messages array: conversation history + inline request
+    local messages = {}
+    if history and #history > 0 then
+        for _, msg in ipairs(history) do
+            table.insert(messages, { role = msg.role, content = msg.content })
+        end
+    end
+    table.insert(messages, { role = "user", content = user_content })
+
+    local body = vim.fn.json_encode({
+        model = config.model,
+        max_tokens = config.max_tokens,
+        system = inline_system_prompt,
+        stream = true,
+        messages = messages,
+        -- No tools for inline editing
+    })
+
+    debug.log("Inline request body length: " .. #body)
+
+    local tmp = vim.fn.tempname()
+    local f = io.open(tmp, "w")
+    if not f then
+        debug.log("Failed to create temp file: " .. tmp)
+        on_error("Failed to create temp file")
+        return nil
+    end
+    f:write(body)
+    f:close()
+
+    local stderr_chunks = {}
+
+    local curl_cmd = {
+        "curl", "--silent", "--no-buffer",
+        "-X", "POST",
+        config.endpoint,
+        "-H", "Content-Type: application/json",
+        "-H", "x-api-key: " .. api_key,
+        "-H", "anthropic-version: " .. config.api_version,
+        "-d", "@" .. tmp,
+    }
+
+    local job_id = vim.fn.jobstart(curl_cmd, {
+        on_stdout = function(_, data, _)
+            for _, line in ipairs(data) do
+                if line == "" then goto continue end
+
+                local json_str = line:match("^data: (.+)")
+                if not json_str then goto continue end
+
+                local ok, event = pcall(vim.fn.json_decode, json_str)
+                if not ok then goto continue end
+
+                if event.type == "content_block_delta" then
+                    local delta = event.delta
+                    if delta and delta.type == "text_delta" and delta.text then
+                        vim.schedule(function()
+                            on_delta(delta.text)
+                        end)
+                    end
+                elseif event.type == "message_stop" then
+                    vim.schedule(function()
+                        on_done()
+                        os.remove(tmp)
+                    end)
+                    return
+                elseif event.type == "error" then
+                    local msg = event.error and event.error.message or "Unknown API error"
+                    vim.schedule(function()
+                        on_error(msg)
+                        os.remove(tmp)
+                    end)
+                    return
+                end
+
+                ::continue::
+            end
+        end,
+        on_stderr = function(_, data, _)
+            for _, line in ipairs(data) do
+                if line ~= "" then
+                    debug.log("stderr: " .. line)
+                    table.insert(stderr_chunks, line)
+                end
+            end
+        end,
+        on_exit = function(_, exit_code, _)
+            debug.log("inline curl exited with code: " .. exit_code)
+            os.remove(tmp)
+            if exit_code ~= 0 then
+                vim.schedule(function()
+                    local stderr_msg = table.concat(stderr_chunks, "\n")
+                    on_error("curl exited with code " .. exit_code .. ": " .. stderr_msg)
+                end)
+            end
+        end,
+        stdout_buffered = false,
+        stderr_buffered = false,
+    })
+
+    if job_id <= 0 then
+        on_error("Failed to start curl")
+        os.remove(tmp)
+        return nil
+    end
+
+    return function()
+        vim.fn.jobstop(job_id)
+        os.remove(tmp)
+    end
+end
+
+--- Build an inline prompt for opencode
+local function build_inline_opencode_prompt(selected_text, instruction, context, history)
+    local parts = {
+        "You are an inline code editor. Your response will be inserted DIRECTLY into a source file.",
+        "",
+        "CRITICAL: Output ONLY raw code. NEVER use markdown code fences (```). NEVER add explanations.",
+        "Your entire response replaces the highlighted text in the editor.",
+        "",
+        "If the instruction is not asking for code, output exactly: __NO_INLINE_CODE_PROMPT__",
+    }
+
+    -- Include conversation history for context
+    if history and #history > 0 then
+        table.insert(parts, "")
+        table.insert(parts, "## Conversation History")
+        for _, msg in ipairs(history) do
+            if msg.role == "user" then
+                table.insert(parts, "User: " .. msg.content)
+            elseif msg.role == "assistant" then
+                table.insert(parts, "Assistant: " .. msg.content)
+            end
+            table.insert(parts, "")
+        end
+    end
+
+    table.insert(parts, "## Highlighted Code (editable region)")
+    table.insert(parts, "```")
+    table.insert(parts, selected_text)
+    table.insert(parts, "```")
+    table.insert(parts, "")
+    table.insert(parts, "## Instruction")
+    table.insert(parts, instruction)
+
+    if context then
+        table.insert(parts, "")
+        table.insert(parts, "## Context (other open files)")
+        table.insert(parts, context)
+    end
+    table.insert(parts, "")
+    table.insert(parts, "Replacement code (no markdown, no fences, no explanation):")
+    return table.concat(parts, "\n")
+end
+
+--- @param selected_text string
+--- @param instruction string
+--- @param context string|nil
+--- @param history table|nil
+--- @param on_delta fun(text: string)
+--- @param on_done fun()
+--- @param on_error fun(err: string)
+--- @return fun()|nil cancel
+local function stream_inline_opencode(selected_text, instruction, context, history, on_delta, on_done, on_error)
+    debug.log("using opencode provider for inline edit")
+
+    local prompt = build_inline_opencode_prompt(selected_text, instruction, context, history)
+    debug.log("inline opencode prompt length: " .. #prompt)
+
+    local tmp = vim.fn.tempname()
+    local f = io.open(tmp, "w")
+    if not f then
+        on_error("Failed to create temp file")
+        return nil
+    end
+    f:write(prompt)
+    f:close()
+
+    local stderr_chunks = {}
+
+    local shell_cmd
+    if vim.fn.has("win32") == 1 then
+        shell_cmd = { "cmd", "/c", "type " .. tmp .. " | opencode run --format json --title nvim-ai-inline" }
+    else
+        shell_cmd = { "sh", "-c", "cat " .. tmp .. " | opencode run --format json --title nvim-ai-inline" }
+    end
+
+    local job_id = vim.fn.jobstart(shell_cmd, {
+        on_stdout = function(_, data, _)
+            for _, line in ipairs(data) do
+                if line == "" then goto continue end
+
+                local ok, event = pcall(vim.fn.json_decode, line)
+                if not ok then goto continue end
+
+                if event.type == "text" and event.part and event.part.text then
+                    vim.schedule(function()
+                        on_delta(event.part.text)
+                    end)
+                elseif event.type == "step_finish" then
+                    local reason = event.part and event.part.reason or "unknown"
+                    if reason == "stop" then
+                        vim.schedule(function()
+                            on_done()
+                            os.remove(tmp)
+                        end)
+                        return
+                    end
+                end
+
+                ::continue::
+            end
+        end,
+        on_stderr = function(_, data, _)
+            for _, line in ipairs(data) do
+                if line ~= "" then
+                    table.insert(stderr_chunks, line)
+                end
+            end
+        end,
+        on_exit = function(_, exit_code, _)
+            os.remove(tmp)
+            if exit_code ~= 0 then
+                vim.schedule(function()
+                    local stderr_msg = table.concat(stderr_chunks, "\n")
+                    on_error("opencode exited with code " .. exit_code .. ": " .. stderr_msg)
+                end)
+            else
+                vim.schedule(function()
+                    on_done()
+                end)
+            end
+        end,
+        stdout_buffered = false,
+        stderr_buffered = false,
+    })
+
+    if job_id <= 0 then
+        on_error("Failed to start opencode")
+        os.remove(tmp)
+        return nil
+    end
+
+    return function()
+        vim.fn.jobstop(job_id)
+        os.remove(tmp)
+    end
+end
+
+-- ============================================================
 -- Public API
 -- ============================================================
+
+--- Send a streaming inline edit request to the active provider
+--- @param selected_text string The highlighted code region
+--- @param instruction string The user's instruction
+--- @param context string|nil Optional buffer context
+--- @param history table|nil Optional conversation history
+--- @param on_delta fun(text: string) Called with each text chunk
+--- @param on_done fun() Called when complete
+--- @param on_error fun(err: string) Called on error
+--- @return fun()|nil cancel
+function M.inline_stream(selected_text, instruction, context, history, on_delta, on_done, on_error)
+    debug.log("inline_stream() called")
+    debug.log("Selected text length: " .. #selected_text)
+    debug.log("Instruction: " .. instruction:sub(1, 100))
+    debug.log("History length: " .. (history and #history or 0))
+
+    if is_work_mode() then
+        return stream_inline_anthropic(selected_text, instruction, context, history, on_delta, on_done, on_error)
+    else
+        return stream_inline_opencode(selected_text, instruction, context, history, on_delta, on_done, on_error)
+    end
+end
 
 --- Send a streaming request to the active provider
 --- @param messages table[] Conversation messages [{role, content}, ...]
