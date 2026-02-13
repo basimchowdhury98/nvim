@@ -143,3 +143,19 @@ stays visible and animates throughout the entire streaming process, only clearin
 when the stream completes (`on_done`) or errors (`on_error`).
 
 Files: `lua/utils/ai/inline.lua`
+
+## User Story 10: Automatic file logging
+
+As a user, I want the AI plugin to automatically log all activity to daily log
+files without needing to toggle debug mode, so that I can review AI responses
+and troubleshoot issues after the fact.
+
+Replaced the toggle-based debug module with automatic file logging. Logs are
+written to `vim.fn.stdpath("log")/ai/YYYY-MM-DD.log` with timestamps. Removed
+the debug keymap (`<leader>id`). Added `:AIDebugPath` command to show the log
+directory. Added `set_log_dir()` for test isolation. AI responses (both chat
+and inline) are now logged with full content. Fixed duplicate `on_done()` call
+in `stream_inline_opencode` that was causing inline responses to log twice.
+
+Files: `lua/utils/ai/debug.lua`, `lua/utils/ai/init.lua`, `lua/utils/ai/inline.lua`,
+`lua/utils/ai/api.lua`, `specs/ai_chat_spec.lua`

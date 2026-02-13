@@ -226,12 +226,13 @@ function M.execute(selection, instruction, context, history)
                 return
             end
 
-            debug.log("Inline edit complete, inserted " .. #full_response .. " chars")
+            debug.log("Inline response:\n" .. full_response)
         end,
         -- on_error
         function(err)
             M.stop_spinner()
             vim.notify("AI Inline: " .. err, vim.log.levels.ERROR)
+            debug.log("AI Inline: " .. err)
         end
     )
 

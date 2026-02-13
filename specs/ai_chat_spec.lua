@@ -1,5 +1,11 @@
 local eq = assert.are.same
 
+-- Set up test log directory for all tests
+local debug = require("utils.ai.debug")
+local test_log_dir = vim.fn.stdpath("log") .. "/ai/tests"
+debug.set_log_dir(test_log_dir)
+vim.fn.delete(test_log_dir, "rf")
+
 local function get_chat_lines()
     local buf = require("utils.ai.chat").get_state().buf_id
     if buf and vim.api.nvim_buf_is_valid(buf) then
@@ -634,39 +640,23 @@ describe("AI Inline Editing", function()
 end)
 
 describe("AI Debug", function()
-    local debug = require("utils.ai.debug")
+    it("get_log_dir returns custom path when set", function()
+        local log_dir = debug.get_log_dir()
 
-    before_each(function()
-        if debug.is_enabled() then
-            debug.toggle()
-        end
+        assert(log_dir == test_log_dir, "Expected " .. test_log_dir .. ", got " .. log_dir)
     end)
 
-    it("starts with debug disabled", function()
-        assert(not debug.is_enabled())
-    end)
+    it("log writes to file", function()
+        local date = os.date("%Y-%m-%d")
+        local log_path = test_log_dir .. "/" .. date .. ".log"
 
-    it("toggles debug on and off", function()
-        debug.toggle()
-        assert(debug.is_enabled())
+        debug.log("test message from spec")
 
-        debug.toggle()
-        assert(not debug.is_enabled())
-    end)
+        local f = io.open(log_path, "r")
+        assert(f, "Log file should exist after logging")
+        local content = f:read("*a")
+        f:close()
 
-    it("log only prints when enabled", function()
-        local orig_print = print
-        local printed = nil
-        print = function(msg) printed = msg end
-
-        debug.log("should not appear")
-
-        assert(printed == nil, "Should not print when debug is off")
-
-        debug.toggle()
-        debug.log("should appear")
-
-        assert(printed ~= nil and printed:find("should appear"), "Should print when debug is on")
-        print = orig_print
+        assert(content:find("test message from spec"), "Log file should contain the message")
     end)
 end)

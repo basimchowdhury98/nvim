@@ -39,6 +39,8 @@ end
 -- ============================================================
 -- Provider: opencode CLI
 -- ============================================================
+--
+local opencode_cli_name = "7619b34b-opencode-d0a72d8a"
 
 --- Build the user prompt from conversation messages.
 --- opencode run doesn't support multi-turn, so we flatten the
@@ -66,7 +68,6 @@ end
 local function stream_opencode(messages, on_delta, on_done, on_error)
     debug.log("using opencode provider")
 
-    local opencode_cli_name = "7619b34b-opencode-d0a72d8a"
     local prompt = build_opencode_prompt(messages)
     debug.log("opencode prompt length: " .. #prompt)
 
@@ -574,9 +575,9 @@ local function stream_inline_opencode(selected_text, instruction, context, histo
 
     local shell_cmd
     if vim.fn.has("win32") == 1 then
-        shell_cmd = { "cmd", "/c", "type " .. tmp .. " | opencode run --format json --title nvim-ai-inline" }
+        shell_cmd = { "cmd", "/c", "type " .. tmp .. " | " .. opencode_cli_name .. " run --format json --title nvim-ai-inline" }
     else
-        shell_cmd = { "sh", "-c", "cat " .. tmp .. " | opencode run --format json --title nvim-ai-inline" }
+        shell_cmd = { "sh", "-c", "cat " .. tmp .. " | " .. opencode_cli_name .. " run --format json --title nvim-ai-inline" }
     end
 
     local job_id = vim.fn.jobstart(shell_cmd, {
@@ -618,10 +619,6 @@ local function stream_inline_opencode(selected_text, instruction, context, histo
                 vim.schedule(function()
                     local stderr_msg = table.concat(stderr_chunks, "\n")
                     on_error("opencode exited with code " .. exit_code .. ": " .. stderr_msg)
-                end)
-            else
-                vim.schedule(function()
-                    on_done()
                 end)
             end
         end,

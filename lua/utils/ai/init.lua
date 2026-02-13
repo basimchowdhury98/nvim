@@ -17,7 +17,6 @@ local default_config = {
         toggle = "<leader>io",
         send = "<leader>ia",
         clear = "<leader>ic",
-        debug = "<leader>id",
     },
 }
 
@@ -206,6 +205,7 @@ local function send_message(text)
         -- on_done
         function()
             local full_response = table.concat(response_chunks, "")
+            debug.log("AI response:\n" .. full_response)
             table.insert(conversation, { role = "assistant", content = full_response })
             chat.finish_assistant_message()
             cancel_request = nil
@@ -319,7 +319,6 @@ function M.setup(opts)
     map("n", config.keymaps.send, M.prompt, { desc = "AI: Send message" })
     map("v", config.keymaps.send, M.prompt, { desc = "AI: Inline edit" })
     map("n", config.keymaps.clear, M.clear, { desc = "AI: Clear conversation" })
-    map("n", config.keymaps.debug, debug.toggle, { desc = "AI: Toggle debug mode" })
 
     vim.api.nvim_create_user_command("AIFiles", function()
         if #tracked_bufs == 0 then
@@ -334,6 +333,10 @@ function M.setup(opts)
         end
         vim.notify("AI tracked files:\n" .. table.concat(names, "\n"))
     end, { desc = "AI: List tracked files" })
+
+    vim.api.nvim_create_user_command("AIDebugPath", function()
+        vim.notify("AI log directory: " .. debug.get_log_dir())
+    end, { desc = "AI: Show debug log directory" })
 end
 
 return M
