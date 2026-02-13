@@ -660,3 +660,119 @@ describe("AI Debug", function()
         assert(content:find("test message from spec"), "Log file should contain the message")
     end)
 end)
+
+describe("AI Project-Scoped Sessions", function()
+    local ai = require("utils.ai")
+    local chat = require("utils.ai.chat")
+    ai.setup()
+    stub_api()
+    vim.notify = function() end
+
+    local original_cwd
+    local test_bufs = {}
+
+    before_each(function()
+        original_cwd = vim.fn.getcwd()
+        vim.cmd("enew")
+        ai.reset_all()
+        for _, buf in ipairs(test_bufs) do
+            if vim.api.nvim_buf_is_valid(buf) then
+                vim.api.nvim_buf_delete(buf, { force = true })
+            end
+        end
+        test_bufs = {}
+        stub_response = "I am a test response"
+        stub_error = nil
+        stream_messages_spy = nil
+    end)
+
+    after_each(function()
+        close_all_floats()
+        vim.fn.chdir(original_cwd)
+    end)
+
+    it("switching cwd starts a fresh conversation", function()
+        vim.fn.chdir("/tmp")
+        send_user_message(ai, "project A message")
+
+        vim.fn.chdir("/")
+        stub_response = "project B response"
+        send_user_message(ai, "project B message")
+
+        assert(not chat_contains("project A message"), "Project A message should not appear in project B chat")
+        assert(chat_contains("project B message"), "Project B message should appear")
+        assert(chat_contains("project B response"), "Project B response should appear")
+    end)
+
+    it("returning to previous cwd restores that project's conversation", function()
+        vim.fn.chdir("/tmp")
+        send_user_message(ai, "project A first")
+
+        vim.fn.chdir("/")
+        send_user_message(ai, "project B message")
+
+        vim.fn.chdir("/tmp")
+        ai.toggle()
+
+        assert(chat_contains("project A first"), "Project A conversation should be restored")
+        assert(not chat_contains("project B message"), "Project B message should not appear in project A")
+    end)
+
+    it("conversation history is scoped to project", function()
+        vim.fn.chdir("/tmp")
+        send_user_message(ai, "tmp question")
+
+        vim.fn.chdir("/")
+        send_user_message(ai, "root question")
+
+        local first_msg = stream_messages_spy[1]
+        assert(not first_msg.content:find("tmp question", 1, true),
+            "Project B should not have project A's history in API messages")
+        eq(first_msg.content, "root question", "Should only have project B's user message")
+    end)
+
+    it("tracked buffers are scoped to project", function()
+        vim.fn.chdir("/tmp")
+        local buf_a = create_named_buf("/tmp/project_a.lua", "lua", { "project A code" })
+        table.insert(test_bufs, buf_a)
+        vim.api.nvim_set_current_buf(buf_a)
+        send_user_message(ai, "analyze A")
+
+        vim.fn.chdir("/")
+        local buf_b = create_named_buf("/root_file.lua", "lua", { "project B code" })
+        table.insert(test_bufs, buf_b)
+        vim.api.nvim_set_current_buf(buf_b)
+        send_user_message(ai, "analyze B")
+
+        local first_msg = stream_messages_spy[1]
+        assert(not first_msg.content:find("project A code", 1, true),
+            "Project B context should not include project A buffers")
+        assert(first_msg.content:find("project B code", 1, true),
+            "Project B context should include project B buffers")
+    end)
+
+    it("clear only affects the current project", function()
+        vim.fn.chdir("/tmp")
+        send_user_message(ai, "tmp message")
+
+        vim.fn.chdir("/")
+        send_user_message(ai, "root message")
+        ai.clear()
+
+        vim.fn.chdir("/tmp")
+        ai.toggle()
+
+        assert(chat_contains("tmp message"), "Project A conversation should survive project B clear")
+    end)
+
+    it("re-renders chat when toggling after cwd change", function()
+        vim.fn.chdir("/tmp")
+        send_user_message(ai, "tmp content")
+        chat.close()
+
+        vim.fn.chdir("/")
+        ai.toggle()
+
+        assert(not chat_contains("tmp content"), "Should not show project A content after cwd change")
+    end)
+end)

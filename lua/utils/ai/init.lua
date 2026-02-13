@@ -22,23 +22,42 @@ local default_config = {
 
 local config = vim.deepcopy(default_config)
 
--- Conversation history for the current session (stores raw user/assistant text)
-local conversation = {}
+-- Project-scoped sessions keyed by cwd
+-- Each session: { conversation = {}, tracked_bufs = {}, tracking_augroup = nil }
+local sessions = {}
 
--- Handle to cancel in-flight requests
+-- Handle to cancel in-flight requests (global, only one request at a time)
 local cancel_request = nil
 
--- Ordered list of tracked buffer IDs for the current session
-local tracked_bufs = {}
-
--- Autocmd group ID for BufEnter tracking (nil when no session)
-local tracking_augroup = nil
+-- Track the last active project to detect switches
+local last_project = nil
 
 -- Patterns to exclude from buffer tracking (matched against filename, case-insensitive)
 local exclude_patterns = {
     "appsettings",
     "env",
 }
+
+--- Get or create the session for the current working directory
+--- @return table session
+local function get_session()
+    local cwd = vim.fn.getcwd()
+    if not sessions[cwd] then
+        sessions[cwd] = {
+            conversation = {},
+            tracked_bufs = {},
+            tracking_augroup = nil,
+        }
+        debug.log("Created new session for project: " .. cwd)
+    end
+    return sessions[cwd]
+end
+
+--- Get the current project path
+--- @return string
+local function get_project()
+    return vim.fn.getcwd()
+end
 
 --- Check whether a buffer should be tracked (real file, not chat/input)
 --- @param buf number
@@ -73,34 +92,41 @@ local function track_buf(buf)
     if not is_trackable(buf) then
         return
     end
-    for _, id in ipairs(tracked_bufs) do
+    local session = get_session()
+    for _, id in ipairs(session.tracked_bufs) do
         if id == buf then
             return
         end
     end
-    table.insert(tracked_bufs, buf)
+    table.insert(session.tracked_bufs, buf)
     debug.log("Tracking buffer: " .. vim.api.nvim_buf_get_name(buf))
 end
 
 --- Start the BufEnter autocmd that tracks visited buffers
 local function start_tracking()
-    if tracking_augroup then
+    local session = get_session()
+    if session.tracking_augroup then
         return
     end
-    tracking_augroup = vim.api.nvim_create_augroup("AiChatBufTrack", { clear = true })
+    local group_name = "AiChatBufTrack_" .. get_project():gsub("[^%w]", "_")
+    session.tracking_augroup = vim.api.nvim_create_augroup(group_name, { clear = true })
     vim.api.nvim_create_autocmd("BufEnter", {
-        group = tracking_augroup,
+        group = session.tracking_augroup,
         callback = function(ev)
-            track_buf(ev.buf)
+            -- Only track if we're still in the same project
+            if vim.fn.getcwd() == get_project() then
+                track_buf(ev.buf)
+            end
         end,
     })
 end
 
---- Stop the BufEnter autocmd
+--- Stop the BufEnter autocmd for the current session
 local function stop_tracking()
-    if tracking_augroup then
-        vim.api.nvim_del_augroup_by_id(tracking_augroup)
-        tracking_augroup = nil
+    local session = get_session()
+    if session.tracking_augroup then
+        vim.api.nvim_del_augroup_by_id(session.tracking_augroup)
+        session.tracking_augroup = nil
     end
 end
 
@@ -130,8 +156,9 @@ end
 --- Build a context block from all tracked buffers (reads live content)
 --- @return string|nil
 local function build_context_block()
+    local session = get_session()
     local parts = {}
-    for _, buf in ipairs(tracked_bufs) do
+    for _, buf in ipairs(session.tracked_bufs) do
         local ctx = read_buf_context(buf)
         if ctx then
             table.insert(parts, ctx)
@@ -147,10 +174,11 @@ end
 --- Injects the latest buffer context into the first user message.
 --- @return table[]
 local function build_api_messages()
+    local session = get_session()
     local ctx = build_context_block()
     local messages = {}
     local context_injected = false
-    for _, msg in ipairs(conversation) do
+    for _, msg in ipairs(session.conversation) do
         if not context_injected and msg.role == "user" and ctx then
             table.insert(messages, { role = "user", content = ctx .. "\n\n" .. msg.content })
             context_injected = true
@@ -159,6 +187,33 @@ local function build_api_messages()
         end
     end
     return messages
+end
+
+--- Re-render the chat buffer with the current session's conversation
+local function render_chat()
+    chat.clear()
+    local session = get_session()
+    for _, msg in ipairs(session.conversation) do
+        if msg.role == "user" then
+            chat.append_user_message(msg.content)
+        else
+            chat.append_assistant_content(msg.content)
+        end
+    end
+end
+
+--- Check if project changed and re-render chat if needed
+--- @return boolean true if project changed
+local function sync_project()
+    local current = get_project()
+    local changed = last_project and last_project ~= current
+    if changed then
+        debug.log("Project changed from " .. last_project .. " to " .. current)
+        -- Always re-render (clears old content even if chat is closed)
+        render_chat()
+    end
+    last_project = current
+    return changed
 end
 
 --- Send a user message and stream the AI response
@@ -171,6 +226,9 @@ local function send_message(text)
         return
     end
 
+    -- Sync project state (re-render if changed)
+    sync_project()
+
     -- Track the current buffer and start the BufEnter autocmd
     track_buf(vim.api.nvim_get_current_buf())
     start_tracking()
@@ -180,8 +238,10 @@ local function send_message(text)
         chat.open()
     end
 
+    local session = get_session()
+
     -- Store raw user message (no context baked in)
-    table.insert(conversation, { role = "user", content = text })
+    table.insert(session.conversation, { role = "user", content = text })
 
     -- Build the full messages array with fresh buffer context
     local api_messages = build_api_messages()
@@ -206,7 +266,7 @@ local function send_message(text)
         function()
             local full_response = table.concat(response_chunks, "")
             debug.log("AI response:\n" .. full_response)
-            table.insert(conversation, { role = "assistant", content = full_response })
+            table.insert(session.conversation, { role = "assistant", content = full_response })
             chat.finish_assistant_message()
             cancel_request = nil
         end,
@@ -214,7 +274,7 @@ local function send_message(text)
         function(err)
             chat.append_error(err)
             -- Remove the failed user message from history
-            table.remove(conversation)
+            table.remove(session.conversation)
             cancel_request = nil
         end
     )
@@ -262,12 +322,14 @@ end
 --- If called from visual mode, opens inline mode instead
 --- @return number buf_id The buffer id of the input popup
 function M.prompt()
+    sync_project()
     local selection = get_visual_selection()
+    local session = get_session()
 
     if selection then
         -- Visual mode: inline agentic coding
         return input.open(function(instruction)
-            inline.execute(selection, instruction, build_context_block(), conversation)
+            inline.execute(selection, instruction, build_context_block(), session.conversation)
         end, { title = " Inline Edit " })
     else
         -- Normal mode: regular chat
@@ -279,21 +341,43 @@ end
 
 --- Toggle the chat panel
 function M.toggle()
+    sync_project()
     chat.toggle()
 end
 
---- Close the chat and clear conversation
+--- Close the chat and clear conversation for the current project
 function M.clear()
     if cancel_request then
         cancel_request()
         cancel_request = nil
     end
     chat.clear()
-    conversation = {}
-    tracked_bufs = {}
+    local session = get_session()
+    session.conversation = {}
+    session.tracked_bufs = {}
     stop_tracking()
     chat.close()
-    vim.notify("AI: Conversation cleared")
+    -- Reset last_project so next toggle doesn't think we switched
+    last_project = get_project()
+    vim.notify("AI: Conversation cleared for " .. get_project())
+end
+
+--- Reset all sessions (for testing)
+function M.reset_all()
+    if cancel_request then
+        cancel_request()
+        cancel_request = nil
+    end
+    chat.clear()
+    chat.close()
+    -- Clear all augroups
+    for _, session in pairs(sessions) do
+        if session.tracking_augroup then
+            pcall(vim.api.nvim_del_augroup_by_id, session.tracking_augroup)
+        end
+    end
+    sessions = {}
+    last_project = nil
 end
 
 --- Cancel the current in-flight request
@@ -321,18 +405,23 @@ function M.setup(opts)
     map("n", config.keymaps.clear, M.clear, { desc = "AI: Clear conversation" })
 
     vim.api.nvim_create_user_command("AIFiles", function()
-        if #tracked_bufs == 0 then
+        local session = get_session()
+        if #session.tracked_bufs == 0 then
             vim.notify("AI: No files tracked")
             return
         end
         local names = {}
-        for _, buf in ipairs(tracked_bufs) do
+        for _, buf in ipairs(session.tracked_bufs) do
             if vim.api.nvim_buf_is_valid(buf) then
                 table.insert(names, vim.api.nvim_buf_get_name(buf))
             end
         end
         vim.notify("AI tracked files:\n" .. table.concat(names, "\n"))
     end, { desc = "AI: List tracked files" })
+
+    vim.api.nvim_create_user_command("AIProject", function()
+        vim.notify("AI project: " .. get_project())
+    end, { desc = "AI: Show current project path" })
 
     vim.api.nvim_create_user_command("AIDebugPath", function()
         vim.notify("AI log directory: " .. debug.get_log_dir())

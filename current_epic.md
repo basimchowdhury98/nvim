@@ -159,3 +159,22 @@ in `stream_inline_opencode` that was causing inline responses to log twice.
 
 Files: `lua/utils/ai/debug.lua`, `lua/utils/ai/init.lua`, `lua/utils/ai/inline.lua`,
 `lua/utils/ai/api.lua`, `specs/ai_chat_spec.lua`
+
+## User Story 11: Project-scoped sessions
+
+As a user, I want my AI chat conversations and tracked buffers to be scoped to
+the current working directory, so that switching between projects gives me
+separate chat histories.
+
+Added a `sessions` table keyed by `vim.fn.getcwd()`. Each session stores its own
+`conversation`, `tracked_bufs`, and `tracking_augroup`. The `get_session()` helper
+lazily creates sessions on demand. When toggling or sending messages, `sync_project()`
+detects cwd changes and re-renders the chat buffer with the new project's conversation.
+The chat buffer is shared across projects — content swaps when switching. `clear()`
+only affects the current project's session. Added `:AIProject` command to show the
+current project path. Added `reset_all()` for test isolation. Added
+`append_assistant_content()` to chat module for re-rendering saved conversations.
+Added 6 tests covering project switching, conversation isolation, buffer tracking
+scope, and clear behavior.
+
+Files: `lua/utils/ai/init.lua`, `lua/utils/ai/chat.lua`, `specs/ai_chat_spec.lua`

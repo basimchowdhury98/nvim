@@ -262,6 +262,17 @@ function M.finish_assistant_message()
     state.is_streaming = false
 end
 
+--- Append a complete assistant message (for re-rendering saved conversations)
+--- @param text string The assistant's full response
+function M.append_assistant_content(text)
+    local lines = { "**Assistant:**", "" }
+    for line in text:gmatch("([^\n]*)\n?") do
+        table.insert(lines, line)
+    end
+    table.insert(lines, "")
+    append_lines(lines)
+end
+
 --- Show an error in the chat buffer
 --- @param msg string Error message
 function M.append_error(msg)
