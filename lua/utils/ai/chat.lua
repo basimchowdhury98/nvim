@@ -1,6 +1,8 @@
 -- chat.lua
 -- Chat buffer management: right-side split, read-only, message rendering
 
+local spinner = require("utils.ai.spinner")
+
 local M = {}
 
 local default_config = {
@@ -11,14 +13,11 @@ local default_config = {
 
 local config = vim.deepcopy(default_config)
 
-local spinner_frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
-
 local state = {
     buf_id = nil,
     win_id = nil,
     is_streaming = false,
-    spinner_timer = nil,
-    spinner_frame = 1,
+    spinner = nil,
     spinner_line = nil, -- 0-indexed line where the spinner lives
 }
 
@@ -56,61 +55,59 @@ local function scroll_to_bottom()
     vim.api.nvim_win_set_cursor(state.win_id, { line_count, 0 })
 end
 
---- Stop the spinner timer and remove the spinner line from the buffer
+--- Run a function with the buffer temporarily modifiable
+local function with_modifiable(fn)
+    if not buf_is_valid() then return end
+    vim.bo[state.buf_id].modifiable = true
+    fn()
+    vim.bo[state.buf_id].modifiable = false
+end
+
+--- Stop the spinner and remove the spinner line from the buffer
 local function stop_spinner()
-    if state.spinner_timer then
-        state.spinner_timer:stop()
-        state.spinner_timer:close()
-        state.spinner_timer = nil
+    if state.spinner then
+        state.spinner.stop()
+        state.spinner = nil
     end
 
-    -- Remove the spinner line from the buffer
     if state.spinner_line and buf_is_valid() then
-        vim.bo[state.buf_id].modifiable = true
-        vim.api.nvim_buf_set_lines(state.buf_id, state.spinner_line, state.spinner_line + 1, false, {})
-        vim.bo[state.buf_id].modifiable = false
+        with_modifiable(function()
+            vim.api.nvim_buf_set_lines(state.buf_id, state.spinner_line, state.spinner_line + 1, false, {})
+        end)
     end
 
     state.spinner_line = nil
-    state.spinner_frame = 1
 end
 
 --- Start an animated spinner on the last line of the chat buffer
 local function start_spinner()
     if not buf_is_valid() then return end
 
-    -- Append the initial spinner line
-    vim.bo[state.buf_id].modifiable = true
-    local line_count = vim.api.nvim_buf_line_count(state.buf_id)
-    vim.api.nvim_buf_set_lines(state.buf_id, line_count, line_count, false, { spinner_frames[1] .. " Thinking..." })
-    state.spinner_line = line_count -- 0-indexed
-    vim.bo[state.buf_id].modifiable = false
+    with_modifiable(function()
+        local line_count = vim.api.nvim_buf_line_count(state.buf_id)
+        vim.api.nvim_buf_set_lines(state.buf_id, line_count, line_count, false, { "" })
+        state.spinner_line = line_count
+    end)
     scroll_to_bottom()
 
-    state.spinner_frame = 1
-
-    local timer = vim.uv.new_timer()
-    state.spinner_timer = timer
-
-    timer:start(80, 80, vim.schedule_wrap(function()
-        if not buf_is_valid() or not state.spinner_line then
-            stop_spinner()
-            return
-        end
-
-        state.spinner_frame = (state.spinner_frame % #spinner_frames) + 1
-        local frame = spinner_frames[state.spinner_frame]
-
-        vim.bo[state.buf_id].modifiable = true
-        vim.api.nvim_buf_set_lines(
-            state.buf_id,
-            state.spinner_line,
-            state.spinner_line + 1,
-            false,
-            { frame .. " Thinking..." }
-        )
-        vim.bo[state.buf_id].modifiable = false
-    end))
+    state.spinner = spinner.create({
+        on_frame = function(frame)
+            if not buf_is_valid() or not state.spinner_line then
+                stop_spinner()
+                return
+            end
+            with_modifiable(function()
+                vim.api.nvim_buf_set_lines(
+                    state.buf_id,
+                    state.spinner_line,
+                    state.spinner_line + 1,
+                    false,
+                    { frame .. " Thinking..." }
+                )
+            end)
+        end,
+    })
+    state.spinner.start()
 end
 
 function M.open()
@@ -165,19 +162,15 @@ end
 local function append_lines(lines)
     if not buf_is_valid() then return end
 
-    -- Temporarily make buffer modifiable
-    vim.bo[state.buf_id].modifiable = true
-
-    local line_count = vim.api.nvim_buf_line_count(state.buf_id)
-    -- If buffer is empty (single empty line), replace first line
-    local first_line = vim.api.nvim_buf_get_lines(state.buf_id, 0, 1, false)
-    if line_count == 1 and first_line[1] == "" then
-        vim.api.nvim_buf_set_lines(state.buf_id, 0, 1, false, lines)
-    else
-        vim.api.nvim_buf_set_lines(state.buf_id, line_count, line_count, false, lines)
-    end
-
-    vim.bo[state.buf_id].modifiable = false
+    with_modifiable(function()
+        local line_count = vim.api.nvim_buf_line_count(state.buf_id)
+        local first_line = vim.api.nvim_buf_get_lines(state.buf_id, 0, 1, false)
+        if line_count == 1 and first_line[1] == "" then
+            vim.api.nvim_buf_set_lines(state.buf_id, 0, 1, false, lines)
+        else
+            vim.api.nvim_buf_set_lines(state.buf_id, line_count, line_count, false, lines)
+        end
+    end)
     scroll_to_bottom()
 end
 
@@ -205,16 +198,11 @@ function M.append_delta(text)
     if not buf_is_valid() then return end
 
     -- On first delta, kill the spinner
-    if state.spinner_timer then
+    if state.spinner then
         stop_spinner()
     end
 
-    vim.bo[state.buf_id].modifiable = true
-
-    local line_count = vim.api.nvim_buf_line_count(state.buf_id)
-    local last_line = vim.api.nvim_buf_get_lines(state.buf_id, line_count - 1, line_count, false)[1] or ""
-
-    -- Split delta by newlines and append appropriately
+    -- Split delta by newlines
     local parts = {}
     local i = 1
     while i <= #text do
@@ -227,31 +215,30 @@ function M.append_delta(text)
             i = #text + 1
         end
     end
-    -- Handle trailing newline
     if text:sub(-1) == "\n" then
         table.insert(parts, "")
     end
 
     if #parts == 0 then
-        vim.bo[state.buf_id].modifiable = false
         return
     end
 
-    -- First part appends to the current last line
-    local new_last = last_line .. parts[1]
-    vim.api.nvim_buf_set_lines(state.buf_id, line_count - 1, line_count, false, { new_last })
+    with_modifiable(function()
+        local line_count = vim.api.nvim_buf_line_count(state.buf_id)
+        local last_line = vim.api.nvim_buf_get_lines(state.buf_id, line_count - 1, line_count, false)[1] or ""
 
-    -- Remaining parts are new lines
-    if #parts > 1 then
-        local new_lines = {}
-        for j = 2, #parts do
-            table.insert(new_lines, parts[j])
+        local new_last = last_line .. parts[1]
+        vim.api.nvim_buf_set_lines(state.buf_id, line_count - 1, line_count, false, { new_last })
+
+        if #parts > 1 then
+            local new_lines = {}
+            for j = 2, #parts do
+                table.insert(new_lines, parts[j])
+            end
+            local updated_count = vim.api.nvim_buf_line_count(state.buf_id)
+            vim.api.nvim_buf_set_lines(state.buf_id, updated_count, updated_count, false, new_lines)
         end
-        local updated_count = vim.api.nvim_buf_line_count(state.buf_id)
-        vim.api.nvim_buf_set_lines(state.buf_id, updated_count, updated_count, false, new_lines)
-    end
-
-    vim.bo[state.buf_id].modifiable = false
+    end)
     scroll_to_bottom()
 end
 
@@ -285,22 +272,22 @@ end
 function M.clear()
     stop_spinner()
     if not buf_is_valid() then return end
-    vim.bo[state.buf_id].modifiable = true
-    vim.api.nvim_buf_set_lines(state.buf_id, 0, -1, false, { "" })
-    vim.bo[state.buf_id].modifiable = false
+    with_modifiable(function()
+        vim.api.nvim_buf_set_lines(state.buf_id, 0, -1, false, { "" })
+    end)
     state.is_streaming = false
 end
 
 --- Start the spinner (public, for tool-use gaps)
 function M.show_spinner()
-    if not state.spinner_timer then
+    if not state.spinner then
         start_spinner()
     end
 end
 
 --- Stop the spinner (public, for tool-use gaps)
 function M.hide_spinner()
-    if state.spinner_timer then
+    if state.spinner then
         stop_spinner()
     end
 end

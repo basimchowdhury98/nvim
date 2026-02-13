@@ -3,20 +3,18 @@
 
 local api = require("utils.ai.api")
 local debug = require("utils.ai.debug")
+local spinner_mod = require("utils.ai.spinner")
 
 local M = {}
 
 local NO_CODE_SENTINEL = "__NO_INLINE_CODE_PROMPT__"
-
-local spinner_frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
 
 -- Namespace for virtual text extmarks
 local ns_id = vim.api.nvim_create_namespace("ai_inline_spinner")
 
 -- Spinner state
 local spinner_state = {
-    timer = nil,
-    frame = 1,
+    spinner = nil,
     buf = nil,
     top_extmark = nil,
     bottom_extmark = nil,
@@ -32,61 +30,45 @@ local function start_spinner(buf, start_row, end_row)
     end
 
     spinner_state.buf = buf
-    spinner_state.frame = 1
 
-    local function get_spinner_text()
-        return spinner_frames[spinner_state.frame] .. " thinking..."
-    end
+    spinner_state.spinner = spinner_mod.create({
+        on_frame = function(frame)
+            if not vim.api.nvim_buf_is_valid(spinner_state.buf) then
+                M.stop_spinner()
+                return
+            end
 
-    -- Create extmark above the selection (virt_lines_above on start_row)
-    spinner_state.top_extmark = vim.api.nvim_buf_set_extmark(buf, ns_id, start_row, 0, {
-        virt_lines_above = true,
-        virt_lines = { { { get_spinner_text(), "Comment" } } },
+            local text = frame .. " thinking..."
+
+            if not spinner_state.top_extmark then
+                spinner_state.top_extmark = vim.api.nvim_buf_set_extmark(buf, ns_id, start_row, 0, {
+                    virt_lines_above = true,
+                    virt_lines = { { { text, "Comment" } } },
+                })
+                spinner_state.bottom_extmark = vim.api.nvim_buf_set_extmark(buf, ns_id, end_row, 0, {
+                    virt_lines = { { { text, "Comment" } } },
+                })
+            else
+                pcall(vim.api.nvim_buf_set_extmark, spinner_state.buf, ns_id, start_row, 0, {
+                    id = spinner_state.top_extmark,
+                    virt_lines_above = true,
+                    virt_lines = { { { text, "Comment" } } },
+                })
+                pcall(vim.api.nvim_buf_set_extmark, spinner_state.buf, ns_id, end_row, 0, {
+                    id = spinner_state.bottom_extmark,
+                    virt_lines = { { { text, "Comment" } } },
+                })
+            end
+        end,
     })
-
-    -- Create extmark below the selection (virt_lines on end_row)
-    spinner_state.bottom_extmark = vim.api.nvim_buf_set_extmark(buf, ns_id, end_row, 0, {
-        virt_lines = { { { get_spinner_text(), "Comment" } } },
-    })
-
-    -- Start timer to animate the spinner
-    local timer = vim.uv.new_timer()
-    spinner_state.timer = timer
-
-    timer:start(80, 80, vim.schedule_wrap(function()
-        if not vim.api.nvim_buf_is_valid(spinner_state.buf) then
-            M.stop_spinner()
-            return
-        end
-
-        spinner_state.frame = (spinner_state.frame % #spinner_frames) + 1
-        local text = get_spinner_text()
-
-        -- Update top extmark
-        if spinner_state.top_extmark then
-            pcall(vim.api.nvim_buf_set_extmark, spinner_state.buf, ns_id, start_row, 0, {
-                id = spinner_state.top_extmark,
-                virt_lines_above = true,
-                virt_lines = { { { text, "Comment" } } },
-            })
-        end
-
-        -- Update bottom extmark
-        if spinner_state.bottom_extmark then
-            pcall(vim.api.nvim_buf_set_extmark, spinner_state.buf, ns_id, end_row, 0, {
-                id = spinner_state.bottom_extmark,
-                virt_lines = { { { text, "Comment" } } },
-            })
-        end
-    end))
+    spinner_state.spinner.start()
 end
 
 --- Stop the spinner and remove virtual lines
 function M.stop_spinner()
-    if spinner_state.timer then
-        spinner_state.timer:stop()
-        spinner_state.timer:close()
-        spinner_state.timer = nil
+    if spinner_state.spinner then
+        spinner_state.spinner.stop()
+        spinner_state.spinner = nil
     end
 
     if spinner_state.buf and vim.api.nvim_buf_is_valid(spinner_state.buf) then
@@ -96,7 +78,6 @@ function M.stop_spinner()
     spinner_state.top_extmark = nil
     spinner_state.bottom_extmark = nil
     spinner_state.buf = nil
-    spinner_state.frame = 1
 end
 
 --- Execute an inline edit: stream AI response into the buffer, replacing the selection

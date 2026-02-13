@@ -4,6 +4,7 @@
 local M = {}
 local debug = require("utils.ai.debug")
 local chat = require("utils.ai.chat")
+local job = require("utils.ai.job")
 
 local default_config = {
     -- Anthropic direct API settings (used when AI_WORK is set)
@@ -71,116 +72,91 @@ local function stream_opencode(messages, on_delta, on_done, on_error)
     local prompt = build_opencode_prompt(messages)
     debug.log("opencode prompt length: " .. #prompt)
 
-    -- Write prompt to temp file to avoid shell escaping issues
-    local tmp = vim.fn.tempname()
-    local f = io.open(tmp, "w")
-    if not f then
-        on_error("Failed to create temp file")
+    local tmp, err = job.write_temp(prompt)
+    if not tmp then
+        on_error(err)
         return nil
     end
-    f:write(prompt)
-    f:close()
 
-    local stderr_chunks = {}
+    local done_called = false
 
-    -- Use cmd.exe /c to handle piping on Windows
-    local shell_cmd
-    if vim.fn.has("win32") == 1 then
-        shell_cmd = { "cmd", "/c", "type " .. tmp .. " | " .. opencode_cli_name .. " run --format json --title nvim-ai" }
-    else
-        shell_cmd = { "sh", "-c", "cat " .. tmp .. " | " .. opencode_cli_name .. " run --format json --title nvim-ai" }
-    end
+    local cancel = job.run({
+        cmd = job.pipe_cmd(tmp, opencode_cli_name .. " run --format json --title nvim-ai"),
+        temp_file = tmp,
+        on_stdout = function(line)
+            debug.log("stdout line: " .. line:sub(1, 200))
 
-    debug.log("Starting opencode job...")
-
-    local job_id = vim.fn.jobstart(shell_cmd, {
-        on_stdout = function(_, data, _)
-            debug.log("on_stdout called, lines: " .. #data)
-            for _, line in ipairs(data) do
-                if line == "" then goto continue end
-
-                debug.log("stdout line: " .. line:sub(1, 200))
-
-                local ok, event = pcall(vim.fn.json_decode, line)
-                if not ok then
-                    debug.log("JSON decode failed: " .. tostring(event))
-                    goto continue
-                end
-
-                debug.log("event type: " .. tostring(event.type))
-
-                if event.type == "text" and event.part and event.part.text then
-                    vim.schedule(function()
-                        on_delta(event.part.text)
-                    end)
-                elseif event.type == "tool_use" and event.part then
-                    local tool = event.part.tool or "unknown"
-                    debug.log("tool_use: " .. tool)
-                    vim.schedule(function()
-                        on_delta("\n\n*Using tool: " .. tool .. "...*\n\n")
-                        chat.show_spinner()
-                    end)
-                elseif event.type == "step_finish" then
-                    local reason = event.part and event.part.reason or "unknown"
-                    debug.log("step_finish received, reason: " .. reason)
-                    -- Only finish on "stop", not "tool-calls" (intermediate step)
-                    if reason == "stop" then
-                        vim.schedule(function()
-                            on_done()
-                            os.remove(tmp)
-                        end)
-                        return
-                    end
-                end
-
-                ::continue::
+            local ok, event = pcall(vim.fn.json_decode, line)
+            if not ok then
+                debug.log("JSON decode failed: " .. tostring(event))
+                return
             end
-        end,
-        on_stderr = function(_, data, _)
-            for _, line in ipairs(data) do
-                if line ~= "" then
-                    debug.log("stderr: " .. line)
-                    table.insert(stderr_chunks, line)
+
+            debug.log("event type: " .. tostring(event.type))
+
+            if event.type == "text" and event.part and event.part.text then
+                vim.schedule(function()
+                    on_delta(event.part.text)
+                end)
+            elseif event.type == "tool_use" and event.part then
+                local tool = event.part.tool or "unknown"
+                debug.log("tool_use: " .. tool)
+                vim.schedule(function()
+                    on_delta("\n\n*Using tool: " .. tool .. "...*\n\n")
+                    chat.show_spinner()
+                end)
+            elseif event.type == "step_finish" then
+                local reason = event.part and event.part.reason or "unknown"
+                debug.log("step_finish received, reason: " .. reason)
+                if reason == "stop" then
+                    done_called = true
+                    vim.schedule(function()
+                        on_done()
+                    end)
                 end
             end
         end,
-        on_exit = function(_, exit_code, _)
+        on_exit = function(exit_code, stderr_msg)
             debug.log("opencode exited with code: " .. exit_code)
-            os.remove(tmp)
             if exit_code ~= 0 then
                 vim.schedule(function()
-                    local stderr_msg = table.concat(stderr_chunks, "\n")
                     on_error("opencode exited with code " .. exit_code .. ": " .. stderr_msg)
                 end)
-            else
-                -- Fallback: if process exits cleanly but we never got a
-                -- step_finish with reason "stop", finish gracefully
+            elseif not done_called then
                 vim.schedule(function()
                     on_done()
                 end)
             end
         end,
-        stdout_buffered = false,
-        stderr_buffered = false,
     })
 
-    debug.log("jobstart returned: " .. tostring(job_id))
-
-    if job_id <= 0 then
+    if not cancel then
         on_error("Failed to start opencode (is it installed?)")
-        os.remove(tmp)
         return nil
     end
 
-    return function()
-        vim.fn.jobstop(job_id)
-        os.remove(tmp)
-    end
+    return cancel
 end
 
 -- ============================================================
 -- Provider: Anthropic API (direct curl)
 -- ============================================================
+
+--- Parse an SSE line and return the JSON payload or nil
+--- @param line string
+--- @return table|nil
+local function parse_sse(line)
+    local json_str = line:match("^data: (.+)")
+    if not json_str then
+        return nil
+    end
+    local ok, event = pcall(vim.fn.json_decode, json_str)
+    if not ok then
+        debug.log("JSON decode failed: " .. tostring(event))
+        return nil
+    end
+    return event
+end
 
 --- @param messages table[]
 --- @param on_delta fun(text: string)
@@ -217,130 +193,88 @@ local function stream_anthropic(messages, on_delta, on_done, on_error)
     debug.log("Model: " .. config.model)
     debug.log("Endpoint: " .. config.endpoint)
 
-    local tmp = vim.fn.tempname()
-    local f = io.open(tmp, "w")
-    if not f then
-        debug.log("Failed to create temp file: " .. tmp)
-        on_error("Failed to create temp file")
+    local tmp, err = job.write_temp(body)
+    if not tmp then
+        debug.log("Failed to create temp file")
+        on_error(err)
         return nil
     end
-    f:write(body)
-    f:close()
     debug.log("Wrote request body to: " .. tmp)
 
-    local stderr_chunks = {}
+    local done_called = false
 
-    local curl_cmd = {
-        "curl", "--silent", "--no-buffer",
-        "-X", "POST",
-        config.endpoint,
-        "-H", "Content-Type: application/json",
-        "-H", "x-api-key: " .. api_key,
-        "-H", "anthropic-version: " .. config.api_version,
-        "-d", "@" .. tmp,
-    }
-    debug.log("Starting curl job...")
+    local cancel = job.run({
+        cmd = job.curl_cmd({
+            endpoint = config.endpoint,
+            api_key = api_key,
+            api_version = config.api_version,
+            body_file = tmp,
+        }),
+        temp_file = tmp,
+        on_stdout = function(line)
+            debug.log("stdout line: " .. line:sub(1, 200))
 
-    local job_id = vim.fn.jobstart(curl_cmd, {
-        on_stdout = function(_, data, _)
-            debug.log("on_stdout called, lines: " .. #data)
-            for _, line in ipairs(data) do
-                if line == "" then goto continue end
-
-                debug.log("stdout line: " .. line:sub(1, 200))
-
-                -- SSE format: lines starting with "data: "
-                local json_str = line:match("^data: (.+)")
-                if not json_str then
-                    debug.log("line does not match SSE 'data: ' pattern")
-                    goto continue
-                end
-
-                local ok, event = pcall(vim.fn.json_decode, json_str)
-                if not ok then
-                    debug.log("JSON decode failed: " .. tostring(event))
-                    goto continue
-                end
-
-                debug.log("event type: " .. tostring(event.type))
-
-                if event.type == "content_block_start" then
-                    local block = event.content_block
-                    if block and block.type == "server_tool_use" then
-                        local tool = block.name or "unknown"
-                        debug.log("server_tool_use: " .. tool)
-                        vim.schedule(function()
-                            on_delta("\n\n*Searching the web...*\n\n")
-                            chat.show_spinner()
-                        end)
-                    elseif block and block.type == "web_search_tool_result" then
-                        debug.log("web_search_tool_result received")
-                        vim.schedule(function()
-                            chat.hide_spinner()
-                        end)
-                    end
-                elseif event.type == "content_block_delta" then
-                    local delta = event.delta
-                    if delta and delta.type == "text_delta" and delta.text then
-                        vim.schedule(function()
-                            on_delta(delta.text)
-                        end)
-                    end
-                elseif event.type == "message_stop" then
-                    debug.log("message_stop received")
-                    vim.schedule(function()
-                        on_done()
-                        os.remove(tmp)
-                    end)
-                    return
-                elseif event.type == "error" then
-                    local msg = event.error and event.error.message or "Unknown API error"
-                    debug.log("API error: " .. msg)
-                    vim.schedule(function()
-                        on_error(msg)
-                        os.remove(tmp)
-                    end)
-                    return
-                end
-
-                ::continue::
+            local event = parse_sse(line)
+            if not event then
+                return
             end
-        end,
-        on_stderr = function(_, data, _)
-            for _, line in ipairs(data) do
-                if line ~= "" then
-                    debug.log("stderr: " .. line)
-                    table.insert(stderr_chunks, line)
+
+            debug.log("event type: " .. tostring(event.type))
+
+            if event.type == "content_block_start" then
+                local block = event.content_block
+                if block and block.type == "server_tool_use" then
+                    local tool = block.name or "unknown"
+                    debug.log("server_tool_use: " .. tool)
+                    vim.schedule(function()
+                        on_delta("\n\n*Searching the web...*\n\n")
+                        chat.show_spinner()
+                    end)
+                elseif block and block.type == "web_search_tool_result" then
+                    debug.log("web_search_tool_result received")
+                    vim.schedule(function()
+                        chat.hide_spinner()
+                    end)
                 end
-            end
-        end,
-        on_exit = function(_, exit_code, _)
-            debug.log("curl exited with code: " .. exit_code)
-            os.remove(tmp)
-            if exit_code ~= 0 then
+            elseif event.type == "content_block_delta" then
+                local delta = event.delta
+                if delta and delta.type == "text_delta" and delta.text then
+                    vim.schedule(function()
+                        on_delta(delta.text)
+                    end)
+                end
+            elseif event.type == "message_stop" then
+                debug.log("message_stop received")
+                done_called = true
                 vim.schedule(function()
-                    local stderr_msg = table.concat(stderr_chunks, "\n")
+                    on_done()
+                end)
+            elseif event.type == "error" then
+                local msg = event.error and event.error.message or "Unknown API error"
+                debug.log("API error: " .. msg)
+                done_called = true
+                vim.schedule(function()
+                    on_error(msg)
+                end)
+            end
+        end,
+        on_exit = function(exit_code, stderr_msg)
+            debug.log("curl exited with code: " .. exit_code)
+            if exit_code ~= 0 and not done_called then
+                vim.schedule(function()
                     on_error("curl exited with code " .. exit_code .. ": " .. stderr_msg)
                 end)
             end
         end,
-        stdout_buffered = false,
-        stderr_buffered = false,
     })
 
-    debug.log("jobstart returned: " .. tostring(job_id))
-
-    if job_id <= 0 then
+    if not cancel then
         debug.log("jobstart FAILED")
         on_error("Failed to start curl (is curl installed?)")
-        os.remove(tmp)
         return nil
     end
 
-    return function()
-        vim.fn.jobstop(job_id)
-        os.remove(tmp)
-    end
+    return cancel
 end
 
 -- ============================================================
@@ -385,7 +319,6 @@ local function stream_inline_anthropic(selected_text, instruction, context, hist
         return nil
     end
 
-    -- Build the user message with inline-specific content
     local user_content = "## Highlighted Code (editable region)\n```\n" .. selected_text .. "\n```\n\n"
     user_content = user_content .. "## Instruction\n" .. instruction
 
@@ -393,7 +326,6 @@ local function stream_inline_anthropic(selected_text, instruction, context, hist
         user_content = user_content .. "\n\n## Context (other open files)\n" .. context
     end
 
-    -- Build messages array: conversation history + inline request
     local messages = {}
     if history and #history > 0 then
         for _, msg in ipairs(history) do
@@ -408,101 +340,69 @@ local function stream_inline_anthropic(selected_text, instruction, context, hist
         system = inline_system_prompt,
         stream = true,
         messages = messages,
-        -- No tools for inline editing
     })
 
     debug.log("Inline request body length: " .. #body)
 
-    local tmp = vim.fn.tempname()
-    local f = io.open(tmp, "w")
-    if not f then
-        debug.log("Failed to create temp file: " .. tmp)
-        on_error("Failed to create temp file")
+    local tmp, err = job.write_temp(body)
+    if not tmp then
+        debug.log("Failed to create temp file")
+        on_error(err)
         return nil
     end
-    f:write(body)
-    f:close()
 
-    local stderr_chunks = {}
+    local done_called = false
 
-    local curl_cmd = {
-        "curl", "--silent", "--no-buffer",
-        "-X", "POST",
-        config.endpoint,
-        "-H", "Content-Type: application/json",
-        "-H", "x-api-key: " .. api_key,
-        "-H", "anthropic-version: " .. config.api_version,
-        "-d", "@" .. tmp,
-    }
-
-    local job_id = vim.fn.jobstart(curl_cmd, {
-        on_stdout = function(_, data, _)
-            for _, line in ipairs(data) do
-                if line == "" then goto continue end
-
-                local json_str = line:match("^data: (.+)")
-                if not json_str then goto continue end
-
-                local ok, event = pcall(vim.fn.json_decode, json_str)
-                if not ok then goto continue end
-
-                if event.type == "content_block_delta" then
-                    local delta = event.delta
-                    if delta and delta.type == "text_delta" and delta.text then
-                        vim.schedule(function()
-                            on_delta(delta.text)
-                        end)
-                    end
-                elseif event.type == "message_stop" then
-                    vim.schedule(function()
-                        on_done()
-                        os.remove(tmp)
-                    end)
-                    return
-                elseif event.type == "error" then
-                    local msg = event.error and event.error.message or "Unknown API error"
-                    vim.schedule(function()
-                        on_error(msg)
-                        os.remove(tmp)
-                    end)
-                    return
-                end
-
-                ::continue::
+    local cancel = job.run({
+        cmd = job.curl_cmd({
+            endpoint = config.endpoint,
+            api_key = api_key,
+            api_version = config.api_version,
+            body_file = tmp,
+        }),
+        temp_file = tmp,
+        on_stdout = function(line)
+            local event = parse_sse(line)
+            if not event then
+                return
             end
-        end,
-        on_stderr = function(_, data, _)
-            for _, line in ipairs(data) do
-                if line ~= "" then
-                    debug.log("stderr: " .. line)
-                    table.insert(stderr_chunks, line)
+
+            if event.type == "content_block_delta" then
+                local delta = event.delta
+                if delta and delta.type == "text_delta" and delta.text then
+                    vim.schedule(function()
+                        on_delta(delta.text)
+                    end)
                 end
-            end
-        end,
-        on_exit = function(_, exit_code, _)
-            debug.log("inline curl exited with code: " .. exit_code)
-            os.remove(tmp)
-            if exit_code ~= 0 then
+            elseif event.type == "message_stop" then
+                done_called = true
                 vim.schedule(function()
-                    local stderr_msg = table.concat(stderr_chunks, "\n")
+                    on_done()
+                end)
+            elseif event.type == "error" then
+                local msg = event.error and event.error.message or "Unknown API error"
+                done_called = true
+                vim.schedule(function()
+                    on_error(msg)
+                end)
+            end
+        end,
+        on_exit = function(exit_code, stderr_msg)
+            debug.log("inline curl exited with code: " .. exit_code)
+            if exit_code ~= 0 and not done_called then
+                vim.schedule(function()
                     on_error("curl exited with code " .. exit_code .. ": " .. stderr_msg)
                 end)
             end
         end,
-        stdout_buffered = false,
-        stderr_buffered = false,
     })
 
-    if job_id <= 0 then
+    if not cancel then
         on_error("Failed to start curl")
-        os.remove(tmp)
         return nil
     end
 
-    return function()
-        vim.fn.jobstop(job_id)
-        os.remove(tmp)
-    end
+    return cancel
 end
 
 --- Build an inline prompt for opencode
@@ -562,80 +462,52 @@ local function stream_inline_opencode(selected_text, instruction, context, histo
     local prompt = build_inline_opencode_prompt(selected_text, instruction, context, history)
     debug.log("inline opencode prompt length: " .. #prompt)
 
-    local tmp = vim.fn.tempname()
-    local f = io.open(tmp, "w")
-    if not f then
-        on_error("Failed to create temp file")
+    local tmp, err = job.write_temp(prompt)
+    if not tmp then
+        on_error(err)
         return nil
     end
-    f:write(prompt)
-    f:close()
 
-    local stderr_chunks = {}
+    local done_called = false
 
-    local shell_cmd
-    if vim.fn.has("win32") == 1 then
-        shell_cmd = { "cmd", "/c", "type " .. tmp .. " | " .. opencode_cli_name .. " run --format json --title nvim-ai-inline" }
-    else
-        shell_cmd = { "sh", "-c", "cat " .. tmp .. " | " .. opencode_cli_name .. " run --format json --title nvim-ai-inline" }
-    end
-
-    local job_id = vim.fn.jobstart(shell_cmd, {
-        on_stdout = function(_, data, _)
-            for _, line in ipairs(data) do
-                if line == "" then goto continue end
-
-                local ok, event = pcall(vim.fn.json_decode, line)
-                if not ok then goto continue end
-
-                if event.type == "text" and event.part and event.part.text then
-                    vim.schedule(function()
-                        on_delta(event.part.text)
-                    end)
-                elseif event.type == "step_finish" then
-                    local reason = event.part and event.part.reason or "unknown"
-                    if reason == "stop" then
-                        vim.schedule(function()
-                            on_done()
-                            os.remove(tmp)
-                        end)
-                        return
-                    end
-                end
-
-                ::continue::
+    local cancel = job.run({
+        cmd = job.pipe_cmd(tmp, opencode_cli_name .. " run --format json --title nvim-ai-inline"),
+        temp_file = tmp,
+        on_stdout = function(line)
+            local ok, event = pcall(vim.fn.json_decode, line)
+            if not ok then
+                return
             end
-        end,
-        on_stderr = function(_, data, _)
-            for _, line in ipairs(data) do
-                if line ~= "" then
-                    table.insert(stderr_chunks, line)
-                end
-            end
-        end,
-        on_exit = function(_, exit_code, _)
-            os.remove(tmp)
-            if exit_code ~= 0 then
+
+            if event.type == "text" and event.part and event.part.text then
                 vim.schedule(function()
-                    local stderr_msg = table.concat(stderr_chunks, "\n")
+                    on_delta(event.part.text)
+                end)
+            elseif event.type == "step_finish" then
+                local reason = event.part and event.part.reason or "unknown"
+                if reason == "stop" then
+                    done_called = true
+                    vim.schedule(function()
+                        on_done()
+                    end)
+                end
+            end
+        end,
+        on_exit = function(exit_code, stderr_msg)
+            if exit_code ~= 0 and not done_called then
+                vim.schedule(function()
                     on_error("opencode exited with code " .. exit_code .. ": " .. stderr_msg)
                 end)
             end
         end,
-        stdout_buffered = false,
-        stderr_buffered = false,
     })
 
-    if job_id <= 0 then
+    if not cancel then
         on_error("Failed to start opencode")
-        os.remove(tmp)
         return nil
     end
 
-    return function()
-        vim.fn.jobstop(job_id)
-        os.remove(tmp)
-    end
+    return cancel
 end
 
 -- ============================================================

@@ -103,7 +103,6 @@ describe("AI Chat Plugin", function()
 
     it("toggle closes the chat panel if already open", function()
         ai.toggle()
-
         ai.toggle()
 
         assert(not chat.is_open(), "Chat should be closed")
@@ -205,8 +204,8 @@ describe("AI Chat Plugin", function()
 
     it("clear closes chat and resets conversation", function()
         send_user_message(ai, "hello")
-
         ai.clear()
+
         send_user_message(ai, "fresh start")
 
         assert(not chat_contains("hello"), "Old message should not be in chat after clear")
@@ -392,6 +391,7 @@ describe("AI Inline Editing", function()
     local stub_inline_response = "function body() end"
     local stub_inline_error = nil
     local inline_spy = nil
+    local test_bufs = {}
 
     local function stub_inline_api()
         inline_api.inline_stream = function(selected_text, instruction, context, history, on_delta, on_done, on_error)
@@ -415,6 +415,12 @@ describe("AI Inline Editing", function()
 
     before_each(function()
         ai.clear()
+        for _, buf in ipairs(test_bufs) do
+            if vim.api.nvim_buf_is_valid(buf) then
+                vim.api.nvim_buf_delete(buf, { force = true })
+            end
+        end
+        test_bufs = {}
         stub_inline_response = "function body() end"
         stub_inline_error = nil
         inline_spy = nil
@@ -426,15 +432,9 @@ describe("AI Inline Editing", function()
 
     it("executes inline edit and replaces selection with streamed response", function()
         local buf = create_named_buf("/tmp/inline_test.lua", "lua", { "local x = 1", "local y = 2", "local z = 3" })
+        table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
-        local selection = {
-            buf = buf,
-            start_row = 1,
-            start_col = 0,
-            end_row = 1,
-            end_col = 11,
-            text = "local y = 2",
-        }
+        local selection = { buf = buf, start_row = 1, start_col = 0, end_row = 1, end_col = 11, text = "local y = 2" }
 
         inline.execute(selection, "replace with z", nil, nil)
 
@@ -442,59 +442,37 @@ describe("AI Inline Editing", function()
         eq(lines[1], "local x = 1", "First line should be unchanged")
         eq(lines[2], "function body() end", "Second line should be replaced with response")
         eq(lines[3], "local z = 3", "Third line should be unchanged")
-
-        vim.api.nvim_buf_delete(buf, { force = true })
     end)
 
     it("passes selected text and instruction to api.inline_stream", function()
         local buf = create_named_buf("/tmp/inline_spy.lua", "lua", { "original code" })
+        table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
-        local selection = {
-            buf = buf,
-            start_row = 0,
-            start_col = 0,
-            end_row = 0,
-            end_col = 13,
-            text = "original code",
-        }
+        local selection = { buf = buf, start_row = 0, start_col = 0, end_row = 0, end_col = 13, text = "original code" }
 
         inline.execute(selection, "make it better", nil, nil)
 
         assert(inline_spy ~= nil, "inline_stream should have been called")
         eq(inline_spy.selected_text, "original code", "Should pass selected text")
         eq(inline_spy.instruction, "make it better", "Should pass instruction")
-        vim.api.nvim_buf_delete(buf, { force = true })
     end)
 
     it("passes context when provided", function()
         local buf = create_named_buf("/tmp/inline_ctx.lua", "lua", { "code" })
+        table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
-        local selection = {
-            buf = buf,
-            start_row = 0,
-            start_col = 0,
-            end_row = 0,
-            end_col = 4,
-            text = "code",
-        }
+        local selection = { buf = buf, start_row = 0, start_col = 0, end_row = 0, end_col = 4, text = "code" }
 
         inline.execute(selection, "edit", "some context", nil)
 
         eq(inline_spy.context, "some context", "Should pass context to API")
-        vim.api.nvim_buf_delete(buf, { force = true })
     end)
 
     it("passes conversation history when provided", function()
         local buf = create_named_buf("/tmp/inline_hist.lua", "lua", { "code" })
+        table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
-        local selection = {
-            buf = buf,
-            start_row = 0,
-            start_col = 0,
-            end_row = 0,
-            end_col = 4,
-            text = "code",
-        }
+        local selection = { buf = buf, start_row = 0, start_col = 0, end_row = 0, end_col = 4, text = "code" }
         local history = {
             { role = "user", content = "previous question" },
             { role = "assistant", content = "previous answer" },
@@ -505,41 +483,27 @@ describe("AI Inline Editing", function()
         assert(inline_spy.history ~= nil, "Should pass history to API")
         eq(#inline_spy.history, 2, "History should have 2 messages")
         eq(inline_spy.history[1].content, "previous question", "First history message should match")
-        vim.api.nvim_buf_delete(buf, { force = true })
     end)
 
     it("handles sentinel response without modifying buffer", function()
         stub_inline_response = "__NO_INLINE_CODE_PROMPT__"
         local buf = create_named_buf("/tmp/inline_sentinel.lua", "lua", { "unchanged" })
+        table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
-        local selection = {
-            buf = buf,
-            start_row = 0,
-            start_col = 0,
-            end_row = 0,
-            end_col = 9,
-            text = "unchanged",
-        }
+        local selection = { buf = buf, start_row = 0, start_col = 0, end_row = 0, end_col = 9, text = "unchanged" }
 
         inline.execute(selection, "what is this?", nil, nil)
 
         local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
         eq(lines[1], "unchanged", "Buffer should not be modified when sentinel is returned")
-        vim.api.nvim_buf_delete(buf, { force = true })
     end)
 
     it("handles multiline replacement", function()
         stub_inline_response = "line1\nline2\nline3"
         local buf = create_named_buf("/tmp/inline_multi.lua", "lua", { "single line" })
+        table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
-        local selection = {
-            buf = buf,
-            start_row = 0,
-            start_col = 0,
-            end_row = 0,
-            end_col = 11,
-            text = "single line",
-        }
+        local selection = { buf = buf, start_row = 0, start_col = 0, end_row = 0, end_col = 11, text = "single line" }
 
         inline.execute(selection, "expand", nil, nil)
 
@@ -547,27 +511,19 @@ describe("AI Inline Editing", function()
         eq(lines[1], "line1", "First replacement line")
         eq(lines[2], "line2", "Second replacement line")
         eq(lines[3], "line3", "Third replacement line")
-        vim.api.nvim_buf_delete(buf, { force = true })
     end)
 
     it("handles partial line selection replacement", function()
         stub_inline_response = "REPLACED"
         local buf = create_named_buf("/tmp/inline_partial.lua", "lua", { "prefix MIDDLE suffix" })
+        table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
-        local selection = {
-            buf = buf,
-            start_row = 0,
-            start_col = 7,
-            end_row = 0,
-            end_col = 13,
-            text = "MIDDLE",
-        }
+        local selection = { buf = buf, start_row = 0, start_col = 7, end_row = 0, end_col = 13, text = "MIDDLE" }
 
         inline.execute(selection, "replace middle", nil, nil)
 
         local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
         eq(lines[1], "prefix REPLACED suffix", "Should replace only the selected portion")
-        vim.api.nvim_buf_delete(buf, { force = true })
     end)
 
     it("handles error from api gracefully", function()
@@ -575,67 +531,44 @@ describe("AI Inline Editing", function()
         local notified = nil
         vim.notify = function(msg) notified = msg end
         local buf = create_named_buf("/tmp/inline_error.lua", "lua", { "code" })
+        table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
-
-        local selection = {
-            buf = buf,
-            start_row = 0,
-            start_col = 0,
-            end_row = 0,
-            end_col = 4,
-            text = "code",
-        }
+        local selection = { buf = buf, start_row = 0, start_col = 0, end_row = 0, end_col = 4, text = "code" }
 
         inline.execute(selection, "edit", nil, nil)
 
         local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
         eq(lines[1], "code", "Buffer should be unchanged on error")
         assert(notified and notified:find("API failed"), "Should notify user of error")
-        vim.api.nvim_buf_delete(buf, { force = true })
         vim.notify = function() end
     end)
 
     it("cleans up spinner after completion", function()
         local buf = create_named_buf("/tmp/inline_spinner.lua", "lua", { "line1", "line2", "line3" })
+        table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
-        local selection = {
-            buf = buf,
-            start_row = 1,
-            start_col = 0,
-            end_row = 1,
-            end_col = 5,
-            text = "line2",
-        }
+        local selection = { buf = buf, start_row = 1, start_col = 0, end_row = 1, end_col = 5, text = "line2" }
 
         inline.execute(selection, "replace", nil, nil)
 
         local ns_id = vim.api.nvim_create_namespace("ai_inline_spinner")
         local extmarks = vim.api.nvim_buf_get_extmarks(buf, ns_id, 0, -1, {})
         eq(#extmarks, 0, "All spinner extmarks should be cleaned up after completion")
-        vim.api.nvim_buf_delete(buf, { force = true })
     end)
 
     it("cleans up spinner on error", function()
         stub_inline_error = "API failed"
         vim.notify = function() end
         local buf = create_named_buf("/tmp/inline_spinner_err.lua", "lua", { "code" })
+        table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
-        local selection = {
-            buf = buf,
-            start_row = 0,
-            start_col = 0,
-            end_row = 0,
-            end_col = 4,
-            text = "code",
-        }
+        local selection = { buf = buf, start_row = 0, start_col = 0, end_row = 0, end_col = 4, text = "code" }
 
         inline.execute(selection, "edit", nil, nil)
 
         local ns_id = vim.api.nvim_create_namespace("ai_inline_spinner")
         local extmarks = vim.api.nvim_buf_get_extmarks(buf, ns_id, 0, -1, {})
         eq(#extmarks, 0, "All spinner extmarks should be cleaned up after error")
-        vim.api.nvim_buf_delete(buf, { force = true })
-        stub_inline_error = nil
     end)
 end)
 
@@ -647,8 +580,7 @@ describe("AI Debug", function()
     end)
 
     it("log writes to file", function()
-        local date = os.date("%Y-%m-%d")
-        local log_path = test_log_dir .. "/" .. date .. ".log"
+        local log_path = test_log_dir .. "/" .. os.date("%Y-%m-%d") .. ".log"
 
         debug.log("test message from spec")
 
@@ -656,7 +588,6 @@ describe("AI Debug", function()
         assert(f, "Log file should exist after logging")
         local content = f:read("*a")
         f:close()
-
         assert(content:find("test message from spec"), "Log file should contain the message")
     end)
 end)

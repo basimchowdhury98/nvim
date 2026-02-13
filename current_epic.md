@@ -178,3 +178,40 @@ Added 6 tests covering project switching, conversation isolation, buffer trackin
 scope, and clear behavior.
 
 Files: `lua/utils/ai/init.lua`, `lua/utils/ai/chat.lua`, `specs/ai_chat_spec.lua`
+
+## User Story 12: Codebase cleanup and deduplication
+
+As a developer, I want the AI plugin codebase to have clean patterns with no
+duplicate logic, so that it's easier to read, extend, and maintain.
+
+Extracted shared modules to eliminate duplication:
+
+- **`spinner.lua`**: Shared spinner animation with `create(opts)` returning
+  `{start, stop, is_running}`. Both `chat.lua` and `inline.lua` now use this
+  instead of duplicating timer/frame cycling logic (~50 lines each).
+
+- **`job.lua`**: Shared job execution utilities with `write_temp()`, `run()`,
+  `pipe_cmd()`, and `curl_cmd()`. All 4 streaming functions in `api.lua` now
+  use this instead of duplicating temp file handling, stderr collection, and
+  cleanup patterns (~60 lines each).
+
+Refactored existing modules:
+
+- **`chat.lua`**: Added `with_modifiable(fn)` helper to wrap buffer modifications,
+  reducing 7 repetitive `modifiable = true/false` blocks to single-line calls.
+
+- **`api.lua`**: Extracted `parse_sse(line)` helper for SSE JSON parsing, used
+  by both Anthropic streaming functions.
+
+Fixed test structure per AGENTS.md conventions:
+
+- All tests now have exactly 3 sections (arrange/act/assert) separated by single
+  blank lines
+- Moved inline test buffer cleanup from end-of-test to `before_each` via shared
+  `test_bufs` array
+- Consolidated verbose multi-line selection objects to single lines where sensible
+
+Net reduction of ~150-200 lines through deduplication.
+
+Files: `lua/utils/ai/spinner.lua`, `lua/utils/ai/job.lua`, `lua/utils/ai/chat.lua`,
+`lua/utils/ai/api.lua`, `lua/utils/ai/inline.lua`, `specs/ai_chat_spec.lua`
