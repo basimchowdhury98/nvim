@@ -128,9 +128,6 @@ function M.execute(selection, instruction, context, history)
 
     -- Delete the selected region first, then stream in the replacement
     local function prepare_buffer()
-        -- Stop spinner before modifying buffer
-        M.stop_spinner()
-
         vim.api.nvim_buf_set_text(
             buf,
             selection.start_row, selection.start_col,

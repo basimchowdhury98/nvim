@@ -131,3 +131,15 @@ edits, error handling, and spinner cleanup.
 
 Files: `lua/utils/ai/init.lua`, `lua/utils/ai/api.lua`, `lua/utils/ai/input.lua`,
 `lua/utils/ai/inline.lua`, `specs/ai_chat_spec.lua`
+
+## User Story 9: Keep spinner visible during inline streaming
+
+As a user, I want the "thinking..." spinner and virtual lines to remain visible
+while the AI streams replacement code into my buffer, so that I have continuous
+feedback that the operation is still in progress.
+
+Removed the early `stop_spinner()` call from `prepare_buffer()`. The spinner now
+stays visible and animates throughout the entire streaming process, only clearing
+when the stream completes (`on_done`) or errors (`on_error`).
+
+Files: `lua/utils/ai/inline.lua`
