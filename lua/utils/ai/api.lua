@@ -355,10 +355,11 @@ Your task is to output ONLY the replacement code for the highlighted region.
 
 CRITICAL RULES:
 - Output ONLY raw code - your entire response will be inserted directly into the source file
-- NEVER wrap output in markdown code fences (```) - this will break the code
+- NEVER wrap output in markdown code fences (``` or cs``` or other code specific fences) this will break the code
 - NEVER include explanations, comments about what you did, or any other text
 - Be smart about what to preserve (e.g., keep a method signature if asked to implement the body)
 - Match the existing code style (indentation, naming conventions, etc.)
+- Respect the spacing provided in the edittable region because your output will replace it inline
 
 If the user's instruction is not asking you to write or modify code (e.g., they're asking a question, requesting an explanation, or the instruction doesn't make sense as a code edit), output exactly this sentinel and nothing else:
 __NO_INLINE_CODE_PROMPT__
