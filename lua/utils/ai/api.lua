@@ -345,16 +345,19 @@ OTHER RULES:
 
 --- @param selected_text string The highlighted code region
 --- @param instruction string The user's instruction
---- @param context string|nil Optional buffer context
+--- @param context string|nil Optional buffer context (other open files)
 --- @param history table|nil Optional conversation history
 --- @param lines_before string|nil Lines before the selection for context
 --- @param lines_after string|nil Lines after the selection for context
 --- @param indent string|nil Detected indentation to use
+--- @param filename string|nil The filename being edited
+--- @param start_line number|nil 1-indexed start line of selection
+--- @param end_line number|nil 1-indexed end line of selection
 --- @param on_delta fun(text: string) Called with each text chunk
 --- @param on_done fun() Called when complete
 --- @param on_error fun(err: string) Called on error
 --- @return fun()|nil cancel
-local function stream_inline_anthropic(selected_text, instruction, context, history, lines_before, lines_after, indent, on_delta, on_done, on_error)
+local function stream_inline_anthropic(selected_text, instruction, context, history, lines_before, lines_after, indent, filename, start_line, end_line, on_delta, on_done, on_error)
     debug.log("using anthropic provider for inline edit")
 
     local api_key = get_api_key()
@@ -366,25 +369,38 @@ local function stream_inline_anthropic(selected_text, instruction, context, hist
 
     local user_content = ""
 
+    -- Open files context first
+    if context then
+        user_content = user_content .. "## Open Files\n" .. context .. "\n\n"
+    end
+
+    -- Current file being edited
+    if filename and filename ~= "" then
+        user_content = user_content .. "## Current File\nFilename: " .. filename .. "\n\n"
+    end
+
+    -- Editing region with line numbers
+    local region_header = "## Editing Region"
+    if start_line and end_line then
+        region_header = region_header .. " (lines " .. start_line .. "-" .. end_line .. ")"
+    end
+    user_content = user_content .. region_header .. "\n\n"
+
     if indent and indent ~= "" then
-        user_content = user_content .. "## Required Indentation\nEach line of your output MUST start with exactly: \"" .. indent .. "\" (the same whitespace as surrounding code)\n\n"
+        user_content = user_content .. "### Required Indentation\nEach line of your output MUST start with exactly: \"" .. indent .. "\" (the same whitespace as surrounding code)\n\n"
     end
 
     if lines_before and lines_before ~= "" then
-        user_content = user_content .. "## Lines Before (read-only context)\n```\n" .. lines_before .. "\n```\n\n"
+        user_content = user_content .. "### Lines Before\n```\n" .. lines_before .. "\n```\n\n"
     end
 
-    user_content = user_content .. "## Highlighted Code (editable region)\n```\n" .. selected_text .. "\n```\n\n"
+    user_content = user_content .. "### Selected Code (will be replaced)\n```\n" .. selected_text .. "\n```\n\n"
 
     if lines_after and lines_after ~= "" then
-        user_content = user_content .. "## Lines After (read-only context)\n```\n" .. lines_after .. "\n```\n\n"
+        user_content = user_content .. "### Lines After\n```\n" .. lines_after .. "\n```\n\n"
     end
 
     user_content = user_content .. "## Instruction\n" .. instruction
-
-    if context then
-        user_content = user_content .. "\n\n## Context (other open files)\n" .. context
-    end
 
     local messages = {}
     if history and #history > 0 then
@@ -477,7 +493,7 @@ local function stream_inline_anthropic(selected_text, instruction, context, hist
 end
 
 --- Build an inline prompt for opencode
-local function build_inline_opencode_prompt(selected_text, instruction, context, history, lines_before, lines_after, indent)
+local function build_inline_opencode_prompt(selected_text, instruction, context, history, lines_before, lines_after, indent, filename, start_line, end_line)
     local parts = {
         "You are an inline code editor. Your ENTIRE response will be inserted directly into a source file.",
         "",
@@ -490,12 +506,6 @@ local function build_inline_opencode_prompt(selected_text, instruction, context,
         "WRONG: ```lua\\nlocal x = 1\\n```",
         "CORRECT: local x = 1",
     }
-
-    if indent and indent ~= "" then
-        table.insert(parts, "")
-        table.insert(parts, "## Required Indentation")
-        table.insert(parts, "Each line MUST start with exactly: \"" .. indent .. "\"")
-    end
 
     -- Include conversation history for context
     if history and #history > 0 then
@@ -511,23 +521,51 @@ local function build_inline_opencode_prompt(selected_text, instruction, context,
         end
     end
 
+    -- Open files context first
+    if context then
+        table.insert(parts, "")
+        table.insert(parts, "## Open Files")
+        table.insert(parts, context)
+    end
+
+    -- Current file being edited
+    if filename and filename ~= "" then
+        table.insert(parts, "")
+        table.insert(parts, "## Current File")
+        table.insert(parts, "Filename: " .. filename)
+    end
+
+    -- Editing region with line numbers
+    table.insert(parts, "")
+    if start_line and end_line then
+        table.insert(parts, "## Editing Region (lines " .. start_line .. "-" .. end_line .. ")")
+    else
+        table.insert(parts, "## Editing Region")
+    end
+
+    if indent and indent ~= "" then
+        table.insert(parts, "")
+        table.insert(parts, "### Required Indentation")
+        table.insert(parts, "Each line MUST start with exactly: \"" .. indent .. "\"")
+    end
+
     if lines_before and lines_before ~= "" then
         table.insert(parts, "")
-        table.insert(parts, "## Lines Before (read-only context)")
+        table.insert(parts, "### Lines Before")
         table.insert(parts, "```")
         table.insert(parts, lines_before)
         table.insert(parts, "```")
     end
 
     table.insert(parts, "")
-    table.insert(parts, "## Highlighted Code (editable region)")
+    table.insert(parts, "### Selected Code (will be replaced)")
     table.insert(parts, "```")
     table.insert(parts, selected_text)
     table.insert(parts, "```")
 
     if lines_after and lines_after ~= "" then
         table.insert(parts, "")
-        table.insert(parts, "## Lines After (read-only context)")
+        table.insert(parts, "### Lines After")
         table.insert(parts, "```")
         table.insert(parts, lines_after)
         table.insert(parts, "```")
@@ -537,11 +575,6 @@ local function build_inline_opencode_prompt(selected_text, instruction, context,
     table.insert(parts, "## Instruction")
     table.insert(parts, instruction)
 
-    if context then
-        table.insert(parts, "")
-        table.insert(parts, "## Context (other open files)")
-        table.insert(parts, context)
-    end
     table.insert(parts, "")
     table.insert(parts, "Replacement code (no markdown, no fences, no explanation):")
     return table.concat(parts, "\n")
@@ -554,14 +587,17 @@ end
 --- @param lines_before string|nil
 --- @param lines_after string|nil
 --- @param indent string|nil
+--- @param filename string|nil
+--- @param start_line number|nil
+--- @param end_line number|nil
 --- @param on_delta fun(text: string)
 --- @param on_done fun()
 --- @param on_error fun(err: string)
 --- @return fun()|nil cancel
-local function stream_inline_opencode(selected_text, instruction, context, history, lines_before, lines_after, indent, on_delta, on_done, on_error)
+local function stream_inline_opencode(selected_text, instruction, context, history, lines_before, lines_after, indent, filename, start_line, end_line, on_delta, on_done, on_error)
     debug.log("using opencode provider for inline edit")
 
-    local prompt = build_inline_opencode_prompt(selected_text, instruction, context, history, lines_before, lines_after, indent)
+    local prompt = build_inline_opencode_prompt(selected_text, instruction, context, history, lines_before, lines_after, indent, filename, start_line, end_line)
     debug.log("inline opencode prompt length: " .. #prompt)
 
     local tmp, err = job.write_temp(prompt)
@@ -626,25 +662,29 @@ end
 --- Send a streaming inline edit request to the active provider
 --- @param selected_text string The highlighted code region
 --- @param instruction string The user's instruction
---- @param context string|nil Optional buffer context
+--- @param context string|nil Optional buffer context (other open files)
 --- @param history table|nil Optional conversation history
 --- @param lines_before string|nil Lines before the selection for context
 --- @param lines_after string|nil Lines after the selection for context
 --- @param indent string|nil Detected indentation to use
+--- @param filename string|nil The filename being edited
+--- @param start_line number|nil 1-indexed start line of selection
+--- @param end_line number|nil 1-indexed end line of selection
 --- @param on_delta fun(text: string) Called with each text chunk
 --- @param on_done fun() Called when complete
 --- @param on_error fun(err: string) Called on error
 --- @return fun()|nil cancel
-function M.inline_stream(selected_text, instruction, context, history, lines_before, lines_after, indent, on_delta, on_done, on_error)
+function M.inline_stream(selected_text, instruction, context, history, lines_before, lines_after, indent, filename, start_line, end_line, on_delta, on_done, on_error)
     debug.log("inline_stream() called")
     debug.log("Selected text length: " .. #selected_text)
     debug.log("Instruction: " .. instruction:sub(1, 100))
     debug.log("History length: " .. (history and #history or 0))
+    debug.log("Filename: " .. (filename or "nil"))
 
     if is_work_mode() then
-        return stream_inline_anthropic(selected_text, instruction, context, history, lines_before, lines_after, indent, on_delta, on_done, on_error)
+        return stream_inline_anthropic(selected_text, instruction, context, history, lines_before, lines_after, indent, filename, start_line, end_line, on_delta, on_done, on_error)
     else
-        return stream_inline_opencode(selected_text, instruction, context, history, lines_before, lines_after, indent, on_delta, on_done, on_error)
+        return stream_inline_opencode(selected_text, instruction, context, history, lines_before, lines_after, indent, filename, start_line, end_line, on_delta, on_done, on_error)
     end
 end
 

@@ -22,12 +22,14 @@ local spinner_state = {
 --- @param buf number Buffer ID
 --- @param start_row number 0-indexed start row
 --- @param end_row number 0-indexed end row
-local function start_spinner(buf, start_row, end_row)
+--- @param indent string Indentation to match surrounding code
+local function start_spinner(buf, start_row, end_row, indent)
     if not vim.api.nvim_buf_is_valid(buf) then
         return
     end
 
     spinner_state.buf = buf
+    local prefix = indent or ""
 
     spinner_state.spinner = spinner_mod.create({
         on_frame = function(frame)
@@ -36,7 +38,7 @@ local function start_spinner(buf, start_row, end_row)
                 return
             end
 
-            local text = frame .. " thinking..."
+            local text = prefix .. frame .. " thinking..."
 
             if not spinner_state.top_extmark then
                 spinner_state.top_extmark = vim.api.nvim_buf_set_extmark(buf, ns_id, start_row, 0, {
@@ -79,9 +81,9 @@ function M.stop_spinner()
 end
 
 --- Execute an inline edit: stream AI response into the buffer, replacing the selection
---- @param selection table {buf, start_row, start_col, end_row, end_col, text, lines_before, lines_after}
+--- @param selection table {buf, filename, start_row, start_col, end_row, end_col, text, lines_before, lines_after, indent}
 --- @param instruction string The user's instruction
---- @param context string|nil Optional buffer context
+--- @param context string|nil Optional buffer context (other open files)
 --- @param history table|nil Optional conversation history
 function M.execute(selection, instruction, context, history)
     debug.log("inline.execute called")
@@ -95,13 +97,12 @@ function M.execute(selection, instruction, context, history)
     end
 
     -- Start the spinner around the selection
-    start_spinner(buf, selection.start_row, selection.end_row)
+    start_spinner(buf, selection.start_row, selection.end_row, selection.indent)
 
-    -- Track accumulated response to detect sentinel
+    -- Track accumulated response
     local response_chunks = {}
-    local first_chunk = true
 
-    -- Track current insertion position (will update as we stream)
+    -- Track current insertion position
     local insert_row = selection.start_row
     local insert_col = selection.start_col
 
@@ -165,6 +166,34 @@ function M.execute(selection, instruction, context, history)
         end
     end
 
+    --- Strip markdown code fences from response if present
+    local function strip_fences(text)
+        -- Match opening fence with optional language identifier
+        local stripped = text:match("^```[^\n]*\n(.*)$")
+        if stripped then
+            -- Remove closing fence
+            stripped = stripped:gsub("\n?```%s*$", "")
+            return stripped
+        end
+        return text
+    end
+
+    --- Apply indentation to each line of the response
+    local function apply_indent(text, indent)
+        if not indent or indent == "" then
+            return text
+        end
+        local lines = vim.split(text, "\n", { plain = true })
+        for i, line in ipairs(lines) do
+            -- Only indent non-empty lines that don't already have the indent
+            if line ~= "" and not line:match("^" .. indent) then
+                -- Strip any existing leading whitespace and apply correct indent
+                lines[i] = indent .. line:gsub("^%s*", "")
+            end
+        end
+        return table.concat(lines, "\n")
+    end
+
     local cancel = api.inline_stream(
         selection.text,
         instruction,
@@ -173,28 +202,35 @@ function M.execute(selection, instruction, context, history)
         selection.lines_before,
         selection.lines_after,
         selection.indent,
+        selection.filename,
+        selection.start_row + 1, -- convert 0-indexed to 1-indexed
+        selection.end_row + 1,
         -- on_delta
         function(delta)
             table.insert(response_chunks, delta)
-
-            if first_chunk then
-                first_chunk = false
-                prepare_buffer()
-            end
-
-            insert_text(delta)
         end,
         -- on_done
         function()
             M.stop_spinner()
 
-            -- If we never inserted anything (empty response), notify
-            if first_chunk then
+            local full_response = table.concat(response_chunks, "")
+
+            -- If empty response, notify
+            if full_response == "" then
                 vim.notify("AI Inline: No response received", vim.log.levels.WARN)
                 return
             end
 
-            local full_response = table.concat(response_chunks, "")
+            -- Strip markdown fences if the model included them
+            local clean_response = strip_fences(full_response)
+
+            -- Apply correct indentation
+            clean_response = apply_indent(clean_response, selection.indent)
+
+            -- Replace the selection with the clean response
+            prepare_buffer()
+            insert_text(clean_response)
+
             debug.log("Inline response:\n" .. full_response)
         end,
         -- on_error

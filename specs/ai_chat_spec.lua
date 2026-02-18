@@ -33,9 +33,14 @@ local function close_all_floats()
 end
 
 --- Create a scratch buffer with a name and filetype so it looks like a real file
+--- If name is relative, it's prefixed with cwd to make it a project file
 local function create_named_buf(name, ft, lines)
     local buf = vim.api.nvim_create_buf(true, false)
-    vim.api.nvim_buf_set_name(buf, name)
+    local full_name = name
+    if not name:match("^/") then
+        full_name = vim.fn.getcwd() .. "/" .. name
+    end
+    vim.api.nvim_buf_set_name(buf, full_name)
     vim.bo[buf].filetype = ft
     vim.bo[buf].buftype = ""
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
@@ -245,8 +250,8 @@ describe("AI Chat Buffer Tracking", function()
         close_all_floats()
     end)
 
-    it("includes the current buffer content in the first API message", function()
-        local buf = create_named_buf("/tmp/test_track.lua", "lua", { "local x = 1" })
+    it("includes open project buffer content in the first API message", function()
+        local buf = create_named_buf("test_track.lua", "lua", { "local x = 1" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
 
@@ -254,33 +259,31 @@ describe("AI Chat Buffer Tracking", function()
 
         local first_msg = stream_messages_spy[1]
         assert(first_msg.content:find("test_track.lua", 1, true),
-            "First API message should contain the tracked filename")
+            "First API message should contain the filename")
         assert(first_msg.content:find("local x = 1", 1, true),
             "First API message should contain the buffer content")
         assert(first_msg.content:find("explain this", 1, true),
             "First API message should contain the user text")
     end)
 
-    it("tracks a new buffer visited after the first message", function()
-        local buf_a = create_named_buf("/tmp/file_a.lua", "lua", { "aaa" })
-        local buf_b = create_named_buf("/tmp/file_b.py", "python", { "bbb" })
+    it("includes all open project buffers in context", function()
+        local buf_a = create_named_buf("file_a.lua", "lua", { "aaa" })
+        local buf_b = create_named_buf("file_b.py", "python", { "bbb" })
         table.insert(test_bufs, buf_a)
         table.insert(test_bufs, buf_b)
         vim.api.nvim_set_current_buf(buf_a)
-        send_user_message(ai, "first")
-        vim.api.nvim_exec_autocmds("BufEnter", { buffer = buf_b })
 
-        send_user_message(ai, "second")
+        send_user_message(ai, "check both")
 
         local first_msg = stream_messages_spy[1]
         assert(first_msg.content:find("file_a.lua", 1, true),
             "Context should contain first file")
         assert(first_msg.content:find("file_b.py", 1, true),
-            "Context should contain second file after visiting it")
+            "Context should contain second file")
     end)
 
     it("sends updated buffer content on subsequent messages", function()
-        local buf = create_named_buf("/tmp/evolving.lua", "lua", { "version 1" })
+        local buf = create_named_buf("evolving.lua", "lua", { "version 1" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
         send_user_message(ai, "first")
@@ -306,44 +309,36 @@ describe("AI Chat Buffer Tracking", function()
         eq(first_msg.content, "hello", "Message should have no context prefix for unnamed buffers")
     end)
 
-    it("does not duplicate a buffer visited multiple times", function()
-        local buf = create_named_buf("/tmp/once.lua", "lua", { "content" })
+    it("does not duplicate buffers in context", function()
+        local buf = create_named_buf("once.lua", "lua", { "content" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
 
-        send_user_message(ai, "first")
-
-        vim.api.nvim_exec_autocmds("BufEnter", { buffer = buf })
-        vim.api.nvim_exec_autocmds("BufEnter", { buffer = buf })
-
-        send_user_message(ai, "second")
+        send_user_message(ai, "check")
 
         local first_msg = stream_messages_spy[1]
         local _, count = first_msg.content:gsub("once.lua", "")
         eq(count, 1, "Filename should appear exactly once in context")
     end)
 
-    it("clear resets tracked buffers so next session starts fresh", function()
-        local buf_a = create_named_buf("/tmp/old_file.lua", "lua", { "old" })
-        table.insert(test_bufs, buf_a)
-        vim.api.nvim_set_current_buf(buf_a)
-        send_user_message(ai, "first session")
-        ai.clear()
+    it("excludes buffers outside of project directory", function()
+        local project_buf = create_named_buf("project_file.lua", "lua", { "project code" })
+        local outside_buf = create_named_buf("/tmp/outside_file.lua", "lua", { "outside code" })
+        table.insert(test_bufs, project_buf)
+        table.insert(test_bufs, outside_buf)
+        vim.api.nvim_set_current_buf(project_buf)
 
-        local buf_b = create_named_buf("/tmp/new_file.lua", "lua", { "new" })
-        table.insert(test_bufs, buf_b)
-        vim.api.nvim_set_current_buf(buf_b)
-        send_user_message(ai, "second session")
+        send_user_message(ai, "check")
 
         local first_msg = stream_messages_spy[1]
-        assert(not first_msg.content:find("old_file.lua", 1, true),
-            "Old file should not appear after clear")
-        assert(first_msg.content:find("new_file.lua", 1, true),
-            "New file should appear in fresh session")
+        assert(first_msg.content:find("project_file.lua", 1, true),
+            "Project file should be in context")
+        assert(not first_msg.content:find("outside_file.lua", 1, true),
+            "File outside project should not be in context")
     end)
 
     it("only injects context into the first user message in the API payload", function()
-        local buf = create_named_buf("/tmp/ctx_check.lua", "lua", { "ctx content" })
+        local buf = create_named_buf("ctx_check.lua", "lua", { "ctx content" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
 
@@ -356,17 +351,13 @@ describe("AI Chat Buffer Tracking", function()
             "Non-first user messages should not have context injected")
     end)
 
-    it("excludes buffers with sensitive patterns from tracking", function()
-        local env_buf = create_named_buf("/tmp/.env", "sh", { "SECRET_KEY=abc123" })
-        local appsettings_buf = create_named_buf("/tmp/appsettings.json", "json", { '{"password": "secret"}' })
-        local normal_buf = create_named_buf("/tmp/app.lua", "lua", { "safe content" })
+    it("excludes buffers with sensitive patterns from context", function()
+        local env_buf = create_named_buf(".env", "sh", { "SECRET_KEY=abc123" })
+        local appsettings_buf = create_named_buf("appsettings.json", "json", { '{"password": "secret"}' })
+        local normal_buf = create_named_buf("app.lua", "lua", { "safe content" })
         table.insert(test_bufs, env_buf)
         table.insert(test_bufs, appsettings_buf)
         table.insert(test_bufs, normal_buf)
-        vim.api.nvim_set_current_buf(env_buf)
-        vim.api.nvim_exec_autocmds("BufEnter", { buffer = env_buf })
-        vim.api.nvim_set_current_buf(appsettings_buf)
-        vim.api.nvim_exec_autocmds("BufEnter", { buffer = appsettings_buf })
         vim.api.nvim_set_current_buf(normal_buf)
 
         send_user_message(ai, "check my code")
@@ -394,12 +385,15 @@ describe("AI Inline Editing", function()
     local test_bufs = {}
 
     local function stub_inline_api()
-        inline_api.inline_stream = function(selected_text, instruction, context, history, on_delta, on_done, on_error)
+        inline_api.inline_stream = function(selected_text, instruction, context, history, lines_before, lines_after, indent, filename, start_line, end_line, on_delta, on_done, on_error)
             inline_spy = {
                 selected_text = selected_text,
                 instruction = instruction,
                 context = context,
                 history = history,
+                filename = filename,
+                start_line = start_line,
+                end_line = end_line,
             }
             if stub_inline_error then
                 on_error(stub_inline_error)
@@ -483,19 +477,6 @@ describe("AI Inline Editing", function()
         assert(inline_spy.history ~= nil, "Should pass history to API")
         eq(#inline_spy.history, 2, "History should have 2 messages")
         eq(inline_spy.history[1].content, "previous question", "First history message should match")
-    end)
-
-    it("handles sentinel response without modifying buffer", function()
-        stub_inline_response = "__NO_INLINE_CODE_PROMPT__"
-        local buf = create_named_buf("/tmp/inline_sentinel.lua", "lua", { "unchanged" })
-        table.insert(test_bufs, buf)
-        vim.api.nvim_set_current_buf(buf)
-        local selection = { buf = buf, start_row = 0, start_col = 0, end_row = 0, end_col = 9, text = "unchanged" }
-
-        inline.execute(selection, "what is this?", nil, nil)
-
-        local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-        eq(lines[1], "unchanged", "Buffer should not be modified when sentinel is returned")
     end)
 
     it("handles multiline replacement", function()
@@ -653,24 +634,25 @@ describe("AI Project-Scoped Sessions", function()
         vim.fn.chdir("/tmp")
         send_user_message(ai, "tmp question")
 
-        vim.fn.chdir("/")
-        send_user_message(ai, "root question")
+        vim.fn.chdir("/var")
+        send_user_message(ai, "var question")
 
         local first_msg = stream_messages_spy[1]
         assert(not first_msg.content:find("tmp question", 1, true),
             "Project B should not have project A's history in API messages")
-        eq(first_msg.content, "root question", "Should only have project B's user message")
+        assert(first_msg.content:find("var question", 1, true),
+            "Project B should have its own user message")
     end)
 
-    it("tracked buffers are scoped to project", function()
+    it("buffer context is scoped to current project directory", function()
         vim.fn.chdir("/tmp")
         local buf_a = create_named_buf("/tmp/project_a.lua", "lua", { "project A code" })
         table.insert(test_bufs, buf_a)
         vim.api.nvim_set_current_buf(buf_a)
         send_user_message(ai, "analyze A")
 
-        vim.fn.chdir("/")
-        local buf_b = create_named_buf("/root_file.lua", "lua", { "project B code" })
+        vim.fn.chdir("/var")
+        local buf_b = create_named_buf("/var/project_b.lua", "lua", { "project B code" })
         table.insert(test_bufs, buf_b)
         vim.api.nvim_set_current_buf(buf_b)
         send_user_message(ai, "analyze B")

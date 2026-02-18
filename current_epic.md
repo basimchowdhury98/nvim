@@ -248,3 +248,49 @@ now mean "insert code here". Rewrote the system prompts with explicit examples
 of wrong vs correct output format to prevent markdown fences.
 
 Files: `lua/utils/ai/init.lua`, `lua/utils/ai/inline.lua`, `lua/utils/ai/api.lua`
+
+## User Story 15: Improved inline prompt structure and file context
+
+As a user, I want the inline edit prompt to clearly identify which file I'm
+editing within the context of all open project files, so that the LLM has
+better context for making accurate edits.
+
+Restructured the inline prompt to show: "Open Files" (all tracked buffers),
+"Current File" (the file being edited with its filename), and "Editing Region"
+(with line numbers). Added `filename`, `start_line`, and `end_line` to the
+selection object and threaded them through to `api.inline_stream()`. Updated
+both Anthropic and opencode prompt builders with the new structure.
+
+Files: `lua/utils/ai/init.lua`, `lua/utils/ai/api.lua`, `lua/utils/ai/inline.lua`,
+`specs/ai_chat_spec.lua`
+
+## User Story 16: Simplified buffer context — all open project files
+
+As a user, I want the AI to automatically include all open buffers within my
+project directory as context, without needing to start a chat session first,
+so that inline edits work immediately and context is always current.
+
+Replaced the incremental `BufEnter` tracking system with a simpler approach:
+scan all loaded buffers at send time and filter to those within `vim.fn.getcwd()`.
+Removed `tracked_bufs`, `tracking_augroup`, `track_buf()`, `start_tracking()`,
+`stop_tracking()`. Added `get_project_buffers()` and updated `is_includable()`
+to check the cwd prefix. Simplified session state to just `{ conversation = {} }`.
+Updated `:AIFiles` to show all open project buffers. Inline edits now work
+without starting a chat first since context is computed on demand.
+
+Files: `lua/utils/ai/init.lua`, `specs/ai_chat_spec.lua`
+
+## User Story 17: Indented spinner and reliable code indentation
+
+As a user, I want the inline edit spinner to match the indentation of my code,
+and I want generated code to always have correct indentation regardless of what
+the LLM returns.
+
+Added indent parameter to the spinner so virtual text aligns with surrounding
+code. Fixed indent detection to use the closest non-empty line (preferring
+lines after the selection) instead of the maximum indent, which was picking up
+deeply nested lines like `return` statements. Added `apply_indent()` in
+`inline.lua` to programmatically fix indentation after receiving the response,
+ensuring correct whitespace even when the LLM ignores the instruction.
+
+Files: `lua/utils/ai/init.lua`, `lua/utils/ai/inline.lua`

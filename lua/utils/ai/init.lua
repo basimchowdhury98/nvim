@@ -23,7 +23,7 @@ local default_config = {
 local config = vim.deepcopy(default_config)
 
 -- Project-scoped sessions keyed by cwd
--- Each session: { conversation = {}, tracked_bufs = {}, tracking_augroup = nil }
+-- Each session: { conversation = {} }
 local sessions = {}
 
 -- Handle to cancel in-flight requests (global, only one request at a time)
@@ -45,8 +45,6 @@ local function get_session()
     if not sessions[cwd] then
         sessions[cwd] = {
             conversation = {},
-            tracked_bufs = {},
-            tracking_augroup = nil,
         }
         debug.log("Created new session for project: " .. cwd)
     end
@@ -59,10 +57,10 @@ local function get_project()
     return vim.fn.getcwd()
 end
 
---- Check whether a buffer should be tracked (real file, not chat/input)
+--- Check whether a buffer should be included as context
 --- @param buf number
 --- @return boolean
-local function is_trackable(buf)
+local function is_includable(buf)
     if not vim.api.nvim_buf_is_valid(buf) then
         return false
     end
@@ -83,51 +81,24 @@ local function is_trackable(buf)
             return false
         end
     end
+    -- Must be within the current project directory
+    local cwd = vim.fn.getcwd()
+    if not name:find(cwd, 1, true) then
+        return false
+    end
     return true
 end
 
---- Add a buffer to the tracked set if not already present
---- @param buf number
-local function track_buf(buf)
-    if not is_trackable(buf) then
-        return
-    end
-    local session = get_session()
-    for _, id in ipairs(session.tracked_bufs) do
-        if id == buf then
-            return
+--- Get all open buffers that are within the current project
+--- @return number[] buffer ids
+local function get_project_buffers()
+    local bufs = {}
+    for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+        if vim.api.nvim_buf_is_loaded(buf) and is_includable(buf) then
+            table.insert(bufs, buf)
         end
     end
-    table.insert(session.tracked_bufs, buf)
-    debug.log("Tracking buffer: " .. vim.api.nvim_buf_get_name(buf))
-end
-
---- Start the BufEnter autocmd that tracks visited buffers
-local function start_tracking()
-    local session = get_session()
-    if session.tracking_augroup then
-        return
-    end
-    local group_name = "AiChatBufTrack_" .. get_project():gsub("[^%w]", "_")
-    session.tracking_augroup = vim.api.nvim_create_augroup(group_name, { clear = true })
-    vim.api.nvim_create_autocmd("BufEnter", {
-        group = session.tracking_augroup,
-        callback = function(ev)
-            -- Only track if we're still in the same project
-            if vim.fn.getcwd() == get_project() then
-                track_buf(ev.buf)
-            end
-        end,
-    })
-end
-
---- Stop the BufEnter autocmd for the current session
-local function stop_tracking()
-    local session = get_session()
-    if session.tracking_augroup then
-        vim.api.nvim_del_augroup_by_id(session.tracking_augroup)
-        session.tracking_augroup = nil
-    end
+    return bufs
 end
 
 --- Read the current content of a buffer and format it as a context block
@@ -153,12 +124,11 @@ local function read_buf_context(buf)
     return string.format("Filename: %s\nLanguage: %s\n\n```%s\n%s\n```", name, ft, ft, content)
 end
 
---- Build a context block from all tracked buffers (reads live content)
+--- Build a context block from all open project buffers (reads live content)
 --- @return string|nil
 local function build_context_block()
-    local session = get_session()
     local parts = {}
-    for _, buf in ipairs(session.tracked_bufs) do
+    for _, buf in ipairs(get_project_buffers()) do
         local ctx = read_buf_context(buf)
         if ctx then
             table.insert(parts, ctx)
@@ -228,10 +198,6 @@ local function send_message(text)
 
     -- Sync project state (re-render if changed)
     sync_project()
-
-    -- Track the current buffer and start the BufEnter autocmd
-    track_buf(vim.api.nvim_get_current_buf())
-    start_tracking()
 
     -- Make sure chat panel is open
     if not chat.is_open() then
@@ -320,18 +286,28 @@ local function get_visual_selection()
     local lines_before = vim.api.nvim_buf_get_lines(buf, before_start, start_row, false)
     local lines_after = vim.api.nvim_buf_get_lines(buf, end_row + 1, after_end, false)
 
-    -- Detect indentation from surrounding non-empty lines
+    -- Detect indentation from the closest non-empty surrounding line
+    -- Prefer the line immediately after, then immediately before
     local indent = ""
-    local all_surrounding = vim.list_extend(vim.list_slice(lines_before), lines_after)
-    for _, line in ipairs(all_surrounding) do
-        local line_indent = line:match("^(%s+)")
-        if line_indent and #line_indent > #indent then
-            indent = line_indent
+    for _, line in ipairs(lines_after) do
+        if line:match("%S") then
+            indent = line:match("^(%s*)") or ""
+            break
+        end
+    end
+    if indent == "" then
+        for i = #lines_before, 1, -1 do
+            local line = lines_before[i]
+            if line:match("%S") then
+                indent = line:match("^(%s*)") or ""
+                break
+            end
         end
     end
 
     return {
         buf = buf,
+        filename = vim.api.nvim_buf_get_name(buf),
         start_row = start_row,
         start_col = start_col,
         end_row = end_row,
@@ -379,8 +355,6 @@ function M.clear()
     chat.clear()
     local session = get_session()
     session.conversation = {}
-    session.tracked_bufs = {}
-    stop_tracking()
     chat.close()
     -- Reset last_project so next toggle doesn't think we switched
     last_project = get_project()
@@ -395,12 +369,6 @@ function M.reset_all()
     end
     chat.clear()
     chat.close()
-    -- Clear all augroups
-    for _, session in pairs(sessions) do
-        if session.tracking_augroup then
-            pcall(vim.api.nvim_del_augroup_by_id, session.tracking_augroup)
-        end
-    end
     sessions = {}
     last_project = nil
 end
@@ -430,19 +398,17 @@ function M.setup(opts)
     map("n", config.keymaps.clear, M.clear, { desc = "AI: Clear conversation" })
 
     vim.api.nvim_create_user_command("AIFiles", function()
-        local session = get_session()
-        if #session.tracked_bufs == 0 then
-            vim.notify("AI: No files tracked")
+        local bufs = get_project_buffers()
+        if #bufs == 0 then
+            vim.notify("AI: No project files open")
             return
         end
         local names = {}
-        for _, buf in ipairs(session.tracked_bufs) do
-            if vim.api.nvim_buf_is_valid(buf) then
-                table.insert(names, vim.api.nvim_buf_get_name(buf))
-            end
+        for _, buf in ipairs(bufs) do
+            table.insert(names, vim.api.nvim_buf_get_name(buf))
         end
-        vim.notify("AI tracked files:\n" .. table.concat(names, "\n"))
-    end, { desc = "AI: List tracked files" })
+        vim.notify("AI project files:\n" .. table.concat(names, "\n"))
+    end, { desc = "AI: List open project files" })
 
     vim.api.nvim_create_user_command("AIProject", function()
         vim.notify("AI project: " .. get_project())
