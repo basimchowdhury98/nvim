@@ -215,3 +215,19 @@ Net reduction of ~150-200 lines through deduplication.
 
 Files: `lua/utils/ai/spinner.lua`, `lua/utils/ai/job.lua`, `lua/utils/ai/chat.lua`,
 `lua/utils/ai/api.lua`, `lua/utils/ai/inline.lua`, `specs/ai_chat_spec.lua`
+
+## User Story 13: Improved error handling and notifications
+
+As a user, I want to see clear error notifications when LLM API calls fail (e.g.,
+low balance, invalid API key, rate limits), so that I understand why my request
+didn't work and can take action.
+
+Added comprehensive error handling across both providers. For Anthropic, added
+`parse_json_error()` to detect plain JSON error responses returned on HTTP-level
+errors (4xx/5xx) — these aren't SSE-formatted so weren't being caught before.
+For opencode, added handling for `event.type == "error"` events. Both chat and
+inline flows now call `vim.notify` with the error message in addition to stopping
+spinners and cleaning up state. The chat flow also displays errors in the buffer
+and removes the failed message from conversation history.
+
+Files: `lua/utils/ai/api.lua`, `lua/utils/ai/init.lua`

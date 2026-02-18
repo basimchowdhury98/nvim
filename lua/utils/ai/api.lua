@@ -114,6 +114,13 @@ local function stream_opencode(messages, on_delta, on_done, on_error)
                         on_done()
                     end)
                 end
+            elseif event.type == "error" then
+                local msg = event.part and event.part.message or event.message or "Unknown error"
+                debug.log("opencode error: " .. msg)
+                done_called = true
+                vim.schedule(function()
+                    on_error(msg)
+                end)
             end
         end,
         on_exit = function(exit_code, stderr_msg)
@@ -156,6 +163,26 @@ local function parse_sse(line)
         return nil
     end
     return event
+end
+
+--- Parse a plain JSON error response (non-SSE, returned on HTTP errors)
+--- @param line string
+--- @return string|nil error message if this is an error response
+local function parse_json_error(line)
+    -- Skip SSE lines - those are handled by parse_sse
+    if line:match("^data:") or line:match("^event:") or line:match("^:") then
+        return nil
+    end
+    -- Try to parse as JSON error response
+    local ok, obj = pcall(vim.fn.json_decode, line)
+    if not ok then
+        return nil
+    end
+    -- Anthropic error format: {"type":"error","error":{"type":"...","message":"..."}}
+    if obj.type == "error" and obj.error and obj.error.message then
+        return obj.error.message
+    end
+    return nil
 end
 
 --- @param messages table[]
@@ -213,6 +240,17 @@ local function stream_anthropic(messages, on_delta, on_done, on_error)
         temp_file = tmp,
         on_stdout = function(line)
             debug.log("stdout line: " .. line:sub(1, 200))
+
+            -- Check for plain JSON error response (HTTP-level errors like 400, 401, 429)
+            local json_err = parse_json_error(line)
+            if json_err then
+                debug.log("JSON error response: " .. json_err)
+                done_called = true
+                vim.schedule(function()
+                    on_error(json_err)
+                end)
+                return
+            end
 
             local event = parse_sse(line)
             if not event then
@@ -362,6 +400,17 @@ local function stream_inline_anthropic(selected_text, instruction, context, hist
         }),
         temp_file = tmp,
         on_stdout = function(line)
+            -- Check for plain JSON error response (HTTP-level errors like 400, 401, 429)
+            local json_err = parse_json_error(line)
+            if json_err then
+                debug.log("Inline JSON error response: " .. json_err)
+                done_called = true
+                vim.schedule(function()
+                    on_error(json_err)
+                end)
+                return
+            end
+
             local event = parse_sse(line)
             if not event then
                 return
@@ -491,6 +540,13 @@ local function stream_inline_opencode(selected_text, instruction, context, histo
                         on_done()
                     end)
                 end
+            elseif event.type == "error" then
+                local msg = event.part and event.part.message or event.message or "Unknown error"
+                debug.log("opencode inline error: " .. msg)
+                done_called = true
+                vim.schedule(function()
+                    on_error(msg)
+                end)
             end
         end,
         on_exit = function(exit_code, stderr_msg)

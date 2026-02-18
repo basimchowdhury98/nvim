@@ -273,6 +273,7 @@ local function send_message(text)
         -- on_error
         function(err)
             chat.append_error(err)
+            vim.notify("AI: " .. err, vim.log.levels.ERROR)
             -- Remove the failed user message from history
             table.remove(session.conversation)
             cancel_request = nil
