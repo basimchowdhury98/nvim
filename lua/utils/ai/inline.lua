@@ -7,8 +7,6 @@ local spinner_mod = require("utils.ai.spinner")
 
 local M = {}
 
-local NO_CODE_SENTINEL = "__NO_INLINE_CODE_PROMPT__"
-
 -- Namespace for virtual text extmarks
 local ns_id = vim.api.nvim_create_namespace("ai_inline_spinner")
 
@@ -81,7 +79,7 @@ function M.stop_spinner()
 end
 
 --- Execute an inline edit: stream AI response into the buffer, replacing the selection
---- @param selection table {buf, start_row, start_col, end_row, end_col, text}
+--- @param selection table {buf, start_row, start_col, end_row, end_col, text, lines_before, lines_after}
 --- @param instruction string The user's instruction
 --- @param context string|nil Optional buffer context
 --- @param history table|nil Optional conversation history
@@ -172,16 +170,12 @@ function M.execute(selection, instruction, context, history)
         instruction,
         context,
         history,
+        selection.lines_before,
+        selection.lines_after,
+        selection.indent,
         -- on_delta
         function(delta)
             table.insert(response_chunks, delta)
-
-            -- Check for sentinel (might come across multiple chunks)
-            local full_response = table.concat(response_chunks, "")
-            if full_response:find(NO_CODE_SENTINEL, 1, true) then
-                -- Don't insert anything, we'll notify on completion
-                return
-            end
 
             if first_chunk then
                 first_chunk = false
@@ -193,13 +187,6 @@ function M.execute(selection, instruction, context, history)
         -- on_done
         function()
             M.stop_spinner()
-            local full_response = table.concat(response_chunks, "")
-
-            -- Check for sentinel
-            if full_response:find(NO_CODE_SENTINEL, 1, true) then
-                vim.notify("AI Inline: No code edit detected in your instruction", vim.log.levels.WARN)
-                return
-            end
 
             -- If we never inserted anything (empty response), notify
             if first_chunk then
@@ -207,6 +194,7 @@ function M.execute(selection, instruction, context, history)
                 return
             end
 
+            local full_response = table.concat(response_chunks, "")
             debug.log("Inline response:\n" .. full_response)
         end,
         -- on_error

@@ -281,8 +281,11 @@ local function send_message(text)
     )
 end
 
+-- Number of lines to capture before/after selection for context
+local SURROUNDING_LINES = 5
+
 --- Capture the current visual selection range and text
---- @return table|nil {buf, start_row, start_col, end_row, end_col, text} or nil if not in visual mode
+--- @return table|nil {buf, start_row, start_col, end_row, end_col, text, lines_before, lines_after} or nil if not in visual mode
 local function get_visual_selection()
     local mode = vim.fn.mode()
     if mode ~= "v" and mode ~= "V" and mode ~= "\22" then
@@ -309,6 +312,24 @@ local function get_visual_selection()
     local lines = vim.api.nvim_buf_get_text(buf, start_row, start_col, end_row, end_col, {})
     local text = table.concat(lines, "\n")
 
+    -- Capture surrounding lines for context
+    local total_lines = vim.api.nvim_buf_line_count(buf)
+    local before_start = math.max(0, start_row - SURROUNDING_LINES)
+    local after_end = math.min(total_lines, end_row + 1 + SURROUNDING_LINES)
+
+    local lines_before = vim.api.nvim_buf_get_lines(buf, before_start, start_row, false)
+    local lines_after = vim.api.nvim_buf_get_lines(buf, end_row + 1, after_end, false)
+
+    -- Detect indentation from surrounding non-empty lines
+    local indent = ""
+    local all_surrounding = vim.list_extend(vim.list_slice(lines_before), lines_after)
+    for _, line in ipairs(all_surrounding) do
+        local line_indent = line:match("^(%s+)")
+        if line_indent and #line_indent > #indent then
+            indent = line_indent
+        end
+    end
+
     return {
         buf = buf,
         start_row = start_row,
@@ -316,6 +337,9 @@ local function get_visual_selection()
         end_row = end_row,
         end_col = end_col,
         text = text,
+        lines_before = table.concat(lines_before, "\n"),
+        lines_after = table.concat(lines_after, "\n"),
+        indent = indent,
     }
 end
 

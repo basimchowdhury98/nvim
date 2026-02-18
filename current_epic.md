@@ -231,3 +231,20 @@ spinners and cleaning up state. The chat flow also displays errors in the buffer
 and removes the failed message from conversation history.
 
 Files: `lua/utils/ai/api.lua`, `lua/utils/ai/init.lua`
+
+## User Story 14: Surrounding context and indentation for inline edits
+
+As a user, I want inline edits to respect the indentation of surrounding code,
+especially when selecting empty lines, so that generated code fits naturally
+into the existing code structure.
+
+Added surrounding context capture: `get_visual_selection()` now grabs 5 lines
+before and after the selection and detects the indentation level from those
+lines. The inline prompt now includes "Lines Before", "Lines After", and
+"Required Indentation" sections so the AI can see the code structure and match
+the whitespace exactly. Removed the `__NO_INLINE_CODE_PROMPT__` sentinel since
+the user flow (visual select + instruction) is explicit enough — empty regions
+now mean "insert code here". Rewrote the system prompts with explicit examples
+of wrong vs correct output format to prevent markdown fences.
+
+Files: `lua/utils/ai/init.lua`, `lua/utils/ai/inline.lua`, `lua/utils/ai/api.lua`

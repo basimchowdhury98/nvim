@@ -319,35 +319,42 @@ end
 -- Provider: Anthropic API for inline editing (no tools, specialized prompt)
 -- ============================================================
 
-local inline_system_prompt = [[You are an inline code editor. You will receive:
-1. A section of code that the user has highlighted (the "editable region")
-2. The user's instruction for what to write or change
-3. Optional context about other open files
+local inline_system_prompt = [[You are an inline code editor. Your ENTIRE response will be inserted directly into the user's source file, character for character.
 
-Your task is to output ONLY the replacement code for the highlighted region.
+You will receive: surrounding context lines (read-only), the editable region to replace, and the user's instruction.
 
-CRITICAL RULES:
-- Output ONLY raw code - your entire response will be inserted directly into the source file
-- NEVER wrap output in markdown code fences (``` or cs``` or other code specific fences) this will break the code
-- NEVER include explanations, comments about what you did, or any other text
-- Be smart about what to preserve (e.g., keep a method signature if asked to implement the body)
-- Match the existing code style (indentation, naming conventions, etc.)
-- Respect the spacing provided in the edittable region because your output will replace it inline
+CRITICAL - YOUR OUTPUT FORMAT:
+- RAW CODE ONLY. No markdown. No code fences. No backticks. No explanations.
+- Do NOT start with ``` or ```lua or ```python or any fence
+- Do NOT end with ```
+- Do NOT wrap anything in backticks of any kind
+- Just output the replacement code directly, starting with the first character of code
 
-If the user's instruction is not asking you to write or modify code (e.g., they're asking a question, requesting an explanation, or the instruction doesn't make sense as a code edit), output exactly this sentinel and nothing else:
-__NO_INLINE_CODE_PROMPT__
+WRONG (do not do this):
+```lua
+local x = 1
+```
 
-Your response is directly inserted into code. No markdown. No fences. No explanation. Just code.]]
+CORRECT (do this):
+local x = 1
+
+OTHER RULES:
+- Match indentation from the surrounding context lines
+- An empty editable region means "insert code here"
+- The before/after context is read-only - don't include it in output]]
 
 --- @param selected_text string The highlighted code region
 --- @param instruction string The user's instruction
 --- @param context string|nil Optional buffer context
 --- @param history table|nil Optional conversation history
+--- @param lines_before string|nil Lines before the selection for context
+--- @param lines_after string|nil Lines after the selection for context
+--- @param indent string|nil Detected indentation to use
 --- @param on_delta fun(text: string) Called with each text chunk
 --- @param on_done fun() Called when complete
 --- @param on_error fun(err: string) Called on error
 --- @return fun()|nil cancel
-local function stream_inline_anthropic(selected_text, instruction, context, history, on_delta, on_done, on_error)
+local function stream_inline_anthropic(selected_text, instruction, context, history, lines_before, lines_after, indent, on_delta, on_done, on_error)
     debug.log("using anthropic provider for inline edit")
 
     local api_key = get_api_key()
@@ -357,7 +364,22 @@ local function stream_inline_anthropic(selected_text, instruction, context, hist
         return nil
     end
 
-    local user_content = "## Highlighted Code (editable region)\n```\n" .. selected_text .. "\n```\n\n"
+    local user_content = ""
+
+    if indent and indent ~= "" then
+        user_content = user_content .. "## Required Indentation\nEach line of your output MUST start with exactly: \"" .. indent .. "\" (the same whitespace as surrounding code)\n\n"
+    end
+
+    if lines_before and lines_before ~= "" then
+        user_content = user_content .. "## Lines Before (read-only context)\n```\n" .. lines_before .. "\n```\n\n"
+    end
+
+    user_content = user_content .. "## Highlighted Code (editable region)\n```\n" .. selected_text .. "\n```\n\n"
+
+    if lines_after and lines_after ~= "" then
+        user_content = user_content .. "## Lines After (read-only context)\n```\n" .. lines_after .. "\n```\n\n"
+    end
+
     user_content = user_content .. "## Instruction\n" .. instruction
 
     if context then
@@ -455,15 +477,25 @@ local function stream_inline_anthropic(selected_text, instruction, context, hist
 end
 
 --- Build an inline prompt for opencode
-local function build_inline_opencode_prompt(selected_text, instruction, context, history)
+local function build_inline_opencode_prompt(selected_text, instruction, context, history, lines_before, lines_after, indent)
     local parts = {
-        "You are an inline code editor. Your response will be inserted DIRECTLY into a source file.",
+        "You are an inline code editor. Your ENTIRE response will be inserted directly into a source file.",
         "",
-        "CRITICAL: Output ONLY raw code. NEVER use markdown code fences (```). NEVER add explanations.",
-        "Your entire response replaces the highlighted text in the editor.",
+        "CRITICAL OUTPUT FORMAT:",
+        "- RAW CODE ONLY. No markdown. No code fences. No backticks.",
+        "- Do NOT start with ``` or ```lua or any fence",
+        "- Do NOT end with ```",
+        "- Just output the replacement code directly",
         "",
-        "If the instruction is not asking for code, output exactly: __NO_INLINE_CODE_PROMPT__",
+        "WRONG: ```lua\\nlocal x = 1\\n```",
+        "CORRECT: local x = 1",
     }
+
+    if indent and indent ~= "" then
+        table.insert(parts, "")
+        table.insert(parts, "## Required Indentation")
+        table.insert(parts, "Each line MUST start with exactly: \"" .. indent .. "\"")
+    end
 
     -- Include conversation history for context
     if history and #history > 0 then
@@ -479,10 +511,28 @@ local function build_inline_opencode_prompt(selected_text, instruction, context,
         end
     end
 
+    if lines_before and lines_before ~= "" then
+        table.insert(parts, "")
+        table.insert(parts, "## Lines Before (read-only context)")
+        table.insert(parts, "```")
+        table.insert(parts, lines_before)
+        table.insert(parts, "```")
+    end
+
+    table.insert(parts, "")
     table.insert(parts, "## Highlighted Code (editable region)")
     table.insert(parts, "```")
     table.insert(parts, selected_text)
     table.insert(parts, "```")
+
+    if lines_after and lines_after ~= "" then
+        table.insert(parts, "")
+        table.insert(parts, "## Lines After (read-only context)")
+        table.insert(parts, "```")
+        table.insert(parts, lines_after)
+        table.insert(parts, "```")
+    end
+
     table.insert(parts, "")
     table.insert(parts, "## Instruction")
     table.insert(parts, instruction)
@@ -501,14 +551,17 @@ end
 --- @param instruction string
 --- @param context string|nil
 --- @param history table|nil
+--- @param lines_before string|nil
+--- @param lines_after string|nil
+--- @param indent string|nil
 --- @param on_delta fun(text: string)
 --- @param on_done fun()
 --- @param on_error fun(err: string)
 --- @return fun()|nil cancel
-local function stream_inline_opencode(selected_text, instruction, context, history, on_delta, on_done, on_error)
+local function stream_inline_opencode(selected_text, instruction, context, history, lines_before, lines_after, indent, on_delta, on_done, on_error)
     debug.log("using opencode provider for inline edit")
 
-    local prompt = build_inline_opencode_prompt(selected_text, instruction, context, history)
+    local prompt = build_inline_opencode_prompt(selected_text, instruction, context, history, lines_before, lines_after, indent)
     debug.log("inline opencode prompt length: " .. #prompt)
 
     local tmp, err = job.write_temp(prompt)
@@ -575,20 +628,23 @@ end
 --- @param instruction string The user's instruction
 --- @param context string|nil Optional buffer context
 --- @param history table|nil Optional conversation history
+--- @param lines_before string|nil Lines before the selection for context
+--- @param lines_after string|nil Lines after the selection for context
+--- @param indent string|nil Detected indentation to use
 --- @param on_delta fun(text: string) Called with each text chunk
 --- @param on_done fun() Called when complete
 --- @param on_error fun(err: string) Called on error
 --- @return fun()|nil cancel
-function M.inline_stream(selected_text, instruction, context, history, on_delta, on_done, on_error)
+function M.inline_stream(selected_text, instruction, context, history, lines_before, lines_after, indent, on_delta, on_done, on_error)
     debug.log("inline_stream() called")
     debug.log("Selected text length: " .. #selected_text)
     debug.log("Instruction: " .. instruction:sub(1, 100))
     debug.log("History length: " .. (history and #history or 0))
 
     if is_work_mode() then
-        return stream_inline_anthropic(selected_text, instruction, context, history, on_delta, on_done, on_error)
+        return stream_inline_anthropic(selected_text, instruction, context, history, lines_before, lines_after, indent, on_delta, on_done, on_error)
     else
-        return stream_inline_opencode(selected_text, instruction, context, history, on_delta, on_done, on_error)
+        return stream_inline_opencode(selected_text, instruction, context, history, lines_before, lines_after, indent, on_delta, on_done, on_error)
     end
 end
 
