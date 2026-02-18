@@ -371,6 +371,7 @@ function M.reset_all()
     chat.close()
     sessions = {}
     last_project = nil
+    api.reset_alt()
 end
 
 --- Cancel the current in-flight request
@@ -417,6 +418,10 @@ function M.setup(opts)
     vim.api.nvim_create_user_command("AIDebugPath", function()
         vim.notify("AI log directory: " .. debug.get_log_dir())
     end, { desc = "AI: Show debug log directory" })
+
+    vim.api.nvim_create_user_command("AIAlt", function()
+        api.toggle_alt()
+    end, { desc = "AI: Toggle alt OpenAI-compatible provider (work mode only)" })
 end
 
 return M

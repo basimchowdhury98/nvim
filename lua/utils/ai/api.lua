@@ -1,5 +1,5 @@
 -- api.lua
--- AI provider: opencode CLI (default) or Anthropic API (when AI_WORK=true)
+-- AI provider: opencode CLI (default), Anthropic API (AI_WORK=true), or alt OpenAI-compatible (AI_WORK + :AIAlt)
 
 local M = {}
 local debug = require("utils.ai.debug")
@@ -14,9 +14,16 @@ local default_config = {
     endpoint = "https://api.anthropic.com/v1/messages",
     api_version = "2023-06-01",
     system_prompt = "You are a helpful coding assistant. Be concise and direct.",
+    -- Alt provider env var names (OpenAI-compatible, used when alt mode is toggled)
+    alt_url_env = "AI_ALT_URL",
+    alt_key_env = "AI_ALT_API_KEY",
+    alt_model_env = "AI_ALT_MODEL",
 }
 
 local config = vim.deepcopy(default_config)
+
+-- Whether the alt provider is active (only meaningful in work mode)
+local alt_mode = false
 
 function M.setup(opts)
     config = vim.tbl_deep_extend("force", config, opts or {})
@@ -28,6 +35,11 @@ local function is_work_mode()
     return val and val ~= "" and val ~= "false" and val ~= "0"
 end
 
+--- Check if the alt OpenAI-compatible provider is active
+local function is_alt_mode()
+    return is_work_mode() and alt_mode
+end
+
 local function get_api_key()
     local key = os.getenv(config.api_key_env)
     if not key or key == "" then
@@ -35,6 +47,25 @@ local function get_api_key()
         return nil
     end
     return key
+end
+
+local function get_alt_config()
+    local url = os.getenv(config.alt_url_env)
+    if not url or url == "" then
+        vim.notify("AI: " .. config.alt_url_env .. " env var not set", vim.log.levels.ERROR)
+        return nil
+    end
+    local key = os.getenv(config.alt_key_env)
+    if not key or key == "" then
+        vim.notify("AI: " .. config.alt_key_env .. " env var not set", vim.log.levels.ERROR)
+        return nil
+    end
+    local model = os.getenv(config.alt_model_env)
+    if not model or model == "" then
+        vim.notify("AI: " .. config.alt_model_env .. " env var not set", vim.log.levels.ERROR)
+        return nil
+    end
+    return { url = url, key = key, model = model }
 end
 
 -- ============================================================
@@ -656,6 +687,286 @@ local function stream_inline_opencode(selected_text, instruction, context, histo
 end
 
 -- ============================================================
+-- Provider: Alt OpenAI-compatible API (when AI_WORK + :AIAlt)
+-- ============================================================
+
+--- Parse an SSE line from an OpenAI-compatible streaming response
+--- Returns the parsed JSON object, or nil, or the string "done" for [DONE]
+--- @param line string
+--- @return table|string|nil
+local function parse_openai_sse(line)
+    local json_str = line:match("^data: (.+)")
+    if not json_str then
+        return nil
+    end
+    if json_str:match("^%[DONE%]") then
+        return "done"
+    end
+    local ok, event = pcall(vim.fn.json_decode, json_str)
+    if not ok then
+        debug.log("OpenAI JSON decode failed: " .. tostring(event))
+        return nil
+    end
+    return event
+end
+
+--- Parse a plain JSON error response from an OpenAI-compatible API
+--- @param line string
+--- @return string|nil error message
+local function parse_openai_json_error(line)
+    if line:match("^data:") or line:match("^event:") or line:match("^:") then
+        return nil
+    end
+    local ok, obj = pcall(vim.fn.json_decode, line)
+    if not ok then
+        return nil
+    end
+    -- OpenAI error format: {"error":{"message":"...","type":"...","code":"..."}}
+    if obj.error and obj.error.message then
+        return obj.error.message
+    end
+    return nil
+end
+
+--- @param messages table[]
+--- @param on_delta fun(text: string)
+--- @param on_done fun()
+--- @param on_error fun(err: string)
+--- @return fun()|nil cancel
+local function stream_alt(messages, on_delta, on_done, on_error)
+    debug.log("using alt provider")
+
+    local alt = get_alt_config()
+    if not alt then
+        on_error("Alt provider not configured")
+        return nil
+    end
+
+    local body = vim.fn.json_encode({
+        model = alt.model,
+        max_tokens = config.max_tokens,
+        stream = true,
+        messages = vim.list_extend(
+            { { role = "system", content = config.system_prompt } },
+            messages
+        ),
+    })
+
+    debug.log("Alt request body length: " .. #body)
+    debug.log("Alt model: " .. alt.model)
+    debug.log("Alt endpoint: " .. alt.url)
+
+    local tmp, err = job.write_temp(body)
+    if not tmp then
+        debug.log("Failed to create temp file")
+        on_error(err)
+        return nil
+    end
+
+    local done_called = false
+
+    local cancel = job.run({
+        cmd = job.openai_curl_cmd({
+            endpoint = alt.url,
+            api_key = alt.key,
+            body_file = tmp,
+        }),
+        temp_file = tmp,
+        on_stdout = function(line)
+            debug.log("alt stdout: " .. line:sub(1, 200))
+
+            local json_err = parse_openai_json_error(line)
+            if json_err then
+                debug.log("Alt JSON error: " .. json_err)
+                done_called = true
+                vim.schedule(function()
+                    on_error(json_err)
+                end)
+                return
+            end
+
+            local event = parse_openai_sse(line)
+            if not event then
+                return
+            end
+
+            if event == "done" then
+                debug.log("alt stream [DONE]")
+                done_called = true
+                vim.schedule(function()
+                    on_done()
+                end)
+                return
+            end
+
+            local delta = event.choices and event.choices[1] and event.choices[1].delta
+            if delta and delta.content then
+                vim.schedule(function()
+                    on_delta(delta.content)
+                end)
+            end
+        end,
+        on_exit = function(exit_code, stderr_msg)
+            debug.log("alt curl exited with code: " .. exit_code)
+            if exit_code ~= 0 and not done_called then
+                vim.schedule(function()
+                    on_error("curl exited with code " .. exit_code .. ": " .. stderr_msg)
+                end)
+            elseif not done_called then
+                vim.schedule(function()
+                    on_done()
+                end)
+            end
+        end,
+    })
+
+    if not cancel then
+        debug.log("alt jobstart FAILED")
+        on_error("Failed to start curl (is curl installed?)")
+        return nil
+    end
+
+    return cancel
+end
+
+--- @param selected_text string
+--- @param instruction string
+--- @param context string|nil
+--- @param history table|nil
+--- @param lines_before string|nil
+--- @param lines_after string|nil
+--- @param indent string|nil
+--- @param filename string|nil
+--- @param start_line number|nil
+--- @param end_line number|nil
+--- @param on_delta fun(text: string)
+--- @param on_done fun()
+--- @param on_error fun(err: string)
+--- @return fun()|nil cancel
+local function stream_inline_alt(selected_text, instruction, context, history, lines_before, lines_after, indent, filename, start_line, end_line, on_delta, on_done, on_error)
+    debug.log("using alt provider for inline edit")
+
+    local alt = get_alt_config()
+    if not alt then
+        on_error("Alt provider not configured")
+        return nil
+    end
+
+    local user_content = ""
+
+    if context then
+        user_content = user_content .. "## Open Files\n" .. context .. "\n\n"
+    end
+
+    if filename and filename ~= "" then
+        user_content = user_content .. "## Current File\nFilename: " .. filename .. "\n\n"
+    end
+
+    local region_header = "## Editing Region"
+    if start_line and end_line then
+        region_header = region_header .. " (lines " .. start_line .. "-" .. end_line .. ")"
+    end
+    user_content = user_content .. region_header .. "\n\n"
+
+    if indent and indent ~= "" then
+        user_content = user_content .. "### Required Indentation\nEach line of your output MUST start with exactly: \"" .. indent .. "\" (the same whitespace as surrounding code)\n\n"
+    end
+
+    if lines_before and lines_before ~= "" then
+        user_content = user_content .. "### Lines Before\n```\n" .. lines_before .. "\n```\n\n"
+    end
+
+    user_content = user_content .. "### Selected Code (will be replaced)\n```\n" .. selected_text .. "\n```\n\n"
+
+    if lines_after and lines_after ~= "" then
+        user_content = user_content .. "### Lines After\n```\n" .. lines_after .. "\n```\n\n"
+    end
+
+    user_content = user_content .. "## Instruction\n" .. instruction
+
+    local messages = { { role = "system", content = inline_system_prompt } }
+    if history and #history > 0 then
+        for _, msg in ipairs(history) do
+            table.insert(messages, { role = msg.role, content = msg.content })
+        end
+    end
+    table.insert(messages, { role = "user", content = user_content })
+
+    local body = vim.fn.json_encode({
+        model = alt.model,
+        max_tokens = config.max_tokens,
+        stream = true,
+        messages = messages,
+    })
+
+    debug.log("Alt inline request body length: " .. #body)
+
+    local tmp, err = job.write_temp(body)
+    if not tmp then
+        debug.log("Failed to create temp file")
+        on_error(err)
+        return nil
+    end
+
+    local done_called = false
+
+    local cancel = job.run({
+        cmd = job.openai_curl_cmd({
+            endpoint = alt.url,
+            api_key = alt.key,
+            body_file = tmp,
+        }),
+        temp_file = tmp,
+        on_stdout = function(line)
+            local json_err = parse_openai_json_error(line)
+            if json_err then
+                debug.log("Alt inline JSON error: " .. json_err)
+                done_called = true
+                vim.schedule(function()
+                    on_error(json_err)
+                end)
+                return
+            end
+
+            local event = parse_openai_sse(line)
+            if not event then
+                return
+            end
+
+            if event == "done" then
+                done_called = true
+                vim.schedule(function()
+                    on_done()
+                end)
+                return
+            end
+
+            local delta = event.choices and event.choices[1] and event.choices[1].delta
+            if delta and delta.content then
+                vim.schedule(function()
+                    on_delta(delta.content)
+                end)
+            end
+        end,
+        on_exit = function(exit_code, stderr_msg)
+            debug.log("alt inline curl exited with code: " .. exit_code)
+            if exit_code ~= 0 and not done_called then
+                vim.schedule(function()
+                    on_error("curl exited with code " .. exit_code .. ": " .. stderr_msg)
+                end)
+            end
+        end,
+    })
+
+    if not cancel then
+        on_error("Failed to start curl")
+        return nil
+    end
+
+    return cancel
+end
+
+-- ============================================================
 -- Public API
 -- ============================================================
 
@@ -681,7 +992,9 @@ function M.inline_stream(selected_text, instruction, context, history, lines_bef
     debug.log("History length: " .. (history and #history or 0))
     debug.log("Filename: " .. (filename or "nil"))
 
-    if is_work_mode() then
+    if is_alt_mode() then
+        return stream_inline_alt(selected_text, instruction, context, history, lines_before, lines_after, indent, filename, start_line, end_line, on_delta, on_done, on_error)
+    elseif is_work_mode() then
         return stream_inline_anthropic(selected_text, instruction, context, history, lines_before, lines_after, indent, filename, start_line, end_line, on_delta, on_done, on_error)
     else
         return stream_inline_opencode(selected_text, instruction, context, history, lines_before, lines_after, indent, filename, start_line, end_line, on_delta, on_done, on_error)
@@ -698,19 +1011,43 @@ function M.stream(messages, on_delta, on_done, on_error)
     debug.log("stream() called with " .. #messages .. " messages")
     debug.log("AI_WORK=" .. tostring(os.getenv("AI_WORK")))
 
-    if is_work_mode() then
+    if is_alt_mode() then
+        return stream_alt(messages, on_delta, on_done, on_error)
+    elseif is_work_mode() then
         return stream_anthropic(messages, on_delta, on_done, on_error)
     else
         return stream_opencode(messages, on_delta, on_done, on_error)
     end
 end
 
+--- Toggle the alt OpenAI-compatible provider (work mode only)
+--- @return boolean new alt_mode state
+function M.toggle_alt()
+    if not is_work_mode() then
+        vim.notify("AI: Alt provider only available in work mode (AI_WORK)", vim.log.levels.WARN)
+        return false
+    end
+    alt_mode = not alt_mode
+    local provider = alt_mode and "alt" or "anthropic"
+    debug.log("Toggled provider to: " .. provider)
+    vim.notify("AI: Switched to " .. provider .. " provider")
+    return alt_mode
+end
+
 function M.get_provider()
+    if is_alt_mode() then
+        return "alt"
+    end
     return is_work_mode() and "anthropic" or "opencode"
 end
 
 function M.get_config()
     return vim.deepcopy(config)
+end
+
+--- Reset alt mode (for testing)
+function M.reset_alt()
+    alt_mode = false
 end
 
 return M

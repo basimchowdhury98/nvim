@@ -294,3 +294,27 @@ deeply nested lines like `return` statements. Added `apply_indent()` in
 ensuring correct whitespace even when the LLM ignores the instruction.
 
 Files: `lua/utils/ai/init.lua`, `lua/utils/ai/inline.lua`
+
+## User Story 18: Alt OpenAI-compatible provider toggle
+
+As a user in work mode, I want to toggle between the Anthropic API and an
+alternate OpenAI-compatible API endpoint via `:AIAlt`, so that I can use
+different LLM providers without restarting Neovim.
+
+Added a third provider path for OpenAI-compatible APIs, activated by the
+`:AIAlt` command (only available when `AI_WORK` is set). The alt provider
+reads its configuration from three env vars: `AI_ALT_URL` (endpoint),
+`AI_ALT_API_KEY` (Bearer token), and `AI_ALT_MODEL` (model name). Added
+`stream_alt()` and `stream_inline_alt()` functions that use the OpenAI
+chat completions SSE format (`data: {"choices":[{"delta":{"content":"..."}}]}`
+terminated by `data: [DONE]`). Added `parse_openai_sse()` and
+`parse_openai_json_error()` helpers for the different wire format. Added
+`openai_curl_cmd()` to `job.lua` for `Authorization: Bearer` header style.
+The `:AIAlt` command toggles between anthropic and alt providers —
+`get_provider()` now returns `"alt"` when active. No web search support
+for the alt provider. Added `reset_alt()` for test isolation, called by
+`reset_all()`. Added 8 tests covering provider detection, toggle behavior,
+no-op outside work mode, reset, and chat flow with alt active.
+
+Files: `lua/utils/ai/api.lua`, `lua/utils/ai/job.lua`,
+`lua/utils/ai/init.lua`, `specs/ai_chat_spec.lua`, `current_epic.md`

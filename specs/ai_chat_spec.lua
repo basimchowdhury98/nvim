@@ -689,3 +689,112 @@ describe("AI Project-Scoped Sessions", function()
         assert(not chat_contains("tmp content"), "Should not show project A content after cwd change")
     end)
 end)
+
+describe("AI Alt Provider Toggle", function()
+    local ai = require("utils.ai")
+    ai.setup()
+    stub_api()
+    vim.notify = function() end
+
+    before_each(function()
+        vim.cmd("enew")
+        ai.reset_all()
+        stub_response = "I am a test response"
+        stub_error = nil
+        stream_messages_spy = nil
+    end)
+
+    after_each(function()
+        close_all_floats()
+    end)
+
+    it("get_provider returns 'opencode' by default when AI_WORK is not set", function()
+        local original = vim.fn.getenv("AI_WORK")
+        vim.fn.setenv("AI_WORK", vim.NIL)
+
+        local provider = api.get_provider()
+
+        eq(provider, "opencode", "Default provider should be opencode")
+        vim.fn.setenv("AI_WORK", original)
+    end)
+
+    it("get_provider returns 'anthropic' when AI_WORK is set", function()
+        local original = vim.fn.getenv("AI_WORK")
+        vim.fn.setenv("AI_WORK", "true")
+
+        local provider = api.get_provider()
+
+        eq(provider, "anthropic", "Provider should be anthropic in work mode")
+        vim.fn.setenv("AI_WORK", original)
+    end)
+
+    it("toggle_alt switches provider to 'alt' in work mode", function()
+        local original = vim.fn.getenv("AI_WORK")
+        vim.fn.setenv("AI_WORK", "true")
+
+        api.toggle_alt()
+
+        eq(api.get_provider(), "alt", "Provider should be alt after toggle")
+        vim.fn.setenv("AI_WORK", original)
+        api.reset_alt()
+    end)
+
+    it("toggle_alt switches back to 'anthropic' on second call", function()
+        local original = vim.fn.getenv("AI_WORK")
+        vim.fn.setenv("AI_WORK", "true")
+
+        api.toggle_alt()
+        api.toggle_alt()
+
+        eq(api.get_provider(), "anthropic", "Provider should be anthropic after double toggle")
+        vim.fn.setenv("AI_WORK", original)
+        api.reset_alt()
+    end)
+
+    it("toggle_alt is a no-op when AI_WORK is not set", function()
+        local original = vim.fn.getenv("AI_WORK")
+        vim.fn.setenv("AI_WORK", vim.NIL)
+
+        local result = api.toggle_alt()
+
+        eq(result, false, "toggle_alt should return false outside work mode")
+        eq(api.get_provider(), "opencode", "Provider should remain opencode")
+        vim.fn.setenv("AI_WORK", original)
+    end)
+
+    it("reset_alt clears alt mode", function()
+        local original = vim.fn.getenv("AI_WORK")
+        vim.fn.setenv("AI_WORK", "true")
+        api.toggle_alt()
+
+        api.reset_alt()
+
+        eq(api.get_provider(), "anthropic", "Provider should be anthropic after reset")
+        vim.fn.setenv("AI_WORK", original)
+    end)
+
+    it("reset_all on init module resets alt mode", function()
+        local original = vim.fn.getenv("AI_WORK")
+        vim.fn.setenv("AI_WORK", "true")
+        api.toggle_alt()
+
+        ai.reset_all()
+
+        eq(api.get_provider(), "anthropic", "Provider should be anthropic after reset_all")
+        vim.fn.setenv("AI_WORK", original)
+    end)
+
+    it("chat flow works with alt provider active via stub", function()
+        local original = vim.fn.getenv("AI_WORK")
+        vim.fn.setenv("AI_WORK", "true")
+        api.toggle_alt()
+        stub_api()
+
+        send_user_message(ai, "alt provider test")
+
+        assert(chat_contains("alt provider test"), "User message should appear in chat")
+        assert(chat_contains("I am a test response"), "Stub response should appear in chat")
+        vim.fn.setenv("AI_WORK", original)
+        api.reset_alt()
+    end)
+end)

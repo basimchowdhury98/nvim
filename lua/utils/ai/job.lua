@@ -93,4 +93,18 @@ function M.curl_cmd(opts)
     }
 end
 
+--- Build a curl command for OpenAI-compatible API
+--- @param opts table {endpoint: string, api_key: string, body_file: string}
+--- @return string[]
+function M.openai_curl_cmd(opts)
+    return {
+        "curl", "--silent", "--no-buffer",
+        "-X", "POST",
+        opts.endpoint,
+        "-H", "Content-Type: application/json",
+        "-H", "Authorization: Bearer " .. opts.api_key,
+        "-d", "@" .. opts.body_file,
+    }
+end
+
 return M
