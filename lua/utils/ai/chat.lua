@@ -197,6 +197,9 @@ end
 function M.append_delta(text)
     if not buf_is_valid() then return end
 
+    -- Replace <code>/<​/code> tags with markdown fences for display
+    text = text:gsub("<code>", "```"):gsub("</code>", "```")
+
     -- On first delta, kill the spinner
     if state.spinner then
         stop_spinner()
@@ -252,6 +255,7 @@ end
 --- Append a complete assistant message (for re-rendering saved conversations)
 --- @param text string The assistant's full response
 function M.append_assistant_content(text)
+    text = text:gsub("<code>", "```"):gsub("</code>", "```")
     local lines = { "**Assistant:**", "" }
     for line in text:gmatch("([^\n]*)\n?") do
         table.insert(lines, line)

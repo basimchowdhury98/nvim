@@ -12,8 +12,8 @@ local default_config = {
     chat = {},
     input = {},
     keymaps = {
-        toggle = "<leader>io",
-        send = "<leader>ia",
+        toggle = "<leader>ia",
+        send = "<leader>io",
         clear = "<leader>ic",
     },
 }
@@ -247,6 +247,21 @@ local function send_message(text, selection)
             table.insert(session.conversation, { role = "assistant", content = full_response })
             chat.finish_assistant_message()
             cancel_request = nil
+
+            -- Auto-yank the first <code> block into the unnamed register
+            local code = full_response:match("<code>\n?(.-)</code>")
+            if code then
+                -- Safety net: strip fences/backticks/quotes the LLM may have added
+                code = code:gsub("```[^\n]*\n?", "")
+                code = code:gsub("^\n+", ""):gsub("\n+$", "")
+                code = code:gsub("^`+", ""):gsub("`+$", "")
+                code = code:gsub('^"', ""):gsub('"$', "")
+                code = code:gsub("^'", ""):gsub("'$", "")
+                vim.fn.setreg('"', code)
+                vim.fn.setreg('0', code)
+                vim.fn.setreg('+', code)
+                debug.log("Auto-yanked first code block (" .. #code .. " chars)")
+            end
         end,
         -- on_error
         function(err)
@@ -390,9 +405,14 @@ function M.setup(opts)
         vim.notify("AI project: " .. get_project())
     end, { desc = "AI: Show current project path" })
 
-    vim.api.nvim_create_user_command("AIDebugPath", function()
-        vim.notify("AI log directory: " .. debug.get_log_dir())
-    end, { desc = "AI: Show debug log directory" })
+    vim.api.nvim_create_user_command("AIDebugLogs", function()
+        local log_file = debug.get_log_dir() .. "/" .. os.date("%Y-%m-%d") .. ".log"
+        if vim.fn.filereadable(log_file) == 0 then
+            vim.notify("AI: No log file for today", vim.log.levels.WARN)
+            return
+        end
+        vim.cmd("vsplit " .. vim.fn.fnameescape(log_file))
+    end, { desc = "AI: Open today's debug log in a split" })
 
     vim.api.nvim_create_user_command("AIAlt", function()
         api.toggle_alt()

@@ -223,6 +223,93 @@ describe("AI Chat Plugin", function()
     end)
 end)
 
+describe("AI Chat Auto-Yank", function()
+    local ai = require("utils.ai")
+    ai.setup()
+    stub_api()
+    vim.notify = function() end
+
+    before_each(function()
+        ai.clear()
+        stub_response = "I am a test response"
+        stub_error = nil
+        stream_messages_spy = nil
+        vim.fn.setreg('"', "")
+        vim.fn.setreg('0', "")
+    end)
+
+    after_each(function()
+        close_all_floats()
+    end)
+
+    it("yanks the first code block into the unnamed register", function()
+        stub_response = "Here is the code:\n<code>\nlocal x = 1\n</code>\nDone."
+
+        send_user_message(ai, "give me code")
+
+        eq(vim.fn.getreg('"'), "local x = 1", "Unnamed register should contain the code block")
+        eq(vim.fn.getreg('0'), "local x = 1", "Yank register should contain the code block")
+    end)
+
+    it("yanks only the first code block when multiple exist", function()
+        stub_response = "First:\n<code>\nfirst block\n</code>\nSecond:\n<code>\nsecond block\n</code>"
+
+        send_user_message(ai, "give me code")
+
+        eq(vim.fn.getreg('"'), "first block", "Should yank only the first code block")
+    end)
+
+    it("does not modify registers when response has no code blocks", function()
+        stub_response = "No code here, just text."
+        vim.fn.setreg('"', "previous content")
+
+        send_user_message(ai, "hello")
+
+        eq(vim.fn.getreg('"'), "previous content", "Register should be unchanged without code blocks")
+    end)
+
+    it("handles multiline code blocks", function()
+        stub_response = "<code>\ndef foo():\n    return 42\n</code>"
+
+        send_user_message(ai, "give me code")
+
+        eq(vim.fn.getreg('"'), "def foo():\n    return 42", "Should yank the full multiline block")
+    end)
+
+    it("does not yank on error responses", function()
+        stub_error = "connection failed"
+        vim.fn.setreg('"', "previous content")
+
+        send_user_message(ai, "hello")
+
+        eq(vim.fn.getreg('"'), "previous content", "Register should be unchanged on error")
+    end)
+
+    it("strips residual backticks from yanked code", function()
+        stub_response = "<code>\n`print(\"hi\")`\n</code>"
+
+        send_user_message(ai, "give me code")
+
+        eq(vim.fn.getreg('"'), 'print("hi")', "Should strip surrounding backticks from code")
+    end)
+
+    it("strips residual fences from yanked code", function()
+        stub_response = "<code>\n```lua\nlocal x = 1\n```\n</code>"
+
+        send_user_message(ai, "give me code")
+
+        eq(vim.fn.getreg('"'), "local x = 1", "Should strip fences from code")
+    end)
+
+    it("strips residual quotes from yanked code", function()
+        stub_response = '<code>\n"hello world"\n</code>'
+
+        send_user_message(ai, "give me code")
+
+        eq(vim.fn.getreg('"'), "hello world", "Should strip surrounding quotes from code")
+    end)
+end)
+
 describe("AI Chat Buffer Tracking", function()
     local ai = require("utils.ai")
     ai.setup()
