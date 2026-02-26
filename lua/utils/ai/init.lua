@@ -5,8 +5,6 @@ local api = require("utils.ai.api")
 local chat = require("utils.ai.chat")
 local input = require("utils.ai.input")
 local debug = require("utils.ai.debug")
-local inline = require("utils.ai.inline")
-
 local M = {}
 
 local default_config = {
@@ -159,36 +157,38 @@ local function build_api_messages()
     return messages
 end
 
---- Re-render the chat buffer with the current session's conversation
-local function render_chat()
-    chat.clear()
-    local session = get_session()
-    for _, msg in ipairs(session.conversation) do
-        if msg.role == "user" then
-            chat.append_user_message(msg.content)
-        else
-            chat.append_assistant_content(msg.content)
-        end
-    end
-end
-
---- Check if project changed and re-render chat if needed
+--- Check if project changed and clear the chat panel if needed
 --- @return boolean true if project changed
 local function sync_project()
     local current = get_project()
     local changed = last_project and last_project ~= current
     if changed then
         debug.log("Project changed from " .. last_project .. " to " .. current)
-        -- Always re-render (clears old content even if chat is closed)
-        render_chat()
+        -- Clear the panel since we only show the latest Q&A
+        chat.clear()
     end
     last_project = current
     return changed
 end
 
+--- Format a visual selection as a quoted context block for the API message
+--- @param selection table {filename, start_line, end_line, lang, text}
+--- @return string
+local function format_quoted_context(selection)
+    local header = string.format(
+        "[Referring to %s:%d-%d]",
+        selection.filename,
+        selection.start_line,
+        selection.end_line
+    )
+    local fence_lang = selection.lang ~= "" and selection.lang or ""
+    return header .. "\n```" .. fence_lang .. "\n" .. selection.text .. "\n```"
+end
+
 --- Send a user message and stream the AI response
 --- @param text string The user's message
-local function send_message(text)
+--- @param selection table|nil Optional visual selection to include as quoted context
+local function send_message(text, selection)
     debug.log("send_message called with: " .. text:sub(1, 100))
 
     if chat.is_streaming() then
@@ -206,14 +206,26 @@ local function send_message(text)
 
     local session = get_session()
 
-    -- Store raw user message (no context baked in)
-    table.insert(session.conversation, { role = "user", content = text })
+    -- Build the content that goes to the API (with quoted context if any)
+    local api_content = text
+    if selection then
+        api_content = format_quoted_context(selection) .. "\n\n" .. text
+    end
+
+    -- Store the full message with quoted context in conversation history
+    table.insert(session.conversation, { role = "user", content = api_content })
 
     -- Build the full messages array with fresh buffer context
     local api_messages = build_api_messages()
 
-    -- Show user message in chat
-    chat.append_user_message(text)
+    -- Clear the chat panel and show only this exchange
+    chat.clear()
+    local display_text = text
+    if selection then
+        display_text = string.format("> %s:%d-%d\n\n%s",
+            selection.filename, selection.start_line, selection.end_line, text)
+    end
+    chat.append_user_message(display_text)
 
     -- Start assistant block
     chat.start_assistant_message()
@@ -247,11 +259,8 @@ local function send_message(text)
     )
 end
 
--- Number of lines to capture before/after selection for context
-local SURROUNDING_LINES = 5
-
---- Capture the current visual selection range and text
---- @return table|nil {buf, start_row, start_col, end_row, end_col, text, lines_before, lines_after} or nil if not in visual mode
+--- Capture the current visual selection range and text for use as quoted context
+--- @return table|nil {filename, start_line, end_line, lang, text} or nil if not in visual mode
 local function get_visual_selection()
     local mode = vim.fn.mode()
     if mode ~= "v" and mode ~= "V" and mode ~= "\22" then
@@ -278,66 +287,25 @@ local function get_visual_selection()
     local lines = vim.api.nvim_buf_get_text(buf, start_row, start_col, end_row, end_col, {})
     local text = table.concat(lines, "\n")
 
-    -- Capture surrounding lines for context
-    local total_lines = vim.api.nvim_buf_line_count(buf)
-    local before_start = math.max(0, start_row - SURROUNDING_LINES)
-    local after_end = math.min(total_lines, end_row + 1 + SURROUNDING_LINES)
-
-    local lines_before = vim.api.nvim_buf_get_lines(buf, before_start, start_row, false)
-    local lines_after = vim.api.nvim_buf_get_lines(buf, end_row + 1, after_end, false)
-
-    -- Detect indentation from the closest non-empty surrounding line
-    -- Prefer the line immediately after, then immediately before
-    local indent = ""
-    for _, line in ipairs(lines_after) do
-        if line:match("%S") then
-            indent = line:match("^(%s*)") or ""
-            break
-        end
-    end
-    if indent == "" then
-        for i = #lines_before, 1, -1 do
-            local line = lines_before[i]
-            if line:match("%S") then
-                indent = line:match("^(%s*)") or ""
-                break
-            end
-        end
-    end
-
     return {
-        buf = buf,
         filename = vim.api.nvim_buf_get_name(buf),
-        start_row = start_row,
-        start_col = start_col,
-        end_row = end_row,
-        end_col = end_col,
+        start_line = start_row + 1, -- 1-indexed for display
+        end_line = end_row + 1,
+        lang = vim.bo[buf].filetype or "",
         text = text,
-        lines_before = table.concat(lines_before, "\n"),
-        lines_after = table.concat(lines_after, "\n"),
-        indent = indent,
     }
 end
 
---- Open the input popup and send the message on submit
---- If called from visual mode, opens inline mode instead
+--- Open the input popup and send the message on submit.
+--- If called from visual mode, the selection is included as quoted context.
 --- @return number buf_id The buffer id of the input popup
 function M.prompt()
     sync_project()
     local selection = get_visual_selection()
-    local session = get_session()
 
-    if selection then
-        -- Visual mode: inline agentic coding
-        return input.open(function(instruction)
-            inline.execute(selection, instruction, build_context_block(), session.conversation)
-        end, { title = " Inline Edit " })
-    else
-        -- Normal mode: regular chat
-        return input.open(function(text)
-            send_message(text)
-        end)
-    end
+    return input.open(function(text)
+        send_message(text, selection)
+    end)
 end
 
 --- Toggle the chat panel
@@ -384,6 +352,13 @@ function M.cancel()
     end
 end
 
+--- Send a message with an optional quoted selection (exposed for testing)
+--- @param text string
+--- @param selection table|nil
+function M.send(text, selection)
+    send_message(text, selection)
+end
+
 function M.setup(opts)
     config = vim.tbl_deep_extend("force", config, opts or {})
 
@@ -395,7 +370,7 @@ function M.setup(opts)
 
     map("n", config.keymaps.toggle, M.toggle, { desc = "AI: Toggle chat panel" })
     map("n", config.keymaps.send, M.prompt, { desc = "AI: Send message" })
-    map("v", config.keymaps.send, M.prompt, { desc = "AI: Inline edit" })
+    map("v", config.keymaps.send, M.prompt, { desc = "AI: Send message with selection context" })
     map("n", config.keymaps.clear, M.clear, { desc = "AI: Clear conversation" })
 
     vim.api.nvim_create_user_command("AIFiles", function()

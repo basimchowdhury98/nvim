@@ -169,14 +169,14 @@ describe("AI Chat Plugin", function()
         assert(not chat.is_streaming(), "Should not be streaming after response completes")
     end)
 
-    it("multiple messages build up in the chat", function()
+    it("second message replaces the first in the chat panel", function()
         send_user_message(ai, "first question")
         stub_response = "second answer"
 
         send_user_message(ai, "second question")
 
-        assert(chat_contains("first question"), "First user message should be present")
-        assert(chat_contains("I am a test response"), "First response should be present")
+        assert(not chat_contains("first question"), "First user message should be gone")
+        assert(not chat_contains("I am a test response"), "First response should be gone")
         assert(chat_contains("second question"), "Second user message should be present")
         assert(chat_contains("second answer"), "Second response should be present")
     end)
@@ -372,42 +372,17 @@ describe("AI Chat Buffer Tracking", function()
     end)
 end)
 
-describe("AI Inline Editing", function()
+describe("AI Chat Quoted Selection", function()
     local ai = require("utils.ai")
-    local inline = require("utils.ai.inline")
-    local inline_api = require("utils.ai.api")
+    local chat = require("utils.ai.chat")
     ai.setup()
+    stub_api()
     vim.notify = function() end
 
-    local stub_inline_response = "function body() end"
-    local stub_inline_error = nil
-    local inline_spy = nil
     local test_bufs = {}
 
-    local function stub_inline_api()
-        inline_api.inline_stream = function(selected_text, instruction, context, history, lines_before, lines_after, indent, filename, start_line, end_line, on_delta, on_done, on_error)
-            inline_spy = {
-                selected_text = selected_text,
-                instruction = instruction,
-                context = context,
-                history = history,
-                filename = filename,
-                start_line = start_line,
-                end_line = end_line,
-            }
-            if stub_inline_error then
-                on_error(stub_inline_error)
-                return function() end
-            end
-            on_delta(stub_inline_response)
-            on_done()
-            return function() end
-        end
-    end
-
-    stub_inline_api()
-
     before_each(function()
+        vim.cmd("enew")
         ai.clear()
         for _, buf in ipairs(test_bufs) do
             if vim.api.nvim_buf_is_valid(buf) then
@@ -415,141 +390,109 @@ describe("AI Inline Editing", function()
             end
         end
         test_bufs = {}
-        stub_inline_response = "function body() end"
-        stub_inline_error = nil
-        inline_spy = nil
+        stub_response = "I am a test response"
+        stub_error = nil
+        stream_messages_spy = nil
     end)
 
     after_each(function()
         close_all_floats()
     end)
 
-    it("executes inline edit and replaces selection with streamed response", function()
-        local buf = create_named_buf("/tmp/inline_test.lua", "lua", { "local x = 1", "local y = 2", "local z = 3" })
-        table.insert(test_bufs, buf)
-        vim.api.nvim_set_current_buf(buf)
-        local selection = { buf = buf, start_row = 1, start_col = 0, end_row = 1, end_col = 11, text = "local y = 2" }
-
-        inline.execute(selection, "replace with z", nil, nil)
-
-        local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-        eq(lines[1], "local x = 1", "First line should be unchanged")
-        eq(lines[2], "function body() end", "Second line should be replaced with response")
-        eq(lines[3], "local z = 3", "Third line should be unchanged")
-    end)
-
-    it("passes selected text and instruction to api.inline_stream", function()
-        local buf = create_named_buf("/tmp/inline_spy.lua", "lua", { "original code" })
-        table.insert(test_bufs, buf)
-        vim.api.nvim_set_current_buf(buf)
-        local selection = { buf = buf, start_row = 0, start_col = 0, end_row = 0, end_col = 13, text = "original code" }
-
-        inline.execute(selection, "make it better", nil, nil)
-
-        assert(inline_spy ~= nil, "inline_stream should have been called")
-        eq(inline_spy.selected_text, "original code", "Should pass selected text")
-        eq(inline_spy.instruction, "make it better", "Should pass instruction")
-    end)
-
-    it("passes context when provided", function()
-        local buf = create_named_buf("/tmp/inline_ctx.lua", "lua", { "code" })
-        table.insert(test_bufs, buf)
-        vim.api.nvim_set_current_buf(buf)
-        local selection = { buf = buf, start_row = 0, start_col = 0, end_row = 0, end_col = 4, text = "code" }
-
-        inline.execute(selection, "edit", "some context", nil)
-
-        eq(inline_spy.context, "some context", "Should pass context to API")
-    end)
-
-    it("passes conversation history when provided", function()
-        local buf = create_named_buf("/tmp/inline_hist.lua", "lua", { "code" })
-        table.insert(test_bufs, buf)
-        vim.api.nvim_set_current_buf(buf)
-        local selection = { buf = buf, start_row = 0, start_col = 0, end_row = 0, end_col = 4, text = "code" }
-        local history = {
-            { role = "user", content = "previous question" },
-            { role = "assistant", content = "previous answer" },
+    it("includes quoted selection with filename and line range in API message", function()
+        local selection = {
+            filename = "/project/app.lua",
+            start_line = 10,
+            end_line = 12,
+            lang = "lua",
+            text = "local x = 1",
         }
 
-        inline.execute(selection, "edit", nil, history)
+        ai.send("explain this", selection)
 
-        assert(inline_spy.history ~= nil, "Should pass history to API")
-        eq(#inline_spy.history, 2, "History should have 2 messages")
-        eq(inline_spy.history[1].content, "previous question", "First history message should match")
+        local first_msg = stream_messages_spy[1]
+        assert(first_msg.content:find("[Referring to /project/app.lua:10-12]", 1, true),
+            "API message should contain the referring header")
+        assert(first_msg.content:find("local x = 1", 1, true),
+            "API message should contain the selected text")
+        assert(first_msg.content:find("explain this", 1, true),
+            "API message should contain the user question")
     end)
 
-    it("handles multiline replacement", function()
-        stub_inline_response = "line1\nline2\nline3"
-        local buf = create_named_buf("/tmp/inline_multi.lua", "lua", { "single line" })
-        table.insert(test_bufs, buf)
-        vim.api.nvim_set_current_buf(buf)
-        local selection = { buf = buf, start_row = 0, start_col = 0, end_row = 0, end_col = 11, text = "single line" }
+    it("includes language in the code fence", function()
+        local selection = {
+            filename = "/project/app.py",
+            start_line = 5,
+            end_line = 5,
+            lang = "python",
+            text = "x = 1",
+        }
 
-        inline.execute(selection, "expand", nil, nil)
+        ai.send("what does this do", selection)
 
-        local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-        eq(lines[1], "line1", "First replacement line")
-        eq(lines[2], "line2", "Second replacement line")
-        eq(lines[3], "line3", "Third replacement line")
+        local first_msg = stream_messages_spy[1]
+        assert(first_msg.content:find("```python", 1, true),
+            "API message should contain language-tagged code fence")
     end)
 
-    it("handles partial line selection replacement", function()
-        stub_inline_response = "REPLACED"
-        local buf = create_named_buf("/tmp/inline_partial.lua", "lua", { "prefix MIDDLE suffix" })
-        table.insert(test_bufs, buf)
-        vim.api.nvim_set_current_buf(buf)
-        local selection = { buf = buf, start_row = 0, start_col = 7, end_row = 0, end_col = 13, text = "MIDDLE" }
+    it("sends message without quoted context when no selection is provided", function()
+        ai.send("hello")
 
-        inline.execute(selection, "replace middle", nil, nil)
-
-        local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-        eq(lines[1], "prefix REPLACED suffix", "Should replace only the selected portion")
+        local first_msg = stream_messages_spy[1]
+        assert(not first_msg.content:find("[Referring to", 1, true),
+            "API message should not contain referring header without selection")
+        assert(first_msg.content:find("hello", 1, true),
+            "API message should contain the user text")
     end)
 
-    it("handles error from api gracefully", function()
-        stub_inline_error = "API failed"
-        local notified = nil
-        vim.notify = function(msg) notified = msg end
-        local buf = create_named_buf("/tmp/inline_error.lua", "lua", { "code" })
-        table.insert(test_bufs, buf)
-        vim.api.nvim_set_current_buf(buf)
-        local selection = { buf = buf, start_row = 0, start_col = 0, end_row = 0, end_col = 4, text = "code" }
+    it("stores quoted context in conversation history for multi-turn continuity", function()
+        local selection = {
+            filename = "/project/app.lua",
+            start_line = 1,
+            end_line = 1,
+            lang = "lua",
+            text = "local x = 1",
+        }
 
-        inline.execute(selection, "edit", nil, nil)
+        ai.send("explain this", selection)
+        ai.send("can you elaborate")
 
-        local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-        eq(lines[1], "code", "Buffer should be unchanged on error")
-        assert(notified and notified:find("API failed"), "Should notify user of error")
-        vim.notify = function() end
+        -- Second API call should have the quoted context in the first history message
+        local first_msg = stream_messages_spy[1]
+        assert(first_msg.content:find("[Referring to", 1, true),
+            "First message in history should still have the quoted context")
     end)
 
-    it("cleans up spinner after completion", function()
-        local buf = create_named_buf("/tmp/inline_spinner.lua", "lua", { "line1", "line2", "line3" })
-        table.insert(test_bufs, buf)
-        vim.api.nvim_set_current_buf(buf)
-        local selection = { buf = buf, start_row = 1, start_col = 0, end_row = 1, end_col = 5, text = "line2" }
+    it("shows quoted metadata and user question in chat panel", function()
+        local selection = {
+            filename = "/project/app.lua",
+            start_line = 1,
+            end_line = 3,
+            lang = "lua",
+            text = "local x = 1",
+        }
 
-        inline.execute(selection, "replace", nil, nil)
+        ai.send("explain this", selection)
 
-        local ns_id = vim.api.nvim_create_namespace("ai_inline_spinner")
-        local extmarks = vim.api.nvim_buf_get_extmarks(buf, ns_id, 0, -1, {})
-        eq(#extmarks, 0, "All spinner extmarks should be cleaned up after completion")
+        assert(chat_contains("explain this"), "Chat should show the user question")
+        assert(chat_contains("> /project/app.lua:1-3"), "Chat should show the quoted metadata")
+        assert(not chat_contains("local x = 1"), "Chat should not show the full quoted code")
     end)
 
-    it("cleans up spinner on error", function()
-        stub_inline_error = "API failed"
-        vim.notify = function() end
-        local buf = create_named_buf("/tmp/inline_spinner_err.lua", "lua", { "code" })
-        table.insert(test_bufs, buf)
-        vim.api.nvim_set_current_buf(buf)
-        local selection = { buf = buf, start_row = 0, start_col = 0, end_row = 0, end_col = 4, text = "code" }
+    it("handles selection with empty lang gracefully", function()
+        local selection = {
+            filename = "/project/data.txt",
+            start_line = 3,
+            end_line = 3,
+            lang = "",
+            text = "some data",
+        }
 
-        inline.execute(selection, "edit", nil, nil)
+        ai.send("what is this", selection)
 
-        local ns_id = vim.api.nvim_create_namespace("ai_inline_spinner")
-        local extmarks = vim.api.nvim_buf_get_extmarks(buf, ns_id, 0, -1, {})
-        eq(#extmarks, 0, "All spinner extmarks should be cleaned up after error")
+        local first_msg = stream_messages_spy[1]
+        assert(first_msg.content:find("```\nsome data", 1, true),
+            "Code fence should have no language when lang is empty")
     end)
 end)
 
@@ -616,7 +559,7 @@ describe("AI Project-Scoped Sessions", function()
         assert(chat_contains("project B response"), "Project B response should appear")
     end)
 
-    it("returning to previous cwd restores that project's conversation", function()
+    it("returning to previous cwd shows empty panel (single Q&A view)", function()
         vim.fn.chdir("/tmp")
         send_user_message(ai, "project A first")
 
@@ -626,8 +569,8 @@ describe("AI Project-Scoped Sessions", function()
         vim.fn.chdir("/tmp")
         ai.toggle()
 
-        assert(chat_contains("project A first"), "Project A conversation should be restored")
-        assert(not chat_contains("project B message"), "Project B message should not appear in project A")
+        assert(not chat_contains("project A first"), "Panel should be empty after project switch")
+        assert(not chat_contains("project B message"), "Project B message should not appear")
     end)
 
     it("conversation history is scoped to project", function()
@@ -664,7 +607,7 @@ describe("AI Project-Scoped Sessions", function()
             "Project B context should include project B buffers")
     end)
 
-    it("clear only affects the current project", function()
+    it("clear only affects the current project's history", function()
         vim.fn.chdir("/tmp")
         send_user_message(ai, "tmp message")
 
@@ -672,10 +615,17 @@ describe("AI Project-Scoped Sessions", function()
         send_user_message(ai, "root message")
         ai.clear()
 
+        -- Return to /tmp and send a new message - history should still include the old one
         vim.fn.chdir("/tmp")
-        ai.toggle()
+        stub_response = "tmp response 2"
+        send_user_message(ai, "tmp followup")
 
-        assert(chat_contains("tmp message"), "Project A conversation should survive project B clear")
+        -- The API should receive the old /tmp conversation in history
+        assert(#stream_messages_spy >= 3,
+            "API should receive previous history from /tmp project")
+        local first_msg = stream_messages_spy[1]
+        assert(first_msg.content:find("tmp message", 1, true),
+            "Project A history should survive project B clear")
     end)
 
     it("re-renders chat when toggling after cwd change", function()
