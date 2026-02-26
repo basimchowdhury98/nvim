@@ -3,5 +3,7 @@
 * Telescope picker of copied/yanked texts
 * Show ! in c# as not - look into treesitter to help
 * c+n + p in term while in normal mode acts weird
+* Terminal: snap from floating to split and back
+* Terminal: 
 
 Plugin ideas:
