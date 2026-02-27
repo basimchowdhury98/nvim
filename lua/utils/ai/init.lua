@@ -15,6 +15,7 @@ local default_config = {
         toggle = "<leader>it",
         send = "<leader>io",
         clear = "<leader>ic",
+        cancel = "<leader>ix",
     },
 }
 
@@ -329,12 +330,19 @@ function M.toggle()
     chat.toggle()
 end
 
---- Close the chat and clear conversation for the current project
-function M.clear()
+--- Kill any in-flight request (no UI side-effects)
+local function kill_request()
     if cancel_request then
         cancel_request()
         cancel_request = nil
+        return true
     end
+    return false
+end
+
+--- Close the chat and clear conversation for the current project
+function M.clear()
+    kill_request()
     chat.clear()
     local session = get_session()
     session.conversation = {}
@@ -346,10 +354,7 @@ end
 
 --- Reset all sessions (for testing)
 function M.reset_all()
-    if cancel_request then
-        cancel_request()
-        cancel_request = nil
-    end
+    kill_request()
     chat.clear()
     chat.close()
     sessions = {}
@@ -357,14 +362,18 @@ function M.reset_all()
     api.reset_alt()
 end
 
---- Cancel the current in-flight request
+--- Interrupt the current in-flight request
 function M.cancel()
-    if cancel_request then
-        cancel_request()
-        cancel_request = nil
-        chat.append_error("Request cancelled")
-        vim.notify("AI: Request cancelled")
+    if not kill_request() then
+        return
     end
+    -- Discard the pending user message from history
+    local session = get_session()
+    if #session.conversation > 0 and session.conversation[#session.conversation].role == "user" then
+        table.remove(session.conversation)
+    end
+    chat.append_interrupted()
+    debug.log("Request interrupted by user")
 end
 
 --- Send a message with an optional quoted selection (exposed for testing)
@@ -387,6 +396,7 @@ function M.setup(opts)
     map("n", config.keymaps.send, M.prompt, { desc = "AI: Send message" })
     map("v", config.keymaps.send, M.prompt, { desc = "AI: Send message with selection context" })
     map("n", config.keymaps.clear, M.clear, { desc = "AI: Clear conversation" })
+    map("n", config.keymaps.cancel, M.cancel, { desc = "AI: Interrupt streaming response" })
 
     vim.api.nvim_create_user_command("AIFiles", function()
         local bufs = get_project_buffers()
@@ -412,6 +422,8 @@ function M.setup(opts)
             return
         end
         vim.cmd("vsplit " .. vim.fn.fnameescape(log_file))
+        vim.bo.modifiable = false
+        vim.bo.readonly = true
     end, { desc = "AI: Open today's debug log in a split" })
 
     vim.api.nvim_create_user_command("AIAlt", function()

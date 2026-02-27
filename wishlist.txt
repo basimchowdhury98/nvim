@@ -4,6 +4,6 @@
 * Show ! in c# as not - look into treesitter to help
 * c+n + p in term while in normal mode acts weird
 * Terminal: snap from floating to split and back
-* Terminal: 
+* AI driven log, test, lint -> qf list
 
 Plugin ideas:

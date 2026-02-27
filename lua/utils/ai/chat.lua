@@ -19,6 +19,7 @@ local state = {
     is_streaming = false,
     spinner = nil,
     spinner_line = nil, -- 0-indexed line where the spinner lives
+    set_spinner_label = nil, -- function to change spinner label text
 }
 
 function M.setup(opts)
@@ -63,32 +64,43 @@ local function with_modifiable(fn)
     vim.bo[state.buf_id].modifiable = false
 end
 
+--- Remove the spinner line from the buffer (does not stop the timer)
+local function remove_spinner_line()
+    if state.spinner_line and buf_is_valid() then
+        with_modifiable(function()
+            vim.api.nvim_buf_set_lines(state.buf_id, state.spinner_line, state.spinner_line + 1, false, {})
+        end)
+        state.spinner_line = nil
+    end
+end
+
+--- Add a spinner line at the bottom of the buffer (does not start the timer)
+local function add_spinner_line()
+    if not buf_is_valid() then return end
+    with_modifiable(function()
+        local line_count = vim.api.nvim_buf_line_count(state.buf_id)
+        vim.api.nvim_buf_set_lines(state.buf_id, line_count, line_count, false, { "" })
+        state.spinner_line = line_count
+    end)
+end
+
 --- Stop the spinner and remove the spinner line from the buffer
 local function stop_spinner()
     if state.spinner then
         state.spinner.stop()
         state.spinner = nil
     end
-
-    if state.spinner_line and buf_is_valid() then
-        with_modifiable(function()
-            vim.api.nvim_buf_set_lines(state.buf_id, state.spinner_line, state.spinner_line + 1, false, {})
-        end)
-    end
-
-    state.spinner_line = nil
+    remove_spinner_line()
 end
 
 --- Start an animated spinner on the last line of the chat buffer
 local function start_spinner()
     if not buf_is_valid() then return end
 
-    with_modifiable(function()
-        local line_count = vim.api.nvim_buf_line_count(state.buf_id)
-        vim.api.nvim_buf_set_lines(state.buf_id, line_count, line_count, false, { "" })
-        state.spinner_line = line_count
-    end)
+    add_spinner_line()
     scroll_to_bottom()
+
+    local label = "Thinking..."
 
     state.spinner = spinner.create({
         on_frame = function(frame)
@@ -102,12 +114,16 @@ local function start_spinner()
                     state.spinner_line,
                     state.spinner_line + 1,
                     false,
-                    { frame .. " Thinking..." }
+                    { frame .. " " .. label }
                 )
             end)
         end,
     })
     state.spinner.start()
+
+    return function(new_label)
+        label = new_label
+    end
 end
 
 function M.open()
@@ -189,7 +205,7 @@ end
 function M.start_assistant_message()
     append_lines({ "**Assistant:**", "" })
     state.is_streaming = true
-    start_spinner()
+    state.set_spinner_label = start_spinner()
 end
 
 --- Append a streaming text delta to the current assistant response
@@ -200,10 +216,14 @@ function M.append_delta(text)
     -- Replace <code>/<​/code> tags with markdown fences for display
     text = text:gsub("<code>", "```"):gsub("</code>", "```")
 
-    -- On first delta, kill the spinner
-    if state.spinner then
-        stop_spinner()
+    -- Switch spinner label from "Thinking..." to "Streaming..." on first delta
+    if state.set_spinner_label then
+        state.set_spinner_label("Streaming...")
+        state.set_spinner_label = nil
     end
+
+    -- Temporarily remove the spinner line so we append text above it
+    remove_spinner_line()
 
     -- Split delta by newlines
     local parts = {}
@@ -222,32 +242,36 @@ function M.append_delta(text)
         table.insert(parts, "")
     end
 
-    if #parts == 0 then
-        return
+    if #parts > 0 then
+        with_modifiable(function()
+            local line_count = vim.api.nvim_buf_line_count(state.buf_id)
+            local last_line = vim.api.nvim_buf_get_lines(state.buf_id, line_count - 1, line_count, false)[1] or ""
+
+            local new_last = last_line .. parts[1]
+            vim.api.nvim_buf_set_lines(state.buf_id, line_count - 1, line_count, false, { new_last })
+
+            if #parts > 1 then
+                local new_lines = {}
+                for j = 2, #parts do
+                    table.insert(new_lines, parts[j])
+                end
+                local updated_count = vim.api.nvim_buf_line_count(state.buf_id)
+                vim.api.nvim_buf_set_lines(state.buf_id, updated_count, updated_count, false, new_lines)
+            end
+        end)
     end
 
-    with_modifiable(function()
-        local line_count = vim.api.nvim_buf_line_count(state.buf_id)
-        local last_line = vim.api.nvim_buf_get_lines(state.buf_id, line_count - 1, line_count, false)[1] or ""
-
-        local new_last = last_line .. parts[1]
-        vim.api.nvim_buf_set_lines(state.buf_id, line_count - 1, line_count, false, { new_last })
-
-        if #parts > 1 then
-            local new_lines = {}
-            for j = 2, #parts do
-                table.insert(new_lines, parts[j])
-            end
-            local updated_count = vim.api.nvim_buf_line_count(state.buf_id)
-            vim.api.nvim_buf_set_lines(state.buf_id, updated_count, updated_count, false, new_lines)
-        end
-    end)
+    -- Re-add spinner line below the new content
+    if state.spinner then
+        add_spinner_line()
+    end
     scroll_to_bottom()
 end
 
 --- Finish the current assistant response
 function M.finish_assistant_message()
     stop_spinner()
+    state.set_spinner_label = nil
     append_lines({ "", "" })
     state.is_streaming = false
 end
@@ -268,13 +292,23 @@ end
 --- @param msg string Error message
 function M.append_error(msg)
     stop_spinner()
+    state.set_spinner_label = nil
     append_lines({ "", "**Error:** " .. msg, "" })
+    state.is_streaming = false
+end
+
+--- Mark the current response as interrupted
+function M.append_interrupted()
+    stop_spinner()
+    state.set_spinner_label = nil
+    append_lines({ "", "", "*[interrupted]*", "" })
     state.is_streaming = false
 end
 
 --- Clear the chat buffer
 function M.clear()
     stop_spinner()
+    state.set_spinner_label = nil
     if not buf_is_valid() then return end
     with_modifiable(function()
         vim.api.nvim_buf_set_lines(state.buf_id, 0, -1, false, { "" })
