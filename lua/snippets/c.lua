@@ -4,5 +4,5 @@ local i = ls.insert_node
 local fmt = require('luasnip.extras.fmt').fmt
 
 return {
-    s("debug", fmt('printf("{}\\n"); // DEBUG', { i(1, 'string')}))
+    s("debug", fmt('printf("LOCAL_DEBUG: {}\\n");', { i(1, 'string')}))
 }

@@ -5,5 +5,8 @@
 * c+n + p in term while in normal mode acts weird
 * Terminal: snap from floating to split and back
 * AI driven log, test, lint -> qf list
+* AI - passive twitch like chat
+* AI - agent that doesnt violate the "llms ouput should not be system output" rule
+* debug lines to qf list
 
 Plugin ideas:
