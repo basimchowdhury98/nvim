@@ -6,6 +6,9 @@ read_globals = {
 }
 
 files["specs/**/*.lua"] = {
+    globals = {
+        "vim",
+    },
     read_globals = {
         "describe",
         "it",
