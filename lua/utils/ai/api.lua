@@ -92,14 +92,19 @@ end
 --- @param on_delta fun(text: string) Called with each text chunk as it arrives
 --- @param on_done fun() Called when the response is complete
 --- @param on_error fun(err: string) Called on error
+--- @param opts table|nil Optional overrides { system_prompt = "..." }
 --- @return fun()|nil cancel Function to cancel the request, or nil on error
-function M.stream(messages, on_delta, on_done, on_error)
+function M.stream(messages, on_delta, on_done, on_error, opts)
     debug.log("stream() called with " .. #messages .. " messages")
     debug.log("AI_WORK=" .. tostring(os.getenv("AI_WORK")))
 
     local provider_name = M.get_provider()
     local provider = providers.get(provider_name)
     local provider_config = build_provider_config(provider_name)
+
+    if opts and opts.system_prompt then
+        provider_config.system_prompt = opts.system_prompt
+    end
 
     debug.log("using provider: " .. provider.name)
 

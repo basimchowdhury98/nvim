@@ -5,6 +5,7 @@ local api = require("utils.ai.api")
 local chat = require("utils.ai.chat")
 local input = require("utils.ai.input")
 local debug = require("utils.ai.debug")
+local lag = require("utils.ai.lag")
 local M = {}
 
 local default_config = {
@@ -16,6 +17,8 @@ local default_config = {
         send = "<leader>io",
         clear = "<leader>ic",
         cancel = "<leader>ix",
+        lag_revert = "<leader>lr",
+        lag_clear = "<leader>lc",
     },
 }
 
@@ -360,6 +363,7 @@ function M.reset_all()
     sessions = {}
     last_project = nil
     api.reset_alt()
+    lag.reset()
 end
 
 --- Interrupt the current in-flight request
@@ -381,6 +385,18 @@ end
 --- @param selection table|nil
 function M.send(text, selection)
     send_message(text, selection)
+end
+
+--- Get context block from open project buffers (exposed for lag mode)
+--- @return string|nil
+function M.build_context_block()
+    return build_context_block()
+end
+
+--- Get the current project session (exposed for lag mode)
+--- @return table
+function M.get_session()
+    return get_session()
 end
 
 function M.setup(opts)
@@ -429,6 +445,17 @@ function M.setup(opts)
     vim.api.nvim_create_user_command("AIAlt", function()
         api.toggle_alt()
     end, { desc = "AI: Toggle alt OpenAI-compatible provider (work mode only)" })
+
+    vim.api.nvim_create_user_command("LagStart", function()
+        lag.start(M.build_context_block, M.get_session)
+    end, { desc = "Lag: Start lag mode for current buffer" })
+
+    vim.api.nvim_create_user_command("LagStop", function()
+        lag.stop()
+    end, { desc = "Lag: Stop lag mode for current buffer" })
+
+    map("n", config.keymaps.lag_revert, lag.revert, { desc = "Lag: Revert nearest modification" })
+    map("n", config.keymaps.lag_clear, lag.clear, { desc = "Lag: Clear all modifications" })
 end
 
 return M
