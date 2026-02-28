@@ -18,18 +18,14 @@ local get_session_fn = nil
 --   processing = bool,         -- LLM call in flight for this buffer
 --   pending_save = bool,       -- save queued while processing
 --   queue_count = number,      -- number of queued saves waiting
---   debounce_timer = uv_timer, -- debounce handle
---   modifications = table[],   -- applied modifications with original code for revert
+ --   modifications = table[],   -- applied modifications with original code for revert
 --   ns = number,               -- extmark namespace for this buffer
 --   active_index = number|nil, -- index of nearest modification to cursor
 --   working_extmarks = table,  -- extmark ids for "working..." indicators
 -- }
 local buffers = {}
 
--- Module-level config
-local lag_config = {
-    debounce_ms = 2000,
-}
+
 
 -- Namespace for working indicators (shared)
 local ns_working = vim.api.nvim_create_namespace("ai_lag_working")
@@ -57,7 +53,6 @@ local function get_or_create_state(bufnr)
             processing = false,
             pending_save = false,
             queue_count = 0,
-            debounce_timer = nil,
             modifications = {},
             ns = vim.api.nvim_create_namespace("ai_lag_" .. bufnr),
             active_index = nil,
@@ -756,26 +751,8 @@ function M.start(get_context, get_session)
             local name = vim.api.nvim_buf_get_name(bufnr)
             if name == "" then return end
 
-            local state = get_or_create_state(bufnr)
-
-            -- Debounce
-            if state.debounce_timer then
-                state.debounce_timer:stop()
-                state.debounce_timer:close()
-                state.debounce_timer = nil
-            end
-            local timer = vim.uv.new_timer()
-            state.debounce_timer = timer
-            timer:start(lag_config.debounce_ms, 0, vim.schedule_wrap(function()
-                if timer then
-                    timer:stop()
-                    timer:close()
-                end
-                if state.debounce_timer == timer then
-                    state.debounce_timer = nil
-                end
-                on_save(bufnr)
-            end))
+            get_or_create_state(bufnr)
+            on_save(bufnr)
         end,
     })
     table.insert(autocmd_ids, write_id)
@@ -828,11 +805,7 @@ function M.stop()
     autocmd_ids = {}
 
     -- Clean up all buffer state
-    for bufnr, state in pairs(buffers) do
-        if state.debounce_timer then
-            state.debounce_timer:stop()
-            state.debounce_timer:close()
-        end
+    for bufnr, _ in pairs(buffers) do
         pcall(clear_modification_extmarks, bufnr)
         pcall(clear_working_indicator, bufnr)
         pcall(vim.diagnostic.reset, ns_diagnostic, bufnr)
@@ -890,11 +863,7 @@ function M.reset()
     end
     autocmd_ids = {}
 
-    for bufnr, state in pairs(buffers) do
-        if state.debounce_timer then
-            state.debounce_timer:stop()
-            state.debounce_timer:close()
-        end
+    for bufnr, _ in pairs(buffers) do
         pcall(clear_modification_extmarks, bufnr)
         pcall(clear_working_indicator, bufnr)
         pcall(vim.diagnostic.reset, ns_diagnostic, bufnr)
