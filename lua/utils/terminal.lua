@@ -48,6 +48,14 @@ local function window_is_open()
     return state.win_id and vim.api.nvim_win_is_valid(state.win_id)
 end
 
+local function calc_window_dims()
+    local width = math.floor(vim.o.columns * config.width_ratio)
+    local height = math.floor(vim.o.lines * config.height_ratio)
+    local row = math.floor((vim.o.lines - height) / 2)
+    local col = math.floor((vim.o.columns - width) / 2)
+    return { width = width, height = height, row = row, col = col }
+end
+
 local function create_terminal_buffer(path)
     local buf_id = vim.api.nvim_create_buf(false, true)
     vim.bo[buf_id].bufhidden = 'hide'
@@ -94,19 +102,15 @@ local function open_window()
     end
 
     local curr_proj = get_curr_proj();
-
-    local width = math.floor(vim.o.columns * config.width_ratio)
-    local height = math.floor(vim.o.lines * config.height_ratio)
-    local row = math.floor((vim.o.lines - height) / 2)
-    local col = math.floor((vim.o.columns - width) / 2)
+    local dims = calc_window_dims()
 
     -- Window options that match Telescope's style
     local win_opts = {
         relative = 'editor',
-        width = width,
-        height = height,
-        row = row,
-        col = col,
+        width = dims.width,
+        height = dims.height,
+        row = dims.row,
+        col = dims.col,
         style = 'minimal',
         border = config.border,
         title = config.title,
@@ -354,5 +358,21 @@ function M.open_at_path(path)
 
     return state.win_id
 end
+
+vim.api.nvim_create_autocmd("VimResized", {
+    callback = function()
+        if not window_is_open() then
+            return
+        end
+        local dims = calc_window_dims()
+        vim.api.nvim_win_set_config(state.win_id, {
+            relative = 'editor',
+            width = dims.width,
+            height = dims.height,
+            row = dims.row,
+            col = dims.col,
+        })
+    end,
+})
 
 return M
