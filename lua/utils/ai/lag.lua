@@ -780,6 +780,25 @@ function M.start(get_context, get_session)
     })
     table.insert(autocmd_ids, write_id)
 
+    -- BufEnter: capture baseline when visiting a buffer (before user edits)
+    local enter_id = vim.api.nvim_create_autocmd("BufEnter", {
+        callback = function(ev)
+            local bufnr = ev.buf
+            local bt = vim.bo[bufnr].buftype
+            if bt ~= "" then return end
+            local name = vim.api.nvim_buf_get_name(bufnr)
+            if name == "" then return end
+            get_or_create_state(bufnr)
+        end,
+    })
+    table.insert(autocmd_ids, enter_id)
+
+    -- Eagerly capture baseline for the current buffer
+    local cur = vim.api.nvim_get_current_buf()
+    if vim.bo[cur].buftype == "" and vim.api.nvim_buf_get_name(cur) ~= "" then
+        get_or_create_state(cur)
+    end
+
     -- Global CursorMoved: update active modification
     local cursor_id = vim.api.nvim_create_autocmd("CursorMoved", {
         callback = function(ev)

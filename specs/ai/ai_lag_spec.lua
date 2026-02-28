@@ -257,15 +257,16 @@ describe("Lag Global Lifecycle", function()
         assert(not lag.is_running(), "Lag should not be running after reset")
     end)
 
-    it("creates buffer state on demand when saving", function()
-        lag.start(noop_context, noop_session)
+    it("captures baseline for current buffer on start", function()
         local buf = make_buf({ "hello", "world" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
 
-        lag._on_save(buf)
+        lag.start(noop_context, noop_session)
 
-        assert(lag.is_active(buf), "Buffer state should be created on save")
+        assert(lag.is_active(buf), "Current buffer should have state after start")
+        local state = lag.get_state(buf)
+        eq({ "hello", "world" }, state.baseline, "Baseline should match buffer at start time")
     end)
 end)
 
