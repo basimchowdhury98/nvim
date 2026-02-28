@@ -50,6 +50,8 @@ end
 local api = require("utils.ai.api")
 local stub_response = "I am a test response"
 local stub_error = nil
+local stub_hang = false
+local stub_cancel_spy = nil
 local stream_messages_spy = nil
 
 local function stub_api()
@@ -58,6 +60,10 @@ local function stub_api()
         if stub_error then
             on_error(stub_error)
             return function() end
+        end
+        if stub_hang then
+            stub_cancel_spy = false
+            return function() stub_cancel_spy = true end
         end
         on_delta(stub_response)
         on_done()
@@ -102,7 +108,7 @@ describe("AI Chat Plugin", function()
 
         ai.toggle()
 
-        eq(#vim.api.nvim_list_wins(), win_count_before + 1)
+        eq(#vim.api.nvim_list_wins(), win_count_before + 1, "One new window should be open")
         assert(chat.is_open(), "Chat should be open")
     end)
 
@@ -118,7 +124,7 @@ describe("AI Chat Plugin", function()
 
         ai.toggle()
 
-        eq(vim.api.nvim_get_current_win(), original_win)
+        eq(vim.api.nvim_get_current_win(), original_win, "Focus should return to original window")
     end)
 
     it("prompt opens a floating input window", function()
@@ -220,6 +226,75 @@ describe("AI Chat Plugin", function()
                     "Old message should not be in conversation after clear")
             end
         end
+    end)
+end)
+
+describe("AI Chat Cancel", function()
+    local ai = require("utils.ai")
+    local chat = require("utils.ai.chat")
+    ai.setup()
+    stub_api()
+    vim.notify = function() end
+
+    before_each(function()
+        ai.clear()
+        stub_response = "I am a test response"
+        stub_error = nil
+        stub_hang = false
+        stub_cancel_spy = nil
+        stream_messages_spy = nil
+    end)
+
+    after_each(function()
+        stub_hang = false
+        close_all_floats()
+    end)
+
+    it("cancel interrupts an in-flight request", function()
+        stub_hang = true
+        send_user_message(ai, "hanging request")
+
+        ai.cancel()
+
+        assert(stub_cancel_spy == true, "Cancel function should have been called")
+        assert(chat_contains("*[interrupted]*"), "Chat should show interrupted marker")
+        assert(not chat.is_streaming(), "Should not be streaming after cancel")
+    end)
+
+    it("cancel removes the pending user message from history", function()
+        stub_hang = true
+        send_user_message(ai, "this will be cancelled")
+        ai.cancel()
+        stub_hang = false
+        stub_response = "fresh response"
+
+        send_user_message(ai, "followup")
+
+        for _, msg in ipairs(stream_messages_spy) do
+            if msg.role == "user" then
+                assert(not msg.content:find("this will be cancelled"),
+                    "Cancelled message should not be in conversation history")
+            end
+        end
+        assert(chat_contains("fresh response"), "Followup should get a response")
+    end)
+
+    it("cancel is a no-op when nothing is streaming", function()
+        ai.cancel()
+
+        assert(not chat.is_open(), "Chat should not have opened")
+    end)
+
+    it("can send a new message after cancelling", function()
+        stub_hang = true
+        send_user_message(ai, "will cancel")
+        ai.cancel()
+        stub_hang = false
+
+        send_user_message(ai, "new message")
+
+        assert(chat_contains("new message"), "New user message should appear")
+        assert(chat_contains("I am a test response"), "New response should appear")
     end)
 end)
 

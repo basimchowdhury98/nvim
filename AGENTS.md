@@ -81,8 +81,20 @@ Plugin specs under `lua/plugins/` generally do not have tests.
 
 ## Testing Conventions
 
-Tests are **functional, not unit tests**. They exercise real Neovim APIs (buffers,
-windows, keymaps) from the user's perspective. Test doubles are used sparingly.
+Tests are **functional, not unit tests**. The goal is maximum fidelity to real user
+experience while keeping tests blazing fast and deterministic.
+
+### Core Principle
+
+A test must behave like a real user interaction. The two guarantees:
+
+1. **If a test fails, a real user would experience the same failure.** Tests that fail
+   for reasons a user would never encounter are bugs in the test, not the code.
+2. **If a user experiences a failure, a test should also fail.** When a bug is found
+   in practice, add a test that reproduces it before fixing it. This is the natural
+   way to grow the suite — never speculatively, always in response to real breakage.
+
+If both guarantees hold, every test is meaningful and no real failure goes undetected.
 
 ### Rules
 
@@ -92,16 +104,30 @@ windows, keymaps) from the user's perspective. Test doubles are used sparingly.
 - **No mocking frameworks.** Stubs are manual, same pattern as the codebase's
   `spyOnTermOpen` — replace the function on the module table directly, reset in
   `before_each`.
+- **Mock only what is incidental, never what is under test.** Valid reasons to mock:
+  suppressing stdout noise, avoiding a slow external process that isn't the thing
+  being tested, or eliminating async flakiness from something peripheral. If the slow
+  or async thing *is* the behavior under test, do not mock it — instead, keep a small
+  number of tests that exercise it directly to ensure it still works.
 - **Snapshot shared state** with `vim.deepcopy()` when spying on tables that callbacks
   will mutate.
-- **Every assertion has a failure message:** `eq(actual, expected, "what went wrong")`
-  or `assert(condition, "what went wrong")`.
 - **Test idempotency** — calling the same operation twice should be safe.
 - **Test edge cases** — empty state, no-op operations, error paths.
 - **No waits, no sleeps.** Tests must run fast and deterministically.
-- **No brittleness.** If the app works, all tests pass. If a test fails, that same
-  functionality would fail for a real user.
+- **Isolate global state.** Neovim has pervasive global state (buffers, windows,
+  keymaps, global variables). Every test must clean up after itself in `before_each`
+  or `after_each`. A leaked buffer or keymap can cause false passes or mysterious
+  failures in unrelated tests.
 - **Helpers** are `local function` at file scope before the `describe` block.
+
+### What to test and what not to test
+
+- `lua/utils/` modules have clear inputs and outputs — these are the primary test
+  targets.
+- Plugin specs and keymaps are wiring. Testing that `<leader>x` calls the right
+  function is low-value and brittle — don't test wiring.
+- Cross-platform branching (path separators, shell commands, `vim.fn.has()` checks)
+  is easy to miss. When a platform-specific bug is found, add a test for that path.
 
 ## Git Conventions
 

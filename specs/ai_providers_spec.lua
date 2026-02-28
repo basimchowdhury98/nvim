@@ -134,6 +134,179 @@ describe("AI Provider Streaming", function()
     end)
 end)
 
+describe("AI Provider SSE Parsing", function()
+    local job = require("utils.ai.job")
+    local original_run = job.run
+    local original_write_temp = job.write_temp
+    local original_schedule = vim.schedule
+
+    before_each(function()
+        -- Mock vim.schedule to execute immediately (incidental async wrapper)
+        vim.schedule = function(fn) fn() end
+        -- Mock write_temp to avoid file I/O
+        job.write_temp = function() return "/tmp/fake", nil end
+    end)
+
+    after_each(function()
+        job.run = original_run
+        job.write_temp = original_write_temp
+        vim.schedule = original_schedule
+    end)
+
+    it("anthropic parses content_block_delta into on_delta", function()
+        local provider = providers_mod.get("anthropic")
+        local deltas = {}
+        local done = false
+        job.run = function(opts)
+            opts.on_stdout('data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"hello"}}')
+            opts.on_stdout('data: {"type":"content_block_delta","delta":{"type":"text_delta","text":" world"}}')
+            opts.on_stdout('data: {"type":"message_stop"}')
+            opts.on_exit(0, "")
+            return function() end
+        end
+
+        provider.stream(
+            { { role = "user", content = "test" } },
+            { api_key = "test-key", model = "test", endpoint = "http://localhost",
+              api_version = "2023-06-01", system_prompt = "test", max_tokens = 100 },
+            {
+                on_delta = function(text) table.insert(deltas, text) end,
+                on_done = function() done = true end,
+                on_error = function() end,
+            }
+        )
+
+        eq(deltas, { "hello", " world" }, "Should have received both text deltas")
+        assert(done, "on_done should have been called on message_stop")
+    end)
+
+    it("anthropic parses error events into on_error", function()
+        local provider = providers_mod.get("anthropic")
+        local error_msg = nil
+        job.run = function(opts)
+            opts.on_stdout('data: {"type":"error","error":{"message":"rate limited"}}')
+            opts.on_exit(0, "")
+            return function() end
+        end
+
+        provider.stream(
+            { { role = "user", content = "test" } },
+            { api_key = "test-key", model = "test", endpoint = "http://localhost",
+              api_version = "2023-06-01", system_prompt = "test", max_tokens = 100 },
+            {
+                on_delta = function() end,
+                on_done = function() end,
+                on_error = function(err) error_msg = err end,
+            }
+        )
+
+        eq(error_msg, "rate limited", "Should have parsed the error message")
+    end)
+
+    it("anthropic parses non-SSE JSON error responses", function()
+        local provider = providers_mod.get("anthropic")
+        local error_msg = nil
+        job.run = function(opts)
+            opts.on_stdout('{"type":"error","error":{"message":"invalid api key"}}')
+            opts.on_exit(0, "")
+            return function() end
+        end
+
+        provider.stream(
+            { { role = "user", content = "test" } },
+            { api_key = "test-key", model = "test", endpoint = "http://localhost",
+              api_version = "2023-06-01", system_prompt = "test", max_tokens = 100 },
+            {
+                on_delta = function() end,
+                on_done = function() end,
+                on_error = function(err) error_msg = err end,
+            }
+        )
+
+        eq(error_msg, "invalid api key", "Should have parsed the JSON error response")
+    end)
+
+    it("alt parses OpenAI-style SSE deltas into on_delta", function()
+        local provider = providers_mod.get("alt")
+        local deltas = {}
+        local done = false
+        job.run = function(opts)
+            opts.on_stdout('data: {"choices":[{"delta":{"content":"foo"}}]}')
+            opts.on_stdout('data: {"choices":[{"delta":{"content":"bar"}}]}')
+            opts.on_stdout("data: [DONE]")
+            opts.on_exit(0, "")
+            return function() end
+        end
+
+        provider.stream(
+            { { role = "user", content = "test" } },
+            { api_key = "key", model = "m", endpoint = "http://localhost",
+              system_prompt = "test", max_tokens = 100 },
+            {
+                on_delta = function(text) table.insert(deltas, text) end,
+                on_done = function() done = true end,
+                on_error = function() end,
+            }
+        )
+
+        eq(deltas, { "foo", "bar" }, "Should have received both deltas")
+        assert(done, "on_done should have been called on [DONE]")
+    end)
+
+    it("alt parses JSON error responses", function()
+        local provider = providers_mod.get("alt")
+        local error_msg = nil
+        job.run = function(opts)
+            opts.on_stdout('{"error":{"message":"bad request"}}')
+            opts.on_exit(0, "")
+            return function() end
+        end
+
+        provider.stream(
+            { { role = "user", content = "test" } },
+            { api_key = "key", model = "m", endpoint = "http://localhost",
+              system_prompt = "test", max_tokens = 100 },
+            {
+                on_delta = function() end,
+                on_done = function() end,
+                on_error = function(err) error_msg = err end,
+            }
+        )
+
+        eq(error_msg, "bad request", "Should have parsed the error message")
+    end)
+
+    it("anthropic ignores non-text SSE events", function()
+        local provider = providers_mod.get("anthropic")
+        local deltas = {}
+        local done = false
+        job.run = function(opts)
+            opts.on_stdout('data: {"type":"message_start","message":{"id":"msg_123"}}')
+            opts.on_stdout('data: {"type":"content_block_start","content_block":{"type":"text"}}')
+            opts.on_stdout('data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"actual"}}')
+            opts.on_stdout('data: {"type":"content_block_stop"}')
+            opts.on_stdout('data: {"type":"message_delta","delta":{"stop_reason":"end_turn"}}')
+            opts.on_stdout('data: {"type":"message_stop"}')
+            opts.on_exit(0, "")
+            return function() end
+        end
+
+        provider.stream(
+            { { role = "user", content = "test" } },
+            { api_key = "test-key", model = "test", endpoint = "http://localhost",
+              api_version = "2023-06-01", system_prompt = "test", max_tokens = 100 },
+            {
+                on_delta = function(text) table.insert(deltas, text) end,
+                on_done = function() done = true end,
+                on_error = function() end,
+            }
+        )
+
+        eq(deltas, { "actual" }, "Should only capture text deltas, not other event types")
+        assert(done, "on_done should have been called")
+    end)
+end)
+
 describe("AI Provider Dispatcher", function()
     local api = require("utils.ai.api")
 

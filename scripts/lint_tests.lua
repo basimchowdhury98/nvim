@@ -109,7 +109,61 @@ local function find_it_blocks(root, source)
     return results
 end
 
-local function check_file(path, errors)
+--- Count the arguments in a function_call's arguments node.
+--- Returns the number of expression children (skips punctuation like commas/parens).
+local function count_call_args(args_node)
+    local count = 0
+    for child in args_node:iter_children() do
+        local t = child:type()
+        if t ~= "(" and t ~= ")" and t ~= "," then
+            count = count + 1
+        end
+    end
+    return count
+end
+
+--- Find assertions missing failure messages in a spec file.
+--- Checks: eq(a, b) missing 3rd arg, assert(expr) missing 2nd arg.
+local function check_assertion_messages(root, source, path, errors)
+    local query = vim.treesitter.query.parse("lua", [[
+        (function_call
+            name: (identifier) @fn_name
+            arguments: (arguments) @args
+            (#any-of? @fn_name "eq" "assert"))
+    ]])
+
+    for _, match in query:iter_matches(root, source, 0, -1, { all = true }) do
+        local fn_name_node = nil
+        local args_node = nil
+        for id, nodes in pairs(match) do
+            local name = query.captures[id]
+            if name == "fn_name" then fn_name_node = nodes[1] end
+            if name == "args" then args_node = nodes[1] end
+        end
+
+        if fn_name_node and args_node then
+            local fn_name = vim.treesitter.get_node_text(fn_name_node, source)
+            local arg_count = count_call_args(args_node)
+            local line = fn_name_node:start() + 1 -- 0-indexed to 1-indexed
+
+            if fn_name == "eq" and arg_count < 3 then
+                errors[#errors + 1] = {
+                    file = path,
+                    line = line,
+                    msg = "eq() missing failure message (expected 3rd string argument)",
+                }
+            elseif fn_name == "assert" and arg_count < 2 then
+                errors[#errors + 1] = {
+                    file = path,
+                    line = line,
+                    msg = "assert() missing failure message (expected 2nd string argument)",
+                }
+            end
+        end
+    end
+end
+
+local function check_file(path, errors, is_spec)
     local source = read_file(path)
     if not source then return end
 
@@ -162,11 +216,16 @@ local function check_file(path, errors)
             end
         end
     end
+
+    if is_spec then
+        check_assertion_messages(root, source, path, errors)
+    end
 end
 
 local function main()
     local root = vim.fn.getcwd()
     local all_dirs = { root .. "/lua", root .. "/specs" }
+    local spec_dirs = { root .. "/specs" }
     local single_files = { root .. "/init.lua" }
 
     local lua_files = {}
@@ -179,10 +238,17 @@ local function main()
         lua_files[#lua_files + 1] = f
     end
 
+    local spec_files = {}
+    for _, dir in ipairs(spec_dirs) do
+        for _, f in ipairs(find_lua_files(dir)) do
+            spec_files[f] = true
+        end
+    end
+
     local errors = {}
 
     for _, path in ipairs(lua_files) do
-        check_file(path, errors)
+        check_file(path, errors, spec_files[path])
     end
 
     if #errors == 0 then
@@ -197,7 +263,10 @@ local function main()
     end
 
     io.stderr:write(string.format("\nlint_tests: %d violation(s) found\n", #errors))
-    io.stderr:write("Fix: every it() test must have 2 (act + assert) or 3 (arrange + act + assert) sections separated by 1 empty line, with no comments labeling the sections.\n")
+    io.stderr:write("Rules:\n")
+    io.stderr:write("  - every it() body must have 2 or 3 sections separated by 1 blank line (no section-labeling comments)\n")
+    io.stderr:write("  - every eq() must have a 3rd failure message argument\n")
+    io.stderr:write("  - every assert() must have a 2nd failure message argument\n")
     vim.cmd("cquit 1")
 end
 
