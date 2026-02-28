@@ -4,7 +4,7 @@ local M = {}
 
 M.handles = {}
 
-function M:init()
+function M.init()
     local group = vim.api.nvim_create_augroup("RoslynFidgetHooks", {})
 
     vim.api.nvim_create_autocmd({ "User" }, {
@@ -28,7 +28,7 @@ function M:init()
         callback = function (request)
             local handle = M.handles[request.data.client_id]
             if handle then
-               handle.message = "Completed" 
+               handle.message = "Completed"
                handle:finish()
                handle[request.data.client_id] = nil
             end

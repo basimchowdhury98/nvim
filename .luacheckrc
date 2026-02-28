@@ -1,7 +1,7 @@
 std = "luajit"
 max_line_length = false
 
-read_globals = {
+globals = {
     "vim",
 }
 

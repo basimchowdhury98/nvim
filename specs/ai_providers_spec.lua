@@ -10,11 +10,12 @@ describe("AI Provider Contract", function()
     local provider_names = providers_mod.list()
 
     it("lists all registered providers", function()
-        assert(#provider_names >= 3, "Should have at least 3 providers, got " .. #provider_names)
         local lookup = {}
         for _, name in ipairs(provider_names) do
             lookup[name] = true
         end
+
+        assert(#provider_names >= 3, "Should have at least 3 providers, got " .. #provider_names)
         assert(lookup["opencode"], "Should include opencode provider")
         assert(lookup["anthropic"], "Should include anthropic provider")
         assert(lookup["alt"], "Should include alt provider")
@@ -172,10 +173,8 @@ describe("AI Provider Dispatcher", function()
     end)
 
     it("stream delegates to the resolved provider", function()
-        -- Stub stream on all providers so we can verify delegation
         local called_provider = nil
         local original_streams = {}
-
         for _, name in ipairs(providers_mod.list()) do
             local p = providers_mod.get(name)
             original_streams[name] = p.stream
@@ -185,7 +184,6 @@ describe("AI Provider Dispatcher", function()
                 return function() end
             end
         end
-
         local original_env = vim.fn.getenv("AI_WORK")
         vim.fn.setenv("AI_WORK", vim.NIL)
 
@@ -197,8 +195,6 @@ describe("AI Provider Dispatcher", function()
         )
 
         eq(called_provider, "opencode", "Should have called opencode provider")
-
-        -- Restore
         for _, name in ipairs(providers_mod.list()) do
             local p = providers_mod.get(name)
             p.stream = original_streams[name]
@@ -210,16 +206,13 @@ describe("AI Provider Dispatcher", function()
         local captured_callbacks = nil
         local p = providers_mod.get("opencode")
         local original_stream = p.stream
-
         p.stream = function(_, _, callbacks)
             captured_callbacks = callbacks
             callbacks.on_done()
             return function() end
         end
-
         local original_env = vim.fn.getenv("AI_WORK")
         vim.fn.setenv("AI_WORK", vim.NIL)
-
         local delta_called = false
         local done_called = false
 
@@ -234,11 +227,10 @@ describe("AI Provider Dispatcher", function()
         assert(type(captured_callbacks.on_delta) == "function", "Callbacks should include on_delta")
         assert(type(captured_callbacks.on_done) == "function", "Callbacks should include on_done")
         assert(type(captured_callbacks.on_error) == "function", "Callbacks should include on_error")
-
-        -- Verify the callbacks are wired to the original functions
         captured_callbacks.on_delta("test")
         assert(delta_called, "on_delta should be wired to the caller's function")
-
+        captured_callbacks.on_done("test")
+        assert(done_called, "on_done should be wired to the caller's function")
         p.stream = original_stream
         vim.fn.setenv("AI_WORK", original_env)
     end)
@@ -247,13 +239,11 @@ describe("AI Provider Dispatcher", function()
         local captured_config = nil
         local p = providers_mod.get("opencode")
         local original_stream = p.stream
-
         p.stream = function(_, cfg, callbacks)
             captured_config = cfg
             callbacks.on_done()
             return function() end
         end
-
         local original_env = vim.fn.getenv("AI_WORK")
         vim.fn.setenv("AI_WORK", vim.NIL)
 
@@ -267,7 +257,6 @@ describe("AI Provider Dispatcher", function()
         assert(captured_config, "Provider should receive config")
         assert(captured_config.system_prompt, "Config should include system_prompt")
         assert(captured_config.max_tokens, "Config should include max_tokens")
-
         p.stream = original_stream
         vim.fn.setenv("AI_WORK", original_env)
     end)

@@ -461,7 +461,7 @@ end)
 
 describe("AI Chat Quoted Selection", function()
     local ai = require("utils.ai")
-    local chat = require("utils.ai.chat")
+    require("utils.ai.chat")
     ai.setup()
     stub_api()
     vim.notify = function() end
@@ -649,7 +649,6 @@ describe("AI Project-Scoped Sessions", function()
     it("returning to previous cwd shows empty panel (single Q&A view)", function()
         vim.fn.chdir("/tmp")
         send_user_message(ai, "project A first")
-
         vim.fn.chdir("/")
         send_user_message(ai, "project B message")
 
@@ -697,17 +696,14 @@ describe("AI Project-Scoped Sessions", function()
     it("clear only affects the current project's history", function()
         vim.fn.chdir("/tmp")
         send_user_message(ai, "tmp message")
-
         vim.fn.chdir("/")
         send_user_message(ai, "root message")
         ai.clear()
 
-        -- Return to /tmp and send a new message - history should still include the old one
         vim.fn.chdir("/tmp")
         stub_response = "tmp response 2"
         send_user_message(ai, "tmp followup")
 
-        -- The API should receive the old /tmp conversation in history
         assert(#stream_messages_spy >= 3,
             "API should receive previous history from /tmp project")
         local first_msg = stream_messages_spy[1]

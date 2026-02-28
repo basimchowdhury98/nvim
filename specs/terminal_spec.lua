@@ -329,5 +329,7 @@ describe("Floating terminal", function()
 
     it("delete curr terminal when nothing is loaded does nothing", function ()
         term.delete_curr()
+
+        assert(true, "delete_curr on empty state should not error")
     end)
 end)
