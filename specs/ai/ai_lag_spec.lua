@@ -200,7 +200,7 @@ describe("Lag Filter To Diff", function()
     end)
 end)
 
-describe("Lag Lifecycle", function()
+describe("Lag Global Lifecycle", function()
     local ai = require("utils.ai")
     ai.setup()
     stub_api()
@@ -221,68 +221,51 @@ describe("Lag Lifecycle", function()
         stream_opts_spy = nil
     end)
 
-    it("start activates lag mode for the current buffer", function()
-        local buf = make_buf({ "line1" })
-        table.insert(test_bufs, buf)
-        vim.api.nvim_set_current_buf(buf)
-
+    it("start activates lag mode globally", function()
         lag.start(noop_context, noop_session)
 
-        assert(lag.is_active(buf), "Lag should be active after start")
+        assert(lag.is_running(), "Lag should be running after start")
     end)
 
     it("stop deactivates lag mode", function()
-        local buf = make_buf({ "line1" })
-        table.insert(test_bufs, buf)
-        vim.api.nvim_set_current_buf(buf)
         lag.start(noop_context, noop_session)
 
         lag.stop()
 
-        assert(not lag.is_active(buf), "Lag should not be active after stop")
+        assert(not lag.is_running(), "Lag should not be running after stop")
     end)
 
     it("start is idempotent (warns on double start)", function()
-        local buf = make_buf({ "line1" })
-        table.insert(test_bufs, buf)
-        vim.api.nvim_set_current_buf(buf)
         lag.start(noop_context, noop_session)
 
         lag.start(noop_context, noop_session)
 
-        assert(lag.is_active(buf), "Lag should still be active")
+        assert(lag.is_running(), "Lag should still be running")
     end)
 
-    it("stop is safe when not active", function()
-        local buf = make_buf({ "line1" })
-        table.insert(test_bufs, buf)
-        vim.api.nvim_set_current_buf(buf)
-
+    it("stop is safe when not running", function()
         lag.stop()
 
-        assert(not lag.is_active(buf), "Should not error on stop when inactive")
+        assert(not lag.is_running(), "Should not error on stop when not running")
     end)
 
-    it("reset clears all buffer state", function()
-        local buf = make_buf({ "line1" })
-        table.insert(test_bufs, buf)
-        vim.api.nvim_set_current_buf(buf)
+    it("reset clears all state", function()
         lag.start(noop_context, noop_session)
 
         lag.reset()
 
-        assert(not lag.is_active(buf), "Lag should not be active after reset")
+        assert(not lag.is_running(), "Lag should not be running after reset")
     end)
 
-    it("stores baseline on start", function()
+    it("creates buffer state on demand when saving", function()
+        lag.start(noop_context, noop_session)
         local buf = make_buf({ "hello", "world" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
 
-        lag.start(noop_context, noop_session)
+        lag._on_save(buf)
 
-        local state = lag.get_state(buf)
-        eq({ "hello", "world" }, state.baseline, "Baseline should match initial buffer content")
+        assert(lag.is_active(buf), "Buffer state should be created on save")
     end)
 end)
 
@@ -312,26 +295,27 @@ describe("Lag On-Save Processing", function()
     end)
 
     it("skips processing when there is no diff", function()
+        lag.start(noop_context, noop_session)
         local buf = make_buf({ "a", "b" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
-        lag.start(noop_context, noop_session)
 
-        lag._on_save(buf, noop_context, noop_session)
+        lag._on_save(buf)
 
         local state = lag.get_state(buf)
         eq(0, #state.modifications, "Should have no modifications when no diff")
     end)
 
     it("processes diff and applies modifications", function()
+        lag.start(noop_context, noop_session)
         local buf = make_buf({ "a", "b", "c" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
-        lag.start(noop_context, noop_session)
+        lag._get_or_create_state(buf)
         vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "CHANGED" })
         stub_response = '[{"start_line": 2, "end_line": 2, "replacement": "FIXED", "comment": "fixed bug"}]'
 
-        lag._on_save(buf, noop_context, noop_session)
+        lag._on_save(buf)
 
         local lines = get_buf_lines(buf)
         eq("FIXED", lines[2], "Line 2 should be replaced with the fix")
@@ -341,14 +325,15 @@ describe("Lag On-Save Processing", function()
     end)
 
     it("rejects modifications outside the diff region", function()
+        lag.start(noop_context, noop_session)
         local buf = make_buf({ "a", "b", "c", "d", "e" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
-        lag.start(noop_context, noop_session)
+        lag._get_or_create_state(buf)
         vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "CHANGED" })
         stub_response = '[{"start_line": 4, "end_line": 4, "replacement": "NOPE", "comment": "outside diff"}]'
 
-        lag._on_save(buf, noop_context, noop_session)
+        lag._on_save(buf)
 
         local lines = get_buf_lines(buf)
         eq("d", lines[4], "Line 4 should be unchanged (outside diff)")
@@ -357,14 +342,15 @@ describe("Lag On-Save Processing", function()
     end)
 
     it("handles LLM error gracefully", function()
+        lag.start(noop_context, noop_session)
         local buf = make_buf({ "a", "b" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
-        lag.start(noop_context, noop_session)
+        lag._get_or_create_state(buf)
         vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "CHANGED" })
         stub_error = "connection failed"
 
-        lag._on_save(buf, noop_context, noop_session)
+        lag._on_save(buf)
 
         local state = lag.get_state(buf)
         assert(not state.processing, "Processing flag should be cleared after error")
@@ -372,40 +358,46 @@ describe("Lag On-Save Processing", function()
     end)
 
     it("passes system prompt override via opts", function()
+        lag.start(noop_context, noop_session)
         local buf = make_buf({ "a", "b" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
-        lag.start(noop_context, noop_session)
+        lag._get_or_create_state(buf)
         vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "CHANGED" })
 
-        lag._on_save(buf, noop_context, noop_session)
+        lag._on_save(buf)
 
         assert(stream_opts_spy ~= nil, "Should pass opts to api.stream")
         assert(stream_opts_spy.system_prompt ~= nil, "Should include system_prompt in opts")
     end)
 
-    it("updates baseline after applying modifications", function()
-        local buf = make_buf({ "a", "b", "c" })
+    it("accumulates modifications across saves", function()
+        lag.start(noop_context, noop_session)
+        local buf = make_buf({ "a", "b", "c", "d", "e" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
-        lag.start(noop_context, noop_session)
-        vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "CHANGED" })
-        stub_response = '[{"start_line": 2, "end_line": 2, "replacement": "FIXED", "comment": "fix"}]'
+        lag._get_or_create_state(buf)
+        vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "CHANGED1" })
+        stub_response = '[{"start_line": 2, "end_line": 2, "replacement": "FIX1", "comment": "first"}]'
+        lag._on_save(buf)
+        vim.api.nvim_buf_set_lines(buf, 3, 4, false, { "CHANGED2" })
+        stub_response = '[{"start_line": 4, "end_line": 4, "replacement": "FIX2", "comment": "second"}]'
 
-        lag._on_save(buf, noop_context, noop_session)
+        lag._on_save(buf)
 
         local state = lag.get_state(buf)
-        eq({ "a", "FIXED", "c" }, state.baseline, "Baseline should include AI modifications")
+        eq(2, #state.modifications, "Should accumulate both modifications")
     end)
 
     it("does not treat AI modifications as a diff on next save", function()
+        lag.start(noop_context, noop_session)
         local buf = make_buf({ "a", "b", "c" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
-        lag.start(noop_context, noop_session)
+        lag._get_or_create_state(buf)
         vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "CHANGED" })
         stub_response = '[{"start_line": 2, "end_line": 2, "replacement": "FIXED", "comment": "fix"}]'
-        lag._on_save(buf, noop_context, noop_session)
+        lag._on_save(buf)
         local call_count = 0
         api.stream = function(_messages, on_delta, on_done, _on_error, _opts)
             call_count = call_count + 1
@@ -414,27 +406,9 @@ describe("Lag On-Save Processing", function()
             return function() end
         end
 
-        lag._on_save(buf, noop_context, noop_session)
+        lag._on_save(buf)
 
         eq(0, call_count, "Should not call LLM when no user changes exist")
-    end)
-
-    it("clears previous modifications before processing new ones", function()
-        local buf = make_buf({ "a", "b", "c" })
-        table.insert(test_bufs, buf)
-        vim.api.nvim_set_current_buf(buf)
-        lag.start(noop_context, noop_session)
-        vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "CHANGED" })
-        stub_response = '[{"start_line": 2, "end_line": 2, "replacement": "FIX1", "comment": "first"}]'
-        lag._on_save(buf, noop_context, noop_session)
-        vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "CHANGED2" })
-        stub_response = '[{"start_line": 1, "end_line": 1, "replacement": "FIX2", "comment": "second"}]'
-
-        lag._on_save(buf, noop_context, noop_session)
-
-        local state = lag.get_state(buf)
-        eq(1, #state.modifications, "Should only have the latest modification")
-        eq("second", state.modifications[1].comment, "Should be the second modification")
     end)
 
     it("skips processing when diff is whitespace-only", function()
@@ -445,52 +419,243 @@ describe("Lag On-Save Processing", function()
             on_done()
             return function() end
         end
+        lag.start(noop_context, noop_session)
         local buf = make_buf({ "a", "", "c" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
-        lag.start(noop_context, noop_session)
+        lag._get_or_create_state(buf)
         vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "   " })
 
-        lag._on_save(buf, noop_context, noop_session)
+        lag._on_save(buf)
 
         eq(0, call_count, "Should not call LLM for whitespace-only diff")
     end)
+end)
 
-    it("skips processing when already processing", function()
-        local buf = make_buf({ "a", "b" })
-        table.insert(test_bufs, buf)
-        vim.api.nvim_set_current_buf(buf)
-        lag.start(noop_context, noop_session)
-        vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "CHANGED" })
-        local state = lag.get_state(buf)
-        state.processing = true
+describe("Lag Save Queueing", function()
+    local ai = require("utils.ai")
+    ai.setup()
+    stub_api()
+    vim.notify = function() end
 
-        lag._on_save(buf, noop_context, noop_session)
+    local test_bufs = {}
 
-        eq(0, #state.modifications, "Should not process when already processing")
+    before_each(function()
+        lag.reset()
+        for _, buf in ipairs(test_bufs) do
+            if vim.api.nvim_buf_is_valid(buf) then
+                vim.api.nvim_buf_delete(buf, { force = true })
+            end
+        end
+        test_bufs = {}
+        stub_response = "[]"
+        stub_error = nil
     end)
 
-    it("includes context and session in the prompt", function()
-        local context_called = false
-        local session_called = false
-        local buf = make_buf({ "a", "b" })
+    after_each(function()
+        stub_api()
+    end)
+
+    it("queues save when already processing", function()
+        local on_done_cb = nil
+        api.stream = function(_messages, _on_delta, on_done, _on_error, _opts)
+            on_done_cb = on_done
+            return function() end
+        end
+        lag.start(noop_context, noop_session)
+        local buf = make_buf({ "a", "b", "c" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
+        lag._get_or_create_state(buf)
+        vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "FIRST" })
+        lag._on_save(buf)
+        vim.api.nvim_buf_set_lines(buf, 2, 3, false, { "SECOND" })
+
+        lag._on_save(buf)
+
+        local state = lag.get_state(buf)
+        assert(state.pending_save, "Should have a pending save queued")
+        eq(1, state.queue_count, "Should have 1 queued save")
+        if on_done_cb then on_done_cb() end
+    end)
+
+    it("processes queued save after current completes", function()
+        local call_count = 0
+        local on_done_cb = nil
+        api.stream = function(_messages, on_delta, on_done, _on_error, _opts)
+            call_count = call_count + 1
+            if call_count == 1 then
+                on_done_cb = on_done
+            else
+                on_delta("[]")
+                on_done()
+            end
+            return function() end
+        end
         lag.start(noop_context, noop_session)
-        vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "CHANGED" })
-        local ctx_fn = function()
-            context_called = true
-            return "mock context"
-        end
-        local sess_fn = function()
-            session_called = true
-            return { conversation = { { role = "user", content = "prior msg" } } }
-        end
+        local buf = make_buf({ "a", "b", "c" })
+        table.insert(test_bufs, buf)
+        vim.api.nvim_set_current_buf(buf)
+        lag._get_or_create_state(buf)
+        vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "FIRST" })
+        lag._on_save(buf)
+        vim.api.nvim_buf_set_lines(buf, 2, 3, false, { "SECOND" })
+        lag._on_save(buf)
 
-        lag._on_save(buf, ctx_fn, sess_fn)
+        on_done_cb()
 
-        assert(context_called, "Context function should have been called")
-        assert(session_called, "Session function should have been called")
+        eq(2, call_count, "Should have made 2 LLM calls (original + queued)")
+    end)
+
+    it("processes queued save after error", function()
+        local call_count = 0
+        local on_error_cb = nil
+        api.stream = function(_messages, on_delta, on_done, on_error, _opts)
+            call_count = call_count + 1
+            if call_count == 1 then
+                on_error_cb = on_error
+            else
+                on_delta("[]")
+                on_done()
+            end
+            return function() end
+        end
+        lag.start(noop_context, noop_session)
+        local buf = make_buf({ "a", "b", "c" })
+        table.insert(test_bufs, buf)
+        vim.api.nvim_set_current_buf(buf)
+        lag._get_or_create_state(buf)
+        vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "FIRST" })
+        lag._on_save(buf)
+        vim.api.nvim_buf_set_lines(buf, 2, 3, false, { "SECOND" })
+        lag._on_save(buf)
+
+        on_error_cb("network error")
+
+        eq(2, call_count, "Should process queued save even after error")
+    end)
+
+    it("coalesces multiple queued saves into one", function()
+        local on_done_cb = nil
+        local call_count = 0
+        api.stream = function(_messages, on_delta, on_done, _on_error, _opts)
+            call_count = call_count + 1
+            if call_count == 1 then
+                on_done_cb = on_done
+            else
+                on_delta("[]")
+                on_done()
+            end
+            return function() end
+        end
+        lag.start(noop_context, noop_session)
+        local buf = make_buf({ "a", "b", "c" })
+        table.insert(test_bufs, buf)
+        vim.api.nvim_set_current_buf(buf)
+        lag._get_or_create_state(buf)
+        vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "FIRST" })
+        lag._on_save(buf)
+        vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "SECOND" })
+        lag._on_save(buf)
+        lag._on_save(buf)
+
+        on_done_cb()
+
+        eq(2, call_count, "Multiple queued saves should coalesce into one call")
+    end)
+end)
+
+describe("Lag Modification Pruning", function()
+    local ai = require("utils.ai")
+    ai.setup()
+    stub_api()
+    vim.notify = function() end
+
+    local test_bufs = {}
+
+    before_each(function()
+        lag.reset()
+        for _, buf in ipairs(test_bufs) do
+            if vim.api.nvim_buf_is_valid(buf) then
+                vim.api.nvim_buf_delete(buf, { force = true })
+            end
+        end
+        test_bufs = {}
+        stub_response = "[]"
+        stub_error = nil
+    end)
+
+    after_each(function()
+        stub_api()
+    end)
+
+    it("prunes modification when user edits the AI-touched lines", function()
+        lag.start(noop_context, noop_session)
+        local buf = make_buf({ "a", "b", "c" })
+        table.insert(test_bufs, buf)
+        vim.api.nvim_set_current_buf(buf)
+        lag._get_or_create_state(buf)
+        vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "CHANGED" })
+        stub_response = '[{"start_line": 2, "end_line": 2, "replacement": "FIXED", "comment": "fix"}]'
+        lag._on_save(buf)
+        vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "USER_EDIT" })
+
+        lag._prune_edited_modifications(buf)
+
+        local state = lag.get_state(buf)
+        eq(0, #state.modifications, "Should prune modification when user edited the line")
+    end)
+
+    it("keeps modification when AI-touched lines are unchanged", function()
+        lag.start(noop_context, noop_session)
+        local buf = make_buf({ "a", "b", "c" })
+        table.insert(test_bufs, buf)
+        vim.api.nvim_set_current_buf(buf)
+        lag._get_or_create_state(buf)
+        vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "CHANGED" })
+        stub_response = '[{"start_line": 2, "end_line": 2, "replacement": "FIXED", "comment": "fix"}]'
+        lag._on_save(buf)
+
+        lag._prune_edited_modifications(buf)
+
+        local state = lag.get_state(buf)
+        eq(1, #state.modifications, "Should keep modification when AI code is untouched")
+    end)
+
+    it("prunes selectively when only some modifications are edited", function()
+        lag.start(noop_context, noop_session)
+        local buf = make_buf({ "a", "b", "c", "d", "e" })
+        table.insert(test_bufs, buf)
+        vim.api.nvim_set_current_buf(buf)
+        lag._get_or_create_state(buf)
+        vim.api.nvim_buf_set_lines(buf, 0, 5, false, { "A", "B", "C", "D", "E" })
+        stub_response = '[{"start_line": 1, "end_line": 1, "replacement": "FIX_A", "comment": "fix a"}, {"start_line": 5, "end_line": 5, "replacement": "FIX_E", "comment": "fix e"}]'
+        lag._on_save(buf)
+        vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "USER_EDIT" })
+
+        lag._prune_edited_modifications(buf)
+
+        local state = lag.get_state(buf)
+        eq(1, #state.modifications, "Should keep only the untouched modification")
+        eq("fix e", state.modifications[1].comment, "Should keep the modification at line 5")
+    end)
+
+    it("prune runs automatically before each on_save", function()
+        lag.start(noop_context, noop_session)
+        local buf = make_buf({ "a", "b", "c" })
+        table.insert(test_bufs, buf)
+        vim.api.nvim_set_current_buf(buf)
+        lag._get_or_create_state(buf)
+        vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "CHANGED" })
+        stub_response = '[{"start_line": 2, "end_line": 2, "replacement": "FIXED", "comment": "fix"}]'
+        lag._on_save(buf)
+        vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "USER_EDIT" })
+        stub_response = "[]"
+
+        lag._on_save(buf)
+
+        local state = lag.get_state(buf)
+        eq(0, #state.modifications, "Pruning should happen before processing new save")
     end)
 end)
 
@@ -515,16 +680,17 @@ describe("Lag Revert", function()
     end)
 
     it("reverts the active modification to original code", function()
+        lag.start(noop_context, noop_session)
         local buf = make_buf({ "a", "b", "c" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
-        lag.start(noop_context, noop_session)
+        lag._get_or_create_state(buf)
         vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "CHANGED" })
         stub_response = '[{"start_line": 2, "end_line": 2, "replacement": "FIXED", "comment": "fix"}]'
-        lag._on_save(buf, noop_context, noop_session)
+        lag._on_save(buf)
         vim.api.nvim_win_set_cursor(0, { 2, 0 })
-
         lag._update_active(buf)
+
         local reverted = lag._revert_active(buf)
 
         assert(reverted, "Should return true on successful revert")
@@ -533,13 +699,14 @@ describe("Lag Revert", function()
     end)
 
     it("removes the modification entry after revert", function()
+        lag.start(noop_context, noop_session)
         local buf = make_buf({ "a", "b", "c" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
-        lag.start(noop_context, noop_session)
+        lag._get_or_create_state(buf)
         vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "CHANGED" })
         stub_response = '[{"start_line": 2, "end_line": 2, "replacement": "FIXED", "comment": "fix"}]'
-        lag._on_save(buf, noop_context, noop_session)
+        lag._on_save(buf)
         vim.api.nvim_win_set_cursor(0, { 2, 0 })
         lag._update_active(buf)
 
@@ -550,13 +717,14 @@ describe("Lag Revert", function()
     end)
 
     it("updates baseline after revert so revert is not a diff", function()
+        lag.start(noop_context, noop_session)
         local buf = make_buf({ "a", "b", "c" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
-        lag.start(noop_context, noop_session)
+        lag._get_or_create_state(buf)
         vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "CHANGED" })
         stub_response = '[{"start_line": 2, "end_line": 2, "replacement": "FIXED", "comment": "fix"}]'
-        lag._on_save(buf, noop_context, noop_session)
+        lag._on_save(buf)
         vim.api.nvim_win_set_cursor(0, { 2, 0 })
         lag._update_active(buf)
 
@@ -567,42 +735,26 @@ describe("Lag Revert", function()
     end)
 
     it("returns false when no modifications exist", function()
+        lag.start(noop_context, noop_session)
         local buf = make_buf({ "a", "b" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
-        lag.start(noop_context, noop_session)
+        lag._get_or_create_state(buf)
 
         local reverted = lag._revert_active(buf)
 
         assert(not reverted, "Should return false when no modifications to revert")
     end)
 
-    it("reverts nearest modification when cursor is between two", function()
-        local buf = make_buf({ "a", "b", "c", "d", "e" })
-        table.insert(test_bufs, buf)
-        vim.api.nvim_set_current_buf(buf)
-        lag.start(noop_context, noop_session)
-        vim.api.nvim_buf_set_lines(buf, 0, 5, false, { "A", "B", "C", "D", "E" })
-        stub_response = '[{"start_line": 1, "end_line": 1, "replacement": "FIX_A", "comment": "fix a"}, {"start_line": 5, "end_line": 5, "replacement": "FIX_E", "comment": "fix e"}]'
-        lag._on_save(buf, noop_context, noop_session)
-        vim.api.nvim_win_set_cursor(0, { 4, 0 })
-        lag._update_active(buf)
-
-        lag._revert_active(buf)
-
-        local lines = get_buf_lines(buf)
-        eq("FIX_A", lines[1], "First modification should remain")
-        eq("E", lines[5], "Nearest modification (line 5) should be reverted")
-    end)
-
     it("after revert the next closest becomes active", function()
+        lag.start(noop_context, noop_session)
         local buf = make_buf({ "a", "b", "c", "d", "e" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
-        lag.start(noop_context, noop_session)
+        lag._get_or_create_state(buf)
         vim.api.nvim_buf_set_lines(buf, 0, 5, false, { "A", "B", "C", "D", "E" })
         stub_response = '[{"start_line": 1, "end_line": 1, "replacement": "FIX_A", "comment": "fix a"}, {"start_line": 5, "end_line": 5, "replacement": "FIX_E", "comment": "fix e"}]'
-        lag._on_save(buf, noop_context, noop_session)
+        lag._on_save(buf)
         vim.api.nvim_win_set_cursor(0, { 5, 0 })
         lag._update_active(buf)
         lag._revert_active(buf)
@@ -614,13 +766,14 @@ describe("Lag Revert", function()
     end)
 
     it("handles multiline replacement revert correctly", function()
+        lag.start(noop_context, noop_session)
         local buf = make_buf({ "a", "b", "c" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
-        lag.start(noop_context, noop_session)
+        lag._get_or_create_state(buf)
         vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "CHANGED" })
         stub_response = '[{"start_line": 2, "end_line": 2, "replacement": "line1\\nline2\\nline3", "comment": "expanded"}]'
-        lag._on_save(buf, noop_context, noop_session)
+        lag._on_save(buf)
         vim.api.nvim_win_set_cursor(0, { 2, 0 })
         lag._update_active(buf)
 
@@ -652,13 +805,14 @@ describe("Lag Active Tracking", function()
     end)
 
     it("sets active to nearest modification on cursor move", function()
+        lag.start(noop_context, noop_session)
         local buf = make_buf({ "a", "b", "c", "d", "e" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
-        lag.start(noop_context, noop_session)
+        lag._get_or_create_state(buf)
         vim.api.nvim_buf_set_lines(buf, 0, 5, false, { "A", "B", "C", "D", "E" })
         stub_response = '[{"start_line": 1, "end_line": 1, "replacement": "FIX_A", "comment": "fix a"}, {"start_line": 5, "end_line": 5, "replacement": "FIX_E", "comment": "fix e"}]'
-        lag._on_save(buf, noop_context, noop_session)
+        lag._on_save(buf)
 
         vim.api.nvim_win_set_cursor(0, { 1, 0 })
         lag._update_active(buf)
@@ -668,13 +822,14 @@ describe("Lag Active Tracking", function()
     end)
 
     it("switches active when cursor moves to another modification", function()
+        lag.start(noop_context, noop_session)
         local buf = make_buf({ "a", "b", "c", "d", "e" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
-        lag.start(noop_context, noop_session)
+        lag._get_or_create_state(buf)
         vim.api.nvim_buf_set_lines(buf, 0, 5, false, { "A", "B", "C", "D", "E" })
         stub_response = '[{"start_line": 1, "end_line": 1, "replacement": "FIX_A", "comment": "fix a"}, {"start_line": 5, "end_line": 5, "replacement": "FIX_E", "comment": "fix e"}]'
-        lag._on_save(buf, noop_context, noop_session)
+        lag._on_save(buf)
         vim.api.nvim_win_set_cursor(0, { 1, 0 })
         lag._update_active(buf)
 
@@ -686,13 +841,14 @@ describe("Lag Active Tracking", function()
     end)
 
     it("does not re-render when active index unchanged", function()
+        lag.start(noop_context, noop_session)
         local buf = make_buf({ "a", "b", "c" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
-        lag.start(noop_context, noop_session)
+        lag._get_or_create_state(buf)
         vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "CHANGED" })
         stub_response = '[{"start_line": 2, "end_line": 2, "replacement": "FIXED", "comment": "fix"}]'
-        lag._on_save(buf, noop_context, noop_session)
+        lag._on_save(buf)
         vim.api.nvim_win_set_cursor(0, { 2, 0 })
         lag._update_active(buf)
         local state = lag.get_state(buf)
@@ -725,13 +881,14 @@ describe("Lag Clear Modifications", function()
     end)
 
     it("clears all modifications without reverting code", function()
+        lag.start(noop_context, noop_session)
         local buf = make_buf({ "a", "b", "c" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
-        lag.start(noop_context, noop_session)
+        lag._get_or_create_state(buf)
         vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "CHANGED" })
         stub_response = '[{"start_line": 2, "end_line": 2, "replacement": "FIXED", "comment": "fix"}]'
-        lag._on_save(buf, noop_context, noop_session)
+        lag._on_save(buf)
 
         lag._clear_modifications(buf)
 
@@ -742,13 +899,14 @@ describe("Lag Clear Modifications", function()
     end)
 
     it("clears active index", function()
+        lag.start(noop_context, noop_session)
         local buf = make_buf({ "a", "b" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
-        lag.start(noop_context, noop_session)
+        lag._get_or_create_state(buf)
         vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "CHANGED" })
         stub_response = '[{"start_line": 1, "end_line": 1, "replacement": "FIXED", "comment": "fix"}]'
-        lag._on_save(buf, noop_context, noop_session)
+        lag._on_save(buf)
 
         lag._clear_modifications(buf)
 
@@ -779,14 +937,15 @@ describe("Lag Diagnostics and Line Highlights", function()
     end)
 
     it("sets HINT diagnostics on modified lines", function()
+        lag.start(noop_context, noop_session)
         local buf = make_buf({ "a", "b", "c" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
-        lag.start(noop_context, noop_session)
+        lag._get_or_create_state(buf)
         vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "CHANGED" })
         stub_response = '[{"start_line": 2, "end_line": 2, "replacement": "FIXED", "comment": "bug fix"}]'
 
-        lag._on_save(buf, noop_context, noop_session)
+        lag._on_save(buf)
 
         local diags = vim.diagnostic.get(buf, { namespace = ns_diagnostic })
         eq(1, #diags, "Should have one diagnostic")
@@ -795,27 +954,29 @@ describe("Lag Diagnostics and Line Highlights", function()
     end)
 
     it("diagnostic message contains only original code", function()
+        lag.start(noop_context, noop_session)
         local buf = make_buf({ "a", "b", "c" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
-        lag.start(noop_context, noop_session)
+        lag._get_or_create_state(buf)
         vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "CHANGED" })
         stub_response = '[{"start_line": 2, "end_line": 2, "replacement": "FIXED", "comment": "bug fix"}]'
 
-        lag._on_save(buf, noop_context, noop_session)
+        lag._on_save(buf)
 
         local diags = vim.diagnostic.get(buf, { namespace = ns_diagnostic })
         eq("CHANGED", diags[1].message, "Diagnostic message should be the original code only")
     end)
 
     it("clears diagnostics when modifications are cleared", function()
+        lag.start(noop_context, noop_session)
         local buf = make_buf({ "a", "b", "c" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
-        lag.start(noop_context, noop_session)
+        lag._get_or_create_state(buf)
         vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "CHANGED" })
         stub_response = '[{"start_line": 2, "end_line": 2, "replacement": "FIXED", "comment": "fix"}]'
-        lag._on_save(buf, noop_context, noop_session)
+        lag._on_save(buf)
 
         lag._clear_modifications(buf)
 
@@ -824,13 +985,14 @@ describe("Lag Diagnostics and Line Highlights", function()
     end)
 
     it("clears diagnostics when lag is stopped", function()
+        lag.start(noop_context, noop_session)
         local buf = make_buf({ "a", "b", "c" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
-        lag.start(noop_context, noop_session)
+        lag._get_or_create_state(buf)
         vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "CHANGED" })
         stub_response = '[{"start_line": 2, "end_line": 2, "replacement": "FIXED", "comment": "fix"}]'
-        lag._on_save(buf, noop_context, noop_session)
+        lag._on_save(buf)
 
         lag.stop()
 
@@ -838,32 +1000,16 @@ describe("Lag Diagnostics and Line Highlights", function()
         eq(0, #diags, "Diagnostics should be cleared after stop")
     end)
 
-    it("clears diagnostics after revert", function()
-        local buf = make_buf({ "a", "b", "c" })
-        table.insert(test_bufs, buf)
-        vim.api.nvim_set_current_buf(buf)
-        lag.start(noop_context, noop_session)
-        vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "CHANGED" })
-        stub_response = '[{"start_line": 2, "end_line": 2, "replacement": "FIXED", "comment": "fix"}]'
-        lag._on_save(buf, noop_context, noop_session)
-        vim.api.nvim_win_set_cursor(0, { 2, 0 })
-        lag._update_active(buf)
-
-        lag._revert_active(buf)
-
-        local diags = vim.diagnostic.get(buf, { namespace = ns_diagnostic })
-        eq(0, #diags, "Diagnostics should be cleared after reverting last modification")
-    end)
-
     it("sets line highlights on modified lines via extmarks", function()
+        lag.start(noop_context, noop_session)
         local buf = make_buf({ "a", "b", "c" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
-        lag.start(noop_context, noop_session)
+        lag._get_or_create_state(buf)
         vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "CHANGED" })
         stub_response = '[{"start_line": 2, "end_line": 2, "replacement": "FIXED", "comment": "fix"}]'
 
-        lag._on_save(buf, noop_context, noop_session)
+        lag._on_save(buf)
 
         local state = lag.get_state(buf)
         local extmarks = vim.api.nvim_buf_get_extmarks(buf, state.ns, 0, -1, { details = true })
@@ -874,22 +1020,6 @@ describe("Lag Diagnostics and Line Highlights", function()
             end
         end
         assert(has_line_hl, "Should have extmarks with line_hl_group set")
-    end)
-
-    it("diagnostic shows multiline original code", function()
-        local buf = make_buf({ "a", "b", "c", "d" })
-        table.insert(test_bufs, buf)
-        vim.api.nvim_set_current_buf(buf)
-        lag.start(noop_context, noop_session)
-        vim.api.nvim_buf_set_lines(buf, 1, 3, false, { "X", "Y" })
-        stub_response = '[{"start_line": 2, "end_line": 3, "replacement": "FIX1\\nFIX2", "comment": "multi fix"}]'
-
-        lag._on_save(buf, noop_context, noop_session)
-
-        local diags = vim.diagnostic.get(buf, { namespace = ns_diagnostic })
-        eq(1, #diags, "Should have one diagnostic for multiline modification")
-        assert(diags[1].message:find("X", 1, true), "Diagnostic should contain first original line")
-        assert(diags[1].message:find("Y", 1, true), "Diagnostic should contain second original line")
     end)
 end)
 
@@ -924,13 +1054,14 @@ describe("Lag Working Indicator Highlights", function()
             on_done()
             return function() end
         end
+        lag.start(noop_context, noop_session)
         local buf = make_buf({ "a", "b", "c", "d", "e" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
-        lag.start(noop_context, noop_session)
+        lag._get_or_create_state(buf)
         vim.api.nvim_buf_set_lines(buf, 1, 3, false, { "X", "Y" })
 
-        lag._on_save(buf, noop_context, noop_session)
+        lag._on_save(buf)
 
         assert(captured_extmarks ~= nil, "Should have captured extmarks during processing")
         local working_line_hls = 0
@@ -948,34 +1079,17 @@ describe("Lag Working Indicator Highlights", function()
             on_done()
             return function() end
         end
+        lag.start(noop_context, noop_session)
         local buf = make_buf({ "a", "b", "c" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
-        lag.start(noop_context, noop_session)
+        lag._get_or_create_state(buf)
         vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "CHANGED" })
 
-        lag._on_save(buf, noop_context, noop_session)
+        lag._on_save(buf)
 
         local extmarks = vim.api.nvim_buf_get_extmarks(buf, ns_work, 0, -1, { details = true })
         eq(0, #extmarks, "Working highlights should be cleared when no modifications")
-    end)
-
-    it("clears working highlights when modifications are applied", function()
-        api.stream = function(_messages, on_delta, on_done, _on_error, _opts)
-            on_delta('[{"start_line": 2, "end_line": 2, "replacement": "FIXED", "comment": "fix"}]')
-            on_done()
-            return function() end
-        end
-        local buf = make_buf({ "a", "b", "c" })
-        table.insert(test_bufs, buf)
-        vim.api.nvim_set_current_buf(buf)
-        lag.start(noop_context, noop_session)
-        vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "CHANGED" })
-
-        lag._on_save(buf, noop_context, noop_session)
-
-        local extmarks = vim.api.nvim_buf_get_extmarks(buf, ns_work, 0, -1, { details = true })
-        eq(0, #extmarks, "Working highlights should be cleared after modifications applied")
     end)
 
     it("clears working highlights on error", function()
@@ -983,13 +1097,14 @@ describe("Lag Working Indicator Highlights", function()
             on_error("connection failed")
             return function() end
         end
+        lag.start(noop_context, noop_session)
         local buf = make_buf({ "a", "b", "c" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
-        lag.start(noop_context, noop_session)
+        lag._get_or_create_state(buf)
         vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "CHANGED" })
 
-        lag._on_save(buf, noop_context, noop_session)
+        lag._on_save(buf)
 
         local extmarks = vim.api.nvim_buf_get_extmarks(buf, ns_work, 0, -1, { details = true })
         eq(0, #extmarks, "Working highlights should be cleared after error")

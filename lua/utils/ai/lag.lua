@@ -1,17 +1,24 @@
 -- lag.lua
--- AI Lag Mode: watches buffer saves, diffs changes, sends to LLM for
+-- AI Lag Mode: watches buffer saves globally, diffs changes, sends to LLM for
 -- automatic fixes/implementations within the changed regions.
 
 local api = require("utils.ai.api")
 local debug = require("utils.ai.debug")
 local M = {}
 
+-- Global state
+local running = false
+local autocmd_ids = {}
+local get_context_fn = nil
+local get_session_fn = nil
+
 -- Per-buffer state keyed by bufnr
 -- Each entry: {
 --   baseline = string[],       -- buffer snapshot at last user-initiated save
 --   processing = bool,         -- LLM call in flight for this buffer
+--   pending_save = bool,       -- save queued while processing
+--   queue_count = number,      -- number of queued saves waiting
 --   debounce_timer = uv_timer, -- debounce handle
---   autocmd_ids = number[],    -- registered autocmd ids
 --   modifications = table[],   -- applied modifications with original code for revert
 --   ns = number,               -- extmark namespace for this buffer
 --   active_index = number|nil, -- index of nearest modification to cursor
@@ -40,6 +47,26 @@ local function setup_highlights()
     vim.api.nvim_set_hl(0, "AILagActiveLine", { bg = "#253d25" })
 end
 
+--- Get or create per-buffer state.
+--- @param bufnr number
+--- @return table
+local function get_or_create_state(bufnr)
+    if not buffers[bufnr] then
+        buffers[bufnr] = {
+            baseline = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false),
+            processing = false,
+            pending_save = false,
+            queue_count = 0,
+            debounce_timer = nil,
+            modifications = {},
+            ns = vim.api.nvim_create_namespace("ai_lag_" .. bufnr),
+            active_index = nil,
+            working_extmarks = {},
+        }
+    end
+    return buffers[bufnr]
+end
+
 --- Compute a unified diff between two line arrays.
 --- Returns a list of changed regions: { { start_line, end_line } }
 --- Lines are 1-indexed and refer to positions in `new_lines`.
@@ -47,11 +74,9 @@ end
 --- @param new_lines string[]
 --- @return table[] regions
 local function compute_diff_regions(old_lines, new_lines)
-    -- Use vim.diff to get a unified diff, then parse hunks
     local old_text = table.concat(old_lines, "\n") .. "\n"
     local new_text = table.concat(new_lines, "\n") .. "\n"
 
-    -- Handle empty buffers
     if #old_lines == 0 and #new_lines == 0 then
         return {}
     end
@@ -66,13 +91,11 @@ local function compute_diff_regions(old_lines, new_lines)
 
     local regions = {}
     for _, hunk in ipairs(diff) do
-        -- hunk = { old_start, old_count, new_start, new_count }
         local new_start = hunk[3]
         local new_count = hunk[4]
         if new_count > 0 then
             table.insert(regions, { new_start, new_start + new_count - 1 })
         elseif new_count == 0 and new_start > 0 then
-            -- Pure deletion: mark the line after the deletion point
             table.insert(regions, { new_start, new_start })
         end
     end
@@ -87,7 +110,6 @@ end
 local function is_within_diff(mod_start, mod_end, regions)
     for _, region in ipairs(regions) do
         local r_start, r_end = region[1], region[2]
-        -- Overlap check: mod overlaps region if mod_start <= r_end and mod_end >= r_start
         if mod_start <= r_end and mod_end >= r_start then
             return true
         end
@@ -109,13 +131,11 @@ local function show_working_indicator(bufnr, regions)
     local state = buffers[bufnr]
     if not state then return end
 
-    state.working_extmarks = {}
     local line_count = vim.api.nvim_buf_line_count(bufnr)
     for _, region in ipairs(regions) do
-        local start_line = region[1] - 1 -- 0-indexed
+        local start_line = region[1] - 1
         local end_line = region[2] - 1
 
-        -- Virtual text "working..." above the first line of the region
         if start_line >= 0 and start_line < line_count then
             local buf_line = vim.api.nvim_buf_get_lines(bufnr, start_line, start_line + 1, false)[1] or ""
             local indent = get_indent(buf_line)
@@ -126,7 +146,6 @@ local function show_working_indicator(bufnr, regions)
             table.insert(state.working_extmarks, id)
         end
 
-        -- Line highlights on every line in the region
         for l = start_line, math.min(end_line, line_count - 1) do
             local id = vim.api.nvim_buf_set_extmark(bufnr, ns_working, l, 0, {
                 line_hl_group = "AILagWorkingLine",
@@ -166,18 +185,19 @@ local function format_old_code(original_lines)
 end
 
 --- Render virtual text comments, line highlights, and diagnostics for all modifications.
---- Highlights the active one differently.
 --- @param bufnr number
 local function render_modifications(bufnr)
     local state = buffers[bufnr]
-    if not state or #state.modifications == 0 then return end
+    if not state then return end
 
     clear_modification_extmarks(bufnr)
+
+    if #state.modifications == 0 then return end
 
     local diagnostics = {}
 
     for i, mod in ipairs(state.modifications) do
-        local line = mod.line - 1 -- 0-indexed
+        local line = mod.line - 1
         local line_count = vim.api.nvim_buf_line_count(bufnr)
         if line >= 0 and line < line_count then
             local is_active = (i == state.active_index)
@@ -186,13 +206,11 @@ local function render_modifications(bufnr)
             local comment_hl = is_active and "AILagActiveComment" or "AILagComment"
             local line_hl = is_active and "AILagActiveLine" or "AILagLine"
 
-            -- Virtual text comment above the modification
             vim.api.nvim_buf_set_extmark(bufnr, state.ns, line, 0, {
                 virt_lines_above = true,
                 virt_lines = { { { indent .. "Lag: " .. mod.comment, comment_hl } } },
             })
 
-            -- Line highlights on all modified lines
             local end_line = math.min(line + #mod.new_lines, line_count)
             for l = line, end_line - 1 do
                 vim.api.nvim_buf_set_extmark(bufnr, state.ns, l, 0, {
@@ -200,7 +218,6 @@ local function render_modifications(bufnr)
                 })
             end
 
-            -- Diagnostic with old code for hover expansion
             table.insert(diagnostics, {
                 bufnr = bufnr,
                 lnum = line,
@@ -236,6 +253,58 @@ local function update_active(bufnr)
 
     if closest ~= state.active_index then
         state.active_index = closest
+        render_modifications(bufnr)
+    end
+end
+
+--- Prune modifications whose lines have been edited by the user.
+--- A modification is pruned if the buffer lines at its range no longer match
+--- the stored new_lines.
+--- @param bufnr number
+local function prune_edited_modifications(bufnr)
+    local state = buffers[bufnr]
+    if not state or #state.modifications == 0 then return end
+
+    local line_count = vim.api.nvim_buf_line_count(bufnr)
+    local pruned = false
+    local kept = {}
+
+    for _, mod in ipairs(state.modifications) do
+        local start_0 = mod.line - 1
+        local end_0 = start_0 + #mod.new_lines
+        local still_matches = true
+
+        if end_0 > line_count then
+            still_matches = false
+        else
+            local current = vim.api.nvim_buf_get_lines(bufnr, start_0, end_0, false)
+            if #current ~= #mod.new_lines then
+                still_matches = false
+            else
+                for i, line in ipairs(current) do
+                    if line ~= mod.new_lines[i] then
+                        still_matches = false
+                        break
+                    end
+                end
+            end
+        end
+
+        if still_matches then
+            table.insert(kept, mod)
+        else
+            pruned = true
+            debug.log(string.format("Lag: pruned modification at line %d (user edited)", mod.line))
+        end
+    end
+
+    if pruned then
+        state.modifications = kept
+        if #kept == 0 then
+            state.active_index = nil
+        else
+            state.active_index = nil
+        end
         render_modifications(bufnr)
     end
 end
@@ -287,12 +356,10 @@ local function build_lag_prompt(bufnr, diff_regions, context_block, session)
 
     local parts = {}
 
-    -- Context from other buffers
     if context_block then
         table.insert(parts, context_block)
     end
 
-    -- Chat history context
     if session and #session.conversation > 0 then
         table.insert(parts, "Recent chat history for context:")
         for _, msg in ipairs(session.conversation) do
@@ -300,7 +367,6 @@ local function build_lag_prompt(bufnr, diff_regions, context_block, session)
         end
     end
 
-    -- Current buffer
     local numbered = {}
     for i, line in ipairs(lines) do
         table.insert(numbered, string.format("%d: %s", i, line))
@@ -310,7 +376,6 @@ local function build_lag_prompt(bufnr, diff_regions, context_block, session)
         filename, ft, table.concat(numbered, "\n")
     ))
 
-    -- Diff regions
     local region_strs = {}
     for _, r in ipairs(diff_regions) do
         table.insert(region_strs, string.format("lines %d-%d", r[1], r[2]))
@@ -324,10 +389,8 @@ end
 --- @param response string
 --- @return table[]|nil modifications, string|nil error
 local function parse_response(response)
-    -- Extract JSON array from response (handle potential markdown fences)
     local json_str = response:match("%[.-%]")
     if not json_str then
-        -- Could be an empty response or malformed
         if response:match("^%s*$") then
             return {}, nil
         end
@@ -343,7 +406,6 @@ local function parse_response(response)
         return nil, "Expected JSON array, got " .. type(result)
     end
 
-    -- Validate each modification
     local mods = {}
     for _, item in ipairs(result) do
         if type(item) == "table"
@@ -384,41 +446,35 @@ local function filter_to_diff(mods, regions)
 end
 
 --- Apply modifications to the buffer. Processes in reverse line order to keep
---- line numbers stable. Stores original code for revert.
+--- line numbers stable. Appends to existing modifications list.
 --- @param bufnr number
 --- @param mods table[]
 local function apply_modifications(bufnr, mods)
     local state = buffers[bufnr]
     if not state then return end
 
-    -- Sort by start_line descending so replacements don't shift later lines
     table.sort(mods, function(a, b) return a.start_line > b.start_line end)
 
-    state.modifications = {}
+    -- Adjust existing modification line numbers for insertions/deletions
+    -- that happen above them (applied in reverse order, so we track cumulative shift)
+    local new_mods = {}
 
     for _, mod in ipairs(mods) do
         local start_0 = mod.start_line - 1
         local end_0 = mod.end_line
 
-        -- Save original lines for revert
         local original_lines = vim.api.nvim_buf_get_lines(bufnr, start_0, end_0, false)
 
-        -- Split replacement into lines
         local new_lines = vim.split(mod.replacement, "\n", { plain = true })
 
-        -- Re-indent: match the indentation of the first original line
         if #original_lines > 0 then
             local target_indent = get_indent(original_lines[1])
             for i, line in ipairs(new_lines) do
-                -- Strip existing indentation, apply target
                 local stripped = line:gsub("^%s*", "")
                 if stripped ~= "" then
-                    -- For first line use target indent, for subsequent lines
-                    -- preserve relative indent from the replacement
                     if i == 1 then
                         new_lines[i] = target_indent .. stripped
                     else
-                        -- Calculate relative indent from first replacement line
                         local first_indent = get_indent(vim.split(mod.replacement, "\n", { plain = true })[1])
                         local this_indent = get_indent(line)
                         local relative = ""
@@ -433,12 +489,23 @@ local function apply_modifications(bufnr, mods)
             end
         end
 
-        -- Apply the replacement
         vim.api.nvim_buf_set_lines(bufnr, start_0, end_0, false, new_lines)
 
-        -- Store modification info (line now refers to where the comment goes)
-        -- After replacement, the modification starts at start_line
-        table.insert(state.modifications, 1, {
+        local line_delta = #new_lines - #original_lines
+        -- Shift existing modifications that are below this insertion point
+        for _, existing in ipairs(state.modifications) do
+            if existing.line > mod.start_line then
+                existing.line = existing.line + line_delta
+            end
+        end
+        -- Also shift already-processed new mods
+        for _, nm in ipairs(new_mods) do
+            if nm.line > mod.start_line then
+                nm.line = nm.line + line_delta
+            end
+        end
+
+        table.insert(new_mods, 1, {
             line = mod.start_line,
             comment = mod.comment,
             original_lines = original_lines,
@@ -448,10 +515,14 @@ local function apply_modifications(bufnr, mods)
         })
     end
 
-    -- Update the baseline to include AI changes (so they don't show as user diffs)
+    -- Append new modifications to existing list
+    for _, nm in ipairs(new_mods) do
+        table.insert(state.modifications, nm)
+    end
+
+    -- Update the baseline to include AI changes
     state.baseline = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 
-    -- Set active to nearest cursor
     update_active(bufnr)
     render_modifications(bufnr)
 end
@@ -468,22 +539,15 @@ local function revert_active(bufnr)
     local idx = state.active_index
     local mod = state.modifications[idx]
 
-    -- Calculate current position: we need to figure out where this modification
-    -- is now. Line numbers may have shifted due to previous reverts.
-    -- We use the stored line as the anchor.
     local start_0 = mod.line - 1
     local end_0 = start_0 + #mod.new_lines
 
-    -- Replace new lines with original
     vim.api.nvim_buf_set_lines(bufnr, start_0, end_0, false, mod.original_lines)
 
-    -- Update the baseline to include the revert (reverts are not diffs)
     state.baseline = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 
-    -- Remove this modification
     table.remove(state.modifications, idx)
 
-    -- Adjust line numbers for modifications below this one
     local line_delta = #mod.original_lines - #mod.new_lines
     for _, m in ipairs(state.modifications) do
         if m.line > mod.line then
@@ -491,12 +555,11 @@ local function revert_active(bufnr)
         end
     end
 
-    -- Update active index
     if #state.modifications == 0 then
         state.active_index = nil
         clear_modification_extmarks(bufnr)
     else
-        state.active_index = nil -- Force re-calculation
+        state.active_index = nil
         update_active(bufnr)
         render_modifications(bufnr)
     end
@@ -515,17 +578,35 @@ local function clear_modifications(bufnr)
     clear_modification_extmarks(bufnr)
 end
 
---- Process a buffer save: diff, send to LLM, apply modifications.
+-- Forward declaration
+local on_save
+
+--- Process the queue: if a save is pending, re-trigger on_save.
 --- @param bufnr number
---- @param get_context fun(): string|nil
---- @param get_session fun(): table
-local function on_save(bufnr, get_context, get_session)
+local function process_queue(bufnr)
     local state = buffers[bufnr]
     if not state then return end
+
+    if state.pending_save then
+        state.pending_save = false
+        on_save(bufnr)
+    end
+end
+
+--- Process a buffer save: diff, send to LLM, apply modifications.
+--- @param bufnr number
+on_save = function(bufnr)
+    local state = get_or_create_state(bufnr)
+
     if state.processing then
-        debug.log("Lag: skipping save, already processing buffer " .. bufnr)
+        state.pending_save = true
+        state.queue_count = state.queue_count + 1
+        debug.log("Lag: queued save for buffer " .. bufnr .. " (" .. state.queue_count .. " queued)")
         return
     end
+
+    -- Prune modifications the user has edited
+    prune_edited_modifications(bufnr)
 
     local current_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
     local diff_regions = compute_diff_regions(state.baseline, current_lines)
@@ -535,52 +616,71 @@ local function on_save(bufnr, get_context, get_session)
         return
     end
 
-    -- Skip if all changed lines are whitespace-only
-    local has_content = false
+    -- Filter out whitespace-only diff regions
+    local meaningful_regions = {}
     for _, region in ipairs(diff_regions) do
+        local has_content = false
         for l = region[1], region[2] do
             if current_lines[l] and not current_lines[l]:match("^%s*$") then
                 has_content = true
                 break
             end
         end
-        if has_content then break end
+        if has_content then
+            table.insert(meaningful_regions, region)
+        end
     end
-    if not has_content then
-        debug.log("Lag: diff is whitespace-only, skipping buffer " .. bufnr)
+    if #meaningful_regions == 0 then
+        debug.log("Lag: all diff regions are whitespace-only, skipping buffer " .. bufnr)
         state.baseline = current_lines
         return
     end
+    diff_regions = meaningful_regions
 
     debug.log(string.format("Lag: %d diff region(s) in buffer %d", #diff_regions, bufnr))
 
-    -- Clear previous modifications before processing new ones
-    clear_modifications(bufnr)
-
     state.processing = true
+    state.queue_count = 0
 
-    -- Show working indicator on diff regions
     show_working_indicator(bufnr, diff_regions)
+
+    -- Fidget progress spinner with queue count
+    local f_ok, progress = pcall(require, "fidget.progress")
+    local fidget_handle = nil
+    if f_ok then
+        fidget_handle = progress.handle.create({
+            title = "Lag",
+            message = "Reviewing...",
+            lsp_client = { name = "Lag" },
+        })
+    end
+
     vim.cmd("redraw")
 
-    -- Snapshot diff regions and current lines so they can't be mutated
     local snapshot_regions = vim.deepcopy(diff_regions)
-    local context_block = get_context()
-    local session = get_session()
+    local snapshot_lines = vim.deepcopy(current_lines)
+    local context_block = get_context_fn and get_context_fn() or nil
+    local session = get_session_fn and get_session_fn() or { conversation = {} }
 
     local prompt = build_lag_prompt(bufnr, snapshot_regions, context_block, session)
     local response_chunks = {}
 
     api.stream(
         { { role = "user", content = prompt } },
-        -- on_delta
         function(delta)
             table.insert(response_chunks, delta)
+            -- Update fidget with queue count if saves came in
+            if fidget_handle and state.queue_count > 0 then
+                fidget_handle.message = "Reviewing... (" .. state.queue_count .. " queued)"
+            end
         end,
-        -- on_done
         function()
             state.processing = false
             clear_working_indicator(bufnr)
+            if fidget_handle then
+                fidget_handle.message = "Done"
+                fidget_handle:finish()
+            end
 
             local full_response = table.concat(response_chunks, "")
             debug.log("Lag: LLM response:\n" .. full_response)
@@ -588,71 +688,76 @@ local function on_save(bufnr, get_context, get_session)
             local mods, err = parse_response(full_response)
             if err then
                 debug.log("Lag: parse error: " .. err)
+                state.baseline = snapshot_lines
                 vim.cmd("redraw")
+                process_queue(bufnr)
                 return
             end
 
             if #mods == 0 then
                 debug.log("Lag: no modifications suggested")
+                state.baseline = snapshot_lines
                 vim.cmd("redraw")
+                process_queue(bufnr)
                 return
             end
 
-            -- Filter to only modifications within diff regions
             mods = filter_to_diff(mods, snapshot_regions)
             if #mods == 0 then
                 debug.log("Lag: all modifications were outside diff regions")
+                state.baseline = snapshot_lines
                 vim.cmd("redraw")
+                process_queue(bufnr)
                 return
             end
 
             debug.log(string.format("Lag: applying %d modification(s)", #mods))
             apply_modifications(bufnr, mods)
             vim.cmd("redraw")
+            process_queue(bufnr)
         end,
-        -- on_error
         function(err)
             state.processing = false
             clear_working_indicator(bufnr)
+            if fidget_handle then
+                fidget_handle.message = "Error"
+                fidget_handle:finish()
+            end
             debug.log("Lag: stream error: " .. err)
             vim.cmd("redraw")
+            process_queue(bufnr)
         end,
         { system_prompt = build_system_prompt() }
     )
 end
 
---- Start lag mode for the current buffer.
---- @param get_context fun(): string|nil  Function to get context block
---- @param get_session fun(): table  Function to get current session
+--- Start lag mode globally.
+--- @param get_context fun(): string|nil
+--- @param get_session fun(): table
 function M.start(get_context, get_session)
-    local bufnr = vim.api.nvim_get_current_buf()
-
-    if buffers[bufnr] then
-        vim.notify("Lag: already active for this buffer", vim.log.levels.WARN)
+    if running then
+        vim.notify("Lag: already running", vim.log.levels.WARN)
         return
     end
 
     setup_highlights()
 
-    local ns = vim.api.nvim_create_namespace("ai_lag_" .. bufnr)
+    get_context_fn = get_context
+    get_session_fn = get_session
+    running = true
 
-    buffers[bufnr] = {
-        baseline = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false),
-        processing = false,
-        debounce_timer = nil,
-        autocmd_ids = {},
-        modifications = {},
-        ns = ns,
-        active_index = nil,
-        working_extmarks = {},
-    }
-
-    local state = buffers[bufnr]
-
-    -- BufWritePost: debounced trigger
+    -- Global BufWritePost: triggers on any buffer save
     local write_id = vim.api.nvim_create_autocmd("BufWritePost", {
-        buffer = bufnr,
-        callback = function()
+        callback = function(ev)
+            local bufnr = ev.buf
+            -- Skip special buffers
+            local bt = vim.bo[bufnr].buftype
+            if bt ~= "" then return end
+            local name = vim.api.nvim_buf_get_name(bufnr)
+            if name == "" then return end
+
+            local state = get_or_create_state(bufnr)
+
             -- Debounce
             if state.debounce_timer then
                 state.debounce_timer:stop()
@@ -669,55 +774,57 @@ function M.start(get_context, get_session)
                 if state.debounce_timer == timer then
                     state.debounce_timer = nil
                 end
-                on_save(bufnr, get_context, get_session)
+                on_save(bufnr)
             end))
         end,
     })
-    table.insert(state.autocmd_ids, write_id)
+    table.insert(autocmd_ids, write_id)
 
-    -- CursorMoved: update active modification
+    -- Global CursorMoved: update active modification
     local cursor_id = vim.api.nvim_create_autocmd("CursorMoved", {
-        buffer = bufnr,
-        callback = function()
-            update_active(bufnr)
+        callback = function(ev)
+            local bufnr = ev.buf
+            if buffers[bufnr] then
+                update_active(bufnr)
+            end
         end,
     })
-    table.insert(state.autocmd_ids, cursor_id)
+    table.insert(autocmd_ids, cursor_id)
 
-    debug.log("Lag: started for buffer " .. bufnr)
+    debug.log("Lag: started globally")
     vim.notify("Lag: started")
 end
 
---- Stop lag mode for the current buffer.
+--- Stop lag mode globally.
 function M.stop()
-    local bufnr = vim.api.nvim_get_current_buf()
-    local state = buffers[bufnr]
-
-    if not state then
-        vim.notify("Lag: not active for this buffer", vim.log.levels.WARN)
+    if not running then
+        vim.notify("Lag: not running", vim.log.levels.WARN)
         return
     end
 
-    -- Clean up timer
-    if state.debounce_timer then
-        state.debounce_timer:stop()
-        state.debounce_timer:close()
-        state.debounce_timer = nil
-    end
-
-    -- Remove autocmds
-    for _, id in ipairs(state.autocmd_ids) do
+    -- Remove global autocmds
+    for _, id in ipairs(autocmd_ids) do
         pcall(vim.api.nvim_del_autocmd, id)
     end
+    autocmd_ids = {}
 
-    -- Clear all visual indicators
-    clear_modification_extmarks(bufnr)
-    clear_working_indicator(bufnr)
-    vim.diagnostic.reset(ns_diagnostic, bufnr)
+    -- Clean up all buffer state
+    for bufnr, state in pairs(buffers) do
+        if state.debounce_timer then
+            state.debounce_timer:stop()
+            state.debounce_timer:close()
+        end
+        pcall(clear_modification_extmarks, bufnr)
+        pcall(clear_working_indicator, bufnr)
+        pcall(vim.diagnostic.reset, ns_diagnostic, bufnr)
+    end
+    buffers = {}
 
-    buffers[bufnr] = nil
+    get_context_fn = nil
+    get_session_fn = nil
+    running = false
 
-    debug.log("Lag: stopped for buffer " .. bufnr)
+    debug.log("Lag: stopped")
     vim.notify("Lag: stopped")
 end
 
@@ -727,7 +834,7 @@ function M.revert()
     local state = buffers[bufnr]
 
     if not state then
-        vim.notify("Lag: not active for this buffer", vim.log.levels.WARN)
+        vim.notify("Lag: no modifications in this buffer", vim.log.levels.INFO)
         return
     end
 
@@ -748,7 +855,7 @@ function M.clear()
     local state = buffers[bufnr]
 
     if not state then
-        vim.notify("Lag: not active for this buffer", vim.log.levels.WARN)
+        vim.notify("Lag: no modifications in this buffer", vim.log.levels.INFO)
         return
     end
 
@@ -759,22 +866,34 @@ end
 
 --- Reset all lag state (for testing).
 function M.reset()
+    for _, id in ipairs(autocmd_ids) do
+        pcall(vim.api.nvim_del_autocmd, id)
+    end
+    autocmd_ids = {}
+
     for bufnr, state in pairs(buffers) do
         if state.debounce_timer then
             state.debounce_timer:stop()
             state.debounce_timer:close()
-        end
-        for _, id in ipairs(state.autocmd_ids) do
-            pcall(vim.api.nvim_del_autocmd, id)
         end
         pcall(clear_modification_extmarks, bufnr)
         pcall(clear_working_indicator, bufnr)
         pcall(vim.diagnostic.reset, ns_diagnostic, bufnr)
     end
     buffers = {}
+
+    get_context_fn = nil
+    get_session_fn = nil
+    running = false
 end
 
---- Check if lag mode is active for a buffer.
+--- Check if lag mode is running globally.
+--- @return boolean
+function M.is_running()
+    return running
+end
+
+--- Check if a buffer has lag state.
 --- @param bufnr number|nil defaults to current buffer
 --- @return boolean
 function M.is_active(bufnr)
@@ -801,5 +920,8 @@ M._revert_active = revert_active
 M._clear_modifications = clear_modifications
 M._update_active = update_active
 M._render_modifications = render_modifications
+M._prune_edited_modifications = prune_edited_modifications
+M._get_or_create_state = get_or_create_state
+M._process_queue = process_queue
 
 return M

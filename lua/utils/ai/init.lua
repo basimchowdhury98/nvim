@@ -448,11 +448,11 @@ function M.setup(opts)
 
     vim.api.nvim_create_user_command("LagStart", function()
         lag.start(M.build_context_block, M.get_session)
-    end, { desc = "Lag: Start lag mode for current buffer" })
+    end, { desc = "Lag: Start lag mode globally" })
 
     vim.api.nvim_create_user_command("LagStop", function()
         lag.stop()
-    end, { desc = "Lag: Stop lag mode for current buffer" })
+    end, { desc = "Lag: Stop lag mode globally" })
 
     map("n", config.keymaps.lag_revert, lag.revert, { desc = "Lag: Revert nearest modification" })
     map("n", config.keymaps.lag_clear, lag.clear, { desc = "Lag: Clear all modifications" })
