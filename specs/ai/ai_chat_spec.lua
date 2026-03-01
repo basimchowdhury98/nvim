@@ -93,7 +93,9 @@ describe("AI Chat Plugin", function()
     vim.notify = function() end
 
     before_each(function()
-        ai.clear()
+        ai.reset_all()
+        ai.activate()
+        stub_api()
         stub_response = "I am a test response"
         stub_error = nil
         stream_messages_spy = nil
@@ -213,17 +215,18 @@ describe("AI Chat Plugin", function()
         end
     end)
 
-    it("clear closes chat and resets conversation", function()
+    it("stop closes chat and resets conversation", function()
         send_user_message(ai, "hello")
-        ai.clear()
+        ai.stop()
+        ai.activate()
 
         send_user_message(ai, "fresh start")
 
-        assert(not chat_contains("hello"), "Old message should not be in chat after clear")
+        assert(not chat_contains("hello"), "Old message should not be in chat after stop")
         for _, msg in ipairs(stream_messages_spy) do
             if msg.role == "user" then
                 assert(not msg.content:find("hello"),
-                    "Old message should not be in conversation after clear")
+                    "Old message should not be in conversation after stop")
             end
         end
     end)
@@ -237,7 +240,9 @@ describe("AI Chat Cancel", function()
     vim.notify = function() end
 
     before_each(function()
-        ai.clear()
+        ai.reset_all()
+        ai.activate()
+        stub_api()
         stub_response = "I am a test response"
         stub_error = nil
         stub_hang = false
@@ -309,7 +314,9 @@ describe("AI Chat Buffer Tracking", function()
     before_each(function()
         -- Ensure we're in a safe window before clearing (avoids E444)
         vim.cmd("enew")
-        ai.clear()
+        ai.reset_all()
+        ai.activate()
+        stub_api()
         for _, buf in ipairs(test_bufs) do
             if vim.api.nvim_buf_is_valid(buf) then
                 vim.api.nvim_buf_delete(buf, { force = true })
@@ -458,7 +465,9 @@ describe("AI Chat Quoted Selection", function()
 
     before_each(function()
         vim.cmd("enew")
-        ai.clear()
+        ai.reset_all()
+        ai.activate()
+        stub_api()
         for _, buf in ipairs(test_bufs) do
             if vim.api.nvim_buf_is_valid(buf) then
                 vim.api.nvim_buf_delete(buf, { force = true })
@@ -605,6 +614,8 @@ describe("AI Project-Scoped Sessions", function()
         original_cwd = vim.fn.getcwd()
         vim.cmd("enew")
         ai.reset_all()
+        ai.activate()
+        stub_api()
         for _, buf in ipairs(test_bufs) do
             if vim.api.nvim_buf_is_valid(buf) then
                 vim.api.nvim_buf_delete(buf, { force = true })
@@ -681,12 +692,13 @@ describe("AI Project-Scoped Sessions", function()
             "Project B context should include project B buffers")
     end)
 
-    it("clear only affects the current project's history", function()
+    it("stop only affects the current project's history", function()
         vim.fn.chdir("/tmp")
         send_user_message(ai, "tmp message")
         vim.fn.chdir("/")
         send_user_message(ai, "root message")
-        ai.clear()
+        ai.stop()
+        ai.activate()
 
         vim.fn.chdir("/tmp")
         stub_response = "tmp response 2"
@@ -696,7 +708,7 @@ describe("AI Project-Scoped Sessions", function()
             "API should receive previous history from /tmp project")
         local first_msg = stream_messages_spy[1]
         assert(first_msg.content:find("tmp message", 1, true),
-            "Project A history should survive project B clear")
+            "Project A history should survive project B stop")
     end)
 
     it("re-renders chat when toggling after cwd change", function()
@@ -720,6 +732,8 @@ describe("AI Alt Provider Toggle", function()
     before_each(function()
         vim.cmd("enew")
         ai.reset_all()
+        ai.activate()
+        stub_api()
         stub_response = "I am a test response"
         stub_error = nil
         stream_messages_spy = nil
@@ -817,5 +831,150 @@ describe("AI Alt Provider Toggle", function()
         assert(chat_contains("I am a test response"), "Stub response should appear in chat")
         vim.fn.setenv("AI_WORK", original)
         api.reset_alt()
+    end)
+end)
+
+describe("AI Activation Lifecycle", function()
+    local ai = require("utils.ai")
+    local chat = require("utils.ai.chat")
+    local lag_mod = require("utils.ai.lag")
+    ai.setup()
+    stub_api()
+    vim.notify = function() end
+
+    before_each(function()
+        vim.cmd("enew")
+        ai.reset_all()
+        stub_api()
+        stub_response = "I am a test response"
+        stub_error = nil
+        stub_hang = false
+        stream_messages_spy = nil
+    end)
+
+    after_each(function()
+        stub_hang = false
+        close_all_floats()
+        lag_mod.stop()
+    end)
+
+    it("system starts inactive", function()
+        local is_active = ai.is_active()
+
+        eq(is_active, false, "AI should start inactive")
+    end)
+
+    it("toggle is a no-op when inactive", function()
+        ai.toggle()
+
+        assert(not chat.is_open(), "Chat should not open when inactive")
+    end)
+
+    it("continue_response is a no-op when inactive", function()
+        ai.continue_response()
+
+        assert(not chat.is_open(), "Chat should not open from continue when inactive")
+    end)
+
+    it("cancel is a no-op when inactive", function()
+        ai.cancel()
+
+        assert(not chat.is_open(), "Chat should not open from cancel when inactive")
+    end)
+
+    it("prompt opens input with onboarding title when inactive", function()
+        local input_buf = ai.prompt()
+
+        assert(input_buf ~= nil, "Input popup should open even when inactive")
+        assert(vim.api.nvim_buf_is_valid(input_buf), "Input buffer should be valid")
+    end)
+
+    it("cancelling onboarding prompt keeps system inactive", function()
+        ai.prompt()
+
+        press("q")
+
+        eq(ai.is_active(), false, "AI should remain inactive after cancelling onboarding")
+        assert(not chat.is_open(), "Chat should not have opened")
+    end)
+
+    it("empty onboarding prompt keeps system inactive", function()
+        ai.prompt()
+
+        press("<CR>")
+
+        eq(ai.is_active(), false, "AI should remain inactive after empty onboarding input")
+        assert(not chat.is_open(), "Chat should not have opened")
+    end)
+
+    it("answering onboarding prompt activates the system", function()
+        send_user_message(ai, "building a REST API")
+
+        eq(ai.is_active(), true, "AI should be active after answering onboarding")
+        assert(chat.is_open(), "Chat should be open after activation")
+    end)
+
+    it("onboarding message is prefixed with session context", function()
+        send_user_message(ai, "building a REST API")
+
+        local first_msg = stream_messages_spy[1]
+        assert(first_msg.content:find("What we are working on this session: building a REST API", 1, true),
+            "First message should be prefixed with session context")
+    end)
+
+    it("onboarding starts lag mode", function()
+        send_user_message(ai, "building a REST API")
+
+        assert(lag_mod.is_running(), "Lag mode should be running after onboarding")
+    end)
+
+    it("toggle works after activation", function()
+        send_user_message(ai, "starting work")
+        chat.close()
+
+        ai.toggle()
+
+        assert(chat.is_open(), "Toggle should open chat after activation")
+    end)
+
+    it("subsequent prompts use normal title after activation", function()
+        send_user_message(ai, "starting work")
+
+        local input_buf = ai.prompt()
+
+        assert(input_buf ~= nil, "Input popup should open for subsequent messages")
+        assert(vim.api.nvim_buf_is_valid(input_buf), "Input buffer should be valid")
+    end)
+
+    it("AIStop deactivates the system", function()
+        send_user_message(ai, "starting work")
+
+        ai.stop()
+
+        eq(ai.is_active(), false, "AI should be inactive after stop")
+        assert(not chat.is_open(), "Chat should be closed after stop")
+        assert(not lag_mod.is_running(), "Lag mode should be stopped after stop")
+    end)
+
+    it("prompt shows onboarding again after AIStop", function()
+        send_user_message(ai, "first session")
+        ai.stop()
+
+        send_user_message(ai, "new session")
+
+        eq(ai.is_active(), true, "AI should be active again after new onboarding")
+        local first_msg = stream_messages_spy[1]
+        assert(first_msg.content:find("What we are working on this session: new session", 1, true),
+            "New session should have prefixed onboarding message")
+        assert(not first_msg.content:find("first session", 1, true),
+            "Old session message should not appear in new session")
+    end)
+
+    it("reset_all deactivates the system", function()
+        send_user_message(ai, "starting work")
+
+        ai.reset_all()
+
+        eq(ai.is_active(), false, "AI should be inactive after reset_all")
     end)
 end)

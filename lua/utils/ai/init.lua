@@ -16,15 +16,16 @@ local default_config = {
     keymaps = {
         toggle = "<leader>it",
         send = "<leader>io",
-        clear = "<leader>ic",
         cancel = "<leader>ix",
         continue_response = "<leader>in",
         lag_revert = "<leader>lr",
-        lag_clear = "<leader>lc",
     },
 }
 
 local config = vim.deepcopy(default_config)
+
+-- Whether the AI system is active (started via the onboarding prompt)
+local active = false
 
 -- Project-scoped sessions keyed by cwd
 -- Each session: { conversation = {} }
@@ -303,20 +304,40 @@ local function get_visual_selection()
     }
 end
 
+--- Activate the AI system (called after onboarding prompt is answered)
+local function activate()
+    active = true
+    debug.log("AI system activated")
+end
+
 --- Open the input popup and send the message on submit.
+--- If the system is not active, shows the onboarding prompt.
 --- If called from visual mode, the selection is included as quoted context.
 --- @return number buf_id The buffer id of the input popup
 function M.prompt()
     sync_project()
     local selection = get_visual_selection()
 
+    if not active then
+        return input.open(function(text)
+            activate()
+            local prefixed = "What we are working on this session: " .. text
+            send_message(prefixed, selection)
+            lag.start(M.build_context_block, M.get_session)
+            usage.update_tabline()
+        end, { title = " What are we working on? " })
+    end
+
     return input.open(function(text)
         send_message(text, selection)
     end)
 end
 
---- Toggle the chat panel
+--- Toggle the chat panel (no-op when inactive)
 function M.toggle()
+    if not active then
+        return
+    end
     sync_project()
     chat.toggle()
 end
@@ -331,17 +352,18 @@ local function kill_request()
     return false
 end
 
---- Close the chat and clear conversation for the current project
-function M.clear()
+--- Stop the AI system: kill requests, stop lag, clear chat, deactivate
+function M.stop()
     kill_request()
+    lag.stop()
     chat.clear()
+    chat.close()
     local session = get_session()
     session.conversation = {}
-    chat.close()
     usage.reset()
-    -- Reset last_project so next toggle doesn't think we switched
+    active = false
     last_project = get_project()
-    vim.notify("AI: Conversation cleared for " .. get_project())
+    vim.notify("AI: Session ended")
 end
 
 --- Reset all sessions (for testing)
@@ -351,13 +373,17 @@ function M.reset_all()
     chat.close()
     sessions = {}
     last_project = nil
+    active = false
     api.reset_alt()
     lag.reset()
     usage.reset()
 end
 
---- Interrupt the current in-flight request
+--- Interrupt the current in-flight request (no-op when inactive)
 function M.cancel()
+    if not active then
+        return
+    end
     if not kill_request() then
         return
     end
@@ -377,8 +403,11 @@ function M.send(text, selection)
     send_message(text, selection)
 end
 
---- Send a "continue" message to ask the LLM to keep going
+--- Send a "continue" message to ask the LLM to keep going (no-op when inactive)
 function M.continue_response()
+    if not active then
+        return
+    end
     send_message("continue")
 end
 
@@ -394,6 +423,17 @@ function M.get_session()
     return get_session()
 end
 
+--- Whether the AI system is currently active
+--- @return boolean
+function M.is_active()
+    return active
+end
+
+--- Activate the AI system without the onboarding prompt (for testing)
+function M.activate()
+    activate()
+end
+
 function M.setup(opts)
     config = vim.tbl_deep_extend("force", config, opts or {})
 
@@ -406,9 +446,14 @@ function M.setup(opts)
     map("n", config.keymaps.toggle, M.toggle, { desc = "AI: Toggle chat panel" })
     map("n", config.keymaps.send, M.prompt, { desc = "AI: Send message" })
     map("v", config.keymaps.send, M.prompt, { desc = "AI: Send message with selection context" })
-    map("n", config.keymaps.clear, M.clear, { desc = "AI: Clear conversation" })
     map("n", config.keymaps.cancel, M.cancel, { desc = "AI: Interrupt streaming response" })
     map("n", config.keymaps.continue_response, M.continue_response, { desc = "AI: Continue response" })
+    map("n", config.keymaps.lag_revert, function()
+        if not active then
+            return
+        end
+        lag.revert()
+    end, { desc = "Lag: Revert nearest modification" })
 
     vim.api.nvim_create_user_command("AIFiles", function()
         local bufs = get_project_buffers()
@@ -442,18 +487,16 @@ function M.setup(opts)
         api.toggle_alt()
     end, { desc = "AI: Toggle alt OpenAI-compatible provider (work mode only)" })
 
-    vim.api.nvim_create_user_command("LagStart", function()
-        lag.start(M.build_context_block, M.get_session)
-        usage.update_tabline()
-    end, { desc = "Lag: Start lag mode globally" })
+    vim.api.nvim_create_user_command("AIStop", function()
+        M.stop()
+    end, { desc = "AI: Stop everything and deactivate" })
 
-    vim.api.nvim_create_user_command("LagStop", function()
-        lag.stop()
-        usage.update_tabline()
-    end, { desc = "Lag: Stop lag mode globally" })
-
-    map("n", config.keymaps.lag_revert, lag.revert, { desc = "Lag: Revert nearest modification" })
-    map("n", config.keymaps.lag_clear, lag.clear, { desc = "Lag: Clear all modifications" })
+    vim.api.nvim_create_user_command("AILagClear", function()
+        if not active then
+            return
+        end
+        lag.clear()
+    end, { desc = "AI: Clear all lag modifications" })
 end
 
 return M
