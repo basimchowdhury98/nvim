@@ -883,6 +883,38 @@ function M.is_running()
     return running
 end
 
+--- Get a snapshot of all lag state for diagnostics.
+--- @return table
+function M.get_all_state()
+    local buf_states = {}
+    for bufnr, state in pairs(buffers) do
+        local name = vim.api.nvim_buf_is_valid(bufnr)
+            and vim.api.nvim_buf_get_name(bufnr) or ("invalid:" .. bufnr)
+        local mods = {}
+        for i, mod in ipairs(state.modifications) do
+            mods[i] = {
+                line = mod.line,
+                original_start = mod.original_start,
+                original_end = mod.original_end,
+                new_lines = mod.new_lines,
+                original_lines = mod.original_lines,
+            }
+        end
+        buf_states[name] = {
+            baseline_lines = #state.baseline,
+            processing = state.processing,
+            pending_save = state.pending_save,
+            queue_count = state.queue_count,
+            active_index = state.active_index,
+            modifications = mods,
+        }
+    end
+    return {
+        running = running,
+        buffers = buf_states,
+    }
+end
+
 --- Check if a buffer has lag state.
 --- @param bufnr number|nil defaults to current buffer
 --- @return boolean

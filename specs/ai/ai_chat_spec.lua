@@ -978,3 +978,112 @@ describe("AI Activation Lifecycle", function()
         eq(ai.is_active(), false, "AI should be inactive after reset_all")
     end)
 end)
+
+describe("AI Context Dump", function()
+    local ai = require("utils.ai")
+    local lag_mod = require("utils.ai.lag")
+    ai.setup()
+    stub_api()
+    vim.notify = function() end
+
+    local test_bufs = {}
+
+    before_each(function()
+        vim.cmd("enew")
+        ai.reset_all()
+        ai.activate()
+        stub_api()
+        for _, buf in ipairs(test_bufs) do
+            if vim.api.nvim_buf_is_valid(buf) then
+                vim.api.nvim_buf_delete(buf, { force = true })
+            end
+        end
+        test_bufs = {}
+        stub_response = "I am a test response"
+        stub_error = nil
+        stream_messages_spy = nil
+    end)
+
+    after_each(function()
+        close_all_floats()
+        lag_mod.stop()
+    end)
+
+    it("snapshot includes project and active state", function()
+        local snapshot = ai.build_state_snapshot()
+
+        eq(snapshot.project, vim.fn.getcwd(), "Project should be cwd")
+        eq(snapshot.active, true, "Active should reflect current state")
+    end)
+
+    it("snapshot includes conversation history", function()
+        send_user_message(ai, "hello world")
+
+        local snapshot = ai.build_state_snapshot()
+
+        eq(#snapshot.conversation, 2, "Should have user + assistant messages")
+        assert(snapshot.conversation[1].content:find("hello world", 1, true),
+            "First message should contain user text")
+    end)
+
+    it("snapshot includes project buffers", function()
+        local buf = create_named_buf("dump_test.lua", "lua", { "local x = 1" })
+        table.insert(test_bufs, buf)
+        vim.api.nvim_set_current_buf(buf)
+
+        local snapshot = ai.build_state_snapshot()
+
+        assert(#snapshot.project_buffers >= 1, "Should have at least one project buffer")
+        local found = false
+        for _, name in ipairs(snapshot.project_buffers) do
+            if name:find("dump_test.lua", 1, true) then
+                found = true
+            end
+        end
+        assert(found, "Project buffers should include the test buffer")
+    end)
+
+    it("snapshot includes buffer context block", function()
+        local buf = create_named_buf("ctx_dump.lua", "lua", { "local y = 2" })
+        table.insert(test_bufs, buf)
+        vim.api.nvim_set_current_buf(buf)
+
+        local snapshot = ai.build_state_snapshot()
+
+        assert(snapshot.buffer_context ~= nil, "Buffer context should be present")
+        assert(snapshot.buffer_context:find("ctx_dump.lua", 1, true),
+            "Buffer context should contain the test file")
+    end)
+
+    it("snapshot includes lag state", function()
+        local snapshot = ai.build_state_snapshot()
+
+        assert(snapshot.lag ~= nil, "Lag state should be present")
+        eq(type(snapshot.lag.running), "boolean", "Lag running should be a boolean")
+        eq(type(snapshot.lag.buffers), "table", "Lag buffers should be a table")
+    end)
+
+    it("snapshot includes usage totals", function()
+        local snapshot = ai.build_state_snapshot()
+
+        assert(snapshot.usage ~= nil, "Usage should be present")
+        eq(type(snapshot.usage.input), "number", "Usage input should be a number")
+        eq(type(snapshot.usage.output), "number", "Usage output should be a number")
+        eq(type(snapshot.usage.requests), "number", "Usage requests should be a number")
+    end)
+
+    it("context_dump writes a file to the log directory", function()
+        send_user_message(ai, "dump test message")
+
+        ai.context_dump()
+
+        local log_dir = debug.get_log_dir()
+        local files = vim.fn.glob(log_dir .. "/context_dump_*.txt", false, true)
+        assert(#files >= 1, "Should have written at least one dump file")
+        local content = table.concat(vim.fn.readfile(files[#files]), "\n")
+        assert(content:find("AI CONTEXT DUMP", 1, true), "Dump should have header")
+        assert(content:find("dump test message", 1, true), "Dump should contain conversation")
+        assert(content:find("BUFFER CONTEXT BLOCK", 1, true), "Dump should have buffer context section")
+        assert(content:find("LAG MODE", 1, true), "Dump should have lag section")
+    end)
+end)

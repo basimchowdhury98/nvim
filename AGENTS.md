@@ -131,6 +131,7 @@ If both guarantees hold, every test is meaningful and no real failure goes undet
 
 ## Git Conventions
 
+- **Always ask before committing.** Never create a commit without explicit user approval.
 - Short, single-line commit messages
 - Imperative or descriptive tone: `"Add functional tests for AI chat plugin"`
 - No conventional-commits prefix required

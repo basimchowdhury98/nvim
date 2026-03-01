@@ -434,6 +434,153 @@ function M.activate()
     activate()
 end
 
+--- Build a full snapshot of all tracked plugin state.
+--- @return table
+function M.build_state_snapshot()
+    local session = get_session()
+    local project_bufs = get_project_buffers()
+    local buf_names = {}
+    for _, buf in ipairs(project_bufs) do
+        table.insert(buf_names, vim.api.nvim_buf_get_name(buf))
+    end
+
+    return {
+        project = get_project(),
+        active = active,
+        provider = api.get_provider(),
+        conversation = vim.deepcopy(session.conversation),
+        buffer_context = build_context_block(),
+        project_buffers = buf_names,
+        lag = lag.get_all_state(),
+        usage = usage.get_totals(),
+    }
+end
+
+--- Dump full plugin state to a file in the log directory.
+function M.context_dump()
+    local snapshot = M.build_state_snapshot()
+    local lines = {}
+
+    local function add(text)
+        table.insert(lines, text)
+    end
+
+    local function add_separator()
+        add(string.rep("=", 72))
+    end
+
+    add_separator()
+    add("AI CONTEXT DUMP — " .. os.date("%Y-%m-%d %H:%M:%S"))
+    add_separator()
+
+    add("")
+    add("Project: " .. snapshot.project)
+    add("Active: " .. tostring(snapshot.active))
+    add("Provider: " .. snapshot.provider)
+
+    -- Usage
+    add("")
+    add_separator()
+    add("USAGE")
+    add_separator()
+    local u = snapshot.usage
+    add("Requests: " .. u.requests)
+    add("Input tokens: " .. u.input)
+    add("Output tokens: " .. u.output)
+    add("Cache read: " .. u.cache_read)
+    add("Cache write: " .. u.cache_write)
+    add("Cost: $" .. string.format("%.4f", u.cost))
+
+    -- Project buffers
+    add("")
+    add_separator()
+    add("PROJECT BUFFERS (" .. #snapshot.project_buffers .. ")")
+    add_separator()
+    if #snapshot.project_buffers == 0 then
+        add("(none)")
+    else
+        for _, name in ipairs(snapshot.project_buffers) do
+            add("  " .. name)
+        end
+    end
+
+    -- Conversation history
+    add("")
+    add_separator()
+    add("CONVERSATION (" .. #snapshot.conversation .. " messages)")
+    add_separator()
+    if #snapshot.conversation == 0 then
+        add("(empty)")
+    else
+        for i, msg in ipairs(snapshot.conversation) do
+            add("")
+            add("[" .. i .. "] " .. msg.role .. ":")
+            add(msg.content)
+        end
+    end
+
+    -- Buffer context (what gets injected into the first message)
+    add("")
+    add_separator()
+    add("BUFFER CONTEXT BLOCK")
+    add_separator()
+    if snapshot.buffer_context then
+        add(snapshot.buffer_context)
+    else
+        add("(none)")
+    end
+
+    -- Lag mode state
+    add("")
+    add_separator()
+    add("LAG MODE")
+    add_separator()
+    local lag_state = snapshot.lag
+    add("Running: " .. tostring(lag_state.running))
+    local buf_count = 0
+    for _ in pairs(lag_state.buffers) do
+        buf_count = buf_count + 1
+    end
+    add("Tracked buffers: " .. buf_count)
+    for name, bstate in pairs(lag_state.buffers) do
+        add("")
+        add("  Buffer: " .. name)
+        add("  Baseline lines: " .. bstate.baseline_lines)
+        add("  Processing: " .. tostring(bstate.processing))
+        add("  Pending save: " .. tostring(bstate.pending_save))
+        add("  Queue count: " .. bstate.queue_count)
+        add("  Active modification: " .. tostring(bstate.active_index))
+        add("  Modifications: " .. #bstate.modifications)
+        for j, mod in ipairs(bstate.modifications) do
+            add("    [" .. j .. "] line " .. mod.line .. " (original " .. mod.original_start .. "-" .. mod.original_end .. ")")
+            add("    original: " .. table.concat(mod.original_lines, "\n    "))
+            add("    new: " .. table.concat(mod.new_lines, "\n    "))
+        end
+    end
+
+    add("")
+    add_separator()
+
+    -- Write to file
+    local log_dir = debug.get_log_dir()
+    vim.fn.mkdir(log_dir, "p")
+    local dump_path = log_dir .. "/context_dump_" .. os.date("%Y%m%d_%H%M%S") .. ".txt"
+    local content = table.concat(lines, "\n") .. "\n"
+    local f = io.open(dump_path, "w")
+    if not f then
+        vim.notify("AI: Failed to write context dump", vim.log.levels.ERROR)
+        return
+    end
+    f:write(content)
+    f:close()
+
+    -- Open it in a split
+    vim.cmd("vsplit " .. vim.fn.fnameescape(dump_path))
+    vim.bo.modifiable = false
+    vim.bo.readonly = true
+    vim.notify("AI: Context dump written to " .. dump_path)
+end
+
 function M.setup(opts)
     config = vim.tbl_deep_extend("force", config, opts or {})
 
@@ -455,22 +602,9 @@ function M.setup(opts)
         lag.revert()
     end, { desc = "Lag: Revert nearest modification" })
 
-    vim.api.nvim_create_user_command("AIFiles", function()
-        local bufs = get_project_buffers()
-        if #bufs == 0 then
-            vim.notify("AI: No project files open")
-            return
-        end
-        local names = {}
-        for _, buf in ipairs(bufs) do
-            table.insert(names, vim.api.nvim_buf_get_name(buf))
-        end
-        vim.notify("AI project files:\n" .. table.concat(names, "\n"))
-    end, { desc = "AI: List open project files" })
-
-    vim.api.nvim_create_user_command("AIProject", function()
-        vim.notify("AI project: " .. get_project())
-    end, { desc = "AI: Show current project path" })
+    vim.api.nvim_create_user_command("AIContextDump", function()
+        M.context_dump()
+    end, { desc = "AI: Dump full plugin state to log directory" })
 
     vim.api.nvim_create_user_command("AIDebugLogs", function()
         local log_file = debug.get_log_dir() .. "/" .. os.date("%Y-%m-%d") .. ".log"
