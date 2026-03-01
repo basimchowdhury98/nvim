@@ -115,7 +115,7 @@ end
 function M.update_tabline()
     local tabline = M.build_tabline()
     if tabline == "" then
-        vim.o.showtabline = 0
+        vim.o.showtabline = 1
         vim.o.tabline = ""
     else
         vim.o.showtabline = 2
