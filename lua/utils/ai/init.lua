@@ -18,6 +18,7 @@ local default_config = {
         send = "<leader>io",
         clear = "<leader>ic",
         cancel = "<leader>ix",
+        continue_response = "<leader>in",
         lag_revert = "<leader>lr",
         lag_clear = "<leader>lc",
     },
@@ -253,21 +254,6 @@ local function send_message(text, selection)
             chat.finish_assistant_message()
             cancel_request = nil
             usage.add(metadata)
-
-            -- Auto-yank the first <code> block into the unnamed register
-            local code = full_response:match("<code>\n?(.-)</code>")
-            if code then
-                -- Safety net: strip fences/backticks/quotes the LLM may have added
-                code = code:gsub("```[^\n]*\n?", "")
-                code = code:gsub("^\n+", ""):gsub("\n+$", "")
-                code = code:gsub("^`+", ""):gsub("`+$", "")
-                code = code:gsub('^"', ""):gsub('"$', "")
-                code = code:gsub("^'", ""):gsub("'$", "")
-                vim.fn.setreg('"', code)
-                vim.fn.setreg('0', code)
-                vim.fn.setreg('+', code)
-                debug.log("Auto-yanked first code block (" .. #code .. " chars)")
-            end
         end,
         -- on_error
         function(err)
@@ -391,6 +377,11 @@ function M.send(text, selection)
     send_message(text, selection)
 end
 
+--- Send a "continue" message to ask the LLM to keep going
+function M.continue_response()
+    send_message("continue")
+end
+
 --- Get context block from open project buffers (exposed for lag mode)
 --- @return string|nil
 function M.build_context_block()
@@ -417,6 +408,7 @@ function M.setup(opts)
     map("v", config.keymaps.send, M.prompt, { desc = "AI: Send message with selection context" })
     map("n", config.keymaps.clear, M.clear, { desc = "AI: Clear conversation" })
     map("n", config.keymaps.cancel, M.cancel, { desc = "AI: Interrupt streaming response" })
+    map("n", config.keymaps.continue_response, M.continue_response, { desc = "AI: Continue response" })
 
     vim.api.nvim_create_user_command("AIFiles", function()
         local bufs = get_project_buffers()

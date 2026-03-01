@@ -7,11 +7,12 @@ local M = {}
 
 local default_config = {
     split_width = 80,
-    filetype = "markdown",
     title = "AI Chat",
 }
 
 local config = vim.deepcopy(default_config)
+
+local ns = vim.api.nvim_create_namespace("ai_chat")
 
 local state = {
     buf_id = nil,
@@ -20,10 +21,30 @@ local state = {
     spinner = nil,
     spinner_line = nil, -- 0-indexed line where the spinner lives
     set_spinner_label = nil, -- function to change spinner label text
+    user_section_start = nil, -- 0-indexed line where user section begins
+    assistant_section_start = nil, -- 0-indexed line where assistant section starts (for post-processing)
 }
+
+-- Define highlight groups by linking to standard groups (adapts to any colorscheme)
+local function setup_highlights()
+    local set = vim.api.nvim_set_hl
+    set(0, "AIChatUserHeader", { link = "Title", default = true })
+    set(0, "AIChatUserBg", { link = "TabLine", default = true })
+    set(0, "AIChatAssistantHeader", { link = "Function", default = true })
+    set(0, "AIChatError", { link = "ErrorMsg", default = true })
+    set(0, "AIChatInterrupted", { link = "Comment", default = true })
+    set(0, "AIChatSeparator", { link = "NonText", default = true })
+    set(0, "AIChatBold", { bold = true, default = true })
+    set(0, "AIChatCodeBlock", { link = "CursorLine", default = true })
+    set(0, "AIChatInlineCode", { link = "CursorLine", default = true })
+end
 
 function M.setup(opts)
     config = vim.tbl_deep_extend("force", config, opts or {})
+    setup_highlights()
+    vim.api.nvim_create_autocmd("ColorScheme", {
+        callback = setup_highlights,
+    })
 end
 
 local function buf_is_valid()
@@ -32,6 +53,33 @@ end
 
 local function win_is_valid()
     return state.win_id and vim.api.nvim_win_is_valid(state.win_id)
+end
+
+--- Apply a line-level highlight (background) to a range of lines
+--- @param start_line number 0-indexed start line
+--- @param end_line number 0-indexed end line (exclusive)
+--- @param hl_group string highlight group name
+local function highlight_lines(start_line, end_line, hl_group)
+    if not buf_is_valid() then return end
+    for line = start_line, end_line - 1 do
+        vim.api.nvim_buf_set_extmark(state.buf_id, ns, line, 0, {
+            line_hl_group = hl_group,
+        })
+    end
+end
+
+--- Apply a highlight to a specific line's text
+--- @param line number 0-indexed line
+--- @param hl_group string highlight group name
+local function highlight_text(line, hl_group)
+    if not buf_is_valid() then return end
+    local text = vim.api.nvim_buf_get_lines(state.buf_id, line, line + 1, false)[1] or ""
+    if #text > 0 then
+        vim.api.nvim_buf_set_extmark(state.buf_id, ns, line, 0, {
+            end_col = #text,
+            hl_group = hl_group,
+        })
+    end
 end
 
 local function create_buf()
@@ -43,7 +91,7 @@ local function create_buf()
     vim.bo[buf].buftype = "nofile"
     vim.bo[buf].bufhidden = "hide"
     vim.bo[buf].swapfile = false
-    vim.bo[buf].filetype = config.filetype
+    vim.bo[buf].filetype = "aichat"
     vim.api.nvim_buf_set_name(buf, "ai-chat")
 
     state.buf_id = buf
@@ -62,6 +110,108 @@ local function with_modifiable(fn)
     vim.bo[state.buf_id].modifiable = true
     fn()
     vim.bo[state.buf_id].modifiable = false
+end
+
+--- Strip markdown markers from a line, returning cleaned text and a list of
+--- {start, len, hl} entries (0-indexed byte positions in the cleaned string).
+--- @param line string
+--- @return string cleaned
+--- @return table[] highlights
+local function strip_inline_markdown(line)
+    local segments = {} -- {text, hl_group|nil}
+    local pos = 1
+
+    while pos <= #line do
+        -- Try **bold**
+        local bs, be, bold_text = line:find("%*%*(.-)%*%*", pos)
+        -- Try `code`
+        local cs, ce, code_text = line:find("`([^`]+)`", pos)
+
+        -- Pick whichever comes first
+        if bs and (not cs or bs <= cs) then
+            if bs > pos then
+                table.insert(segments, { text = line:sub(pos, bs - 1) })
+            end
+            table.insert(segments, { text = bold_text, hl = "AIChatBold" })
+            pos = be + 1
+        elseif cs then
+            if cs > pos then
+                table.insert(segments, { text = line:sub(pos, cs - 1) })
+            end
+            table.insert(segments, { text = code_text, hl = "AIChatInlineCode" })
+            pos = ce + 1
+        else
+            table.insert(segments, { text = line:sub(pos) })
+            break
+        end
+    end
+
+    local cleaned = {}
+    local highlights = {}
+    local col = 0
+    for _, seg in ipairs(segments) do
+        table.insert(cleaned, seg.text)
+        if seg.hl then
+            table.insert(highlights, { start = col, len = #seg.text, hl = seg.hl })
+        end
+        col = col + #seg.text
+    end
+
+    return table.concat(cleaned), highlights
+end
+
+--- Post-process assistant lines: strip markdown syntax and apply extmark highlights.
+--- Handles **bold**, inline `code`, and ```fenced code blocks```.
+--- @param from_line number 0-indexed first line of assistant content
+--- @param to_line number 0-indexed last line (exclusive)
+local function apply_markdown_highlights(from_line, to_line)
+    if not buf_is_valid() then return end
+    local lines = vim.api.nvim_buf_get_lines(state.buf_id, from_line, to_line, false)
+    local in_code_block = false
+    local code_block_start = nil
+
+    for i, line in ipairs(lines) do
+        local line_idx = from_line + i - 1
+
+        if line:match("^```") then
+            if not in_code_block then
+                in_code_block = true
+                code_block_start = line_idx
+                -- Hide the opening fence line
+                with_modifiable(function()
+                    vim.api.nvim_buf_set_lines(state.buf_id, line_idx, line_idx + 1, false, { "" })
+                end)
+            else
+                -- Hide the closing fence line
+                with_modifiable(function()
+                    vim.api.nvim_buf_set_lines(state.buf_id, line_idx, line_idx + 1, false, { "" })
+                end)
+                if code_block_start then
+                    highlight_lines(code_block_start, line_idx + 1, "AIChatCodeBlock")
+                end
+                in_code_block = false
+                code_block_start = nil
+            end
+        elseif not in_code_block then
+            local cleaned, highlights = strip_inline_markdown(line)
+            if cleaned ~= line then
+                with_modifiable(function()
+                    vim.api.nvim_buf_set_lines(state.buf_id, line_idx, line_idx + 1, false, { cleaned })
+                end)
+            end
+            for _, hl in ipairs(highlights) do
+                vim.api.nvim_buf_set_extmark(state.buf_id, ns, line_idx, hl.start, {
+                    end_col = hl.start + hl.len,
+                    hl_group = hl.hl,
+                    priority = 200,
+                })
+            end
+        end
+    end
+
+    if in_code_block and code_block_start then
+        highlight_lines(code_block_start, to_line, "AIChatCodeBlock")
+    end
 end
 
 --- Remove the spinner line from the buffer (does not stop the timer)
@@ -175,35 +325,57 @@ end
 
 --- Append lines of text to the chat buffer
 --- @param lines string[] Lines to append
+--- @return number start_line 0-indexed start line of the appended content
 local function append_lines(lines)
-    if not buf_is_valid() then return end
+    if not buf_is_valid() then return 0 end
 
+    local start_line = 0
     with_modifiable(function()
         local line_count = vim.api.nvim_buf_line_count(state.buf_id)
         local first_line = vim.api.nvim_buf_get_lines(state.buf_id, 0, 1, false)
         if line_count == 1 and first_line[1] == "" then
+            start_line = 0
             vim.api.nvim_buf_set_lines(state.buf_id, 0, 1, false, lines)
         else
+            start_line = line_count
             vim.api.nvim_buf_set_lines(state.buf_id, line_count, line_count, false, lines)
         end
     end)
     scroll_to_bottom()
+    return start_line
 end
 
 --- Append a user message to the chat buffer
 --- @param text string The user's message
 function M.append_user_message(text)
-    local lines = { "---", "", "**You:**", "" }
+    local lines = { "---", "", "You:", "" }
     for line in text:gmatch("[^\n]+") do
         table.insert(lines, line)
     end
     table.insert(lines, "")
-    append_lines(lines)
+    local start = append_lines(lines)
+
+    -- Track user section for background highlighting
+    state.user_section_start = start
+
+    -- Highlight separator
+    highlight_text(start, "AIChatSeparator")
+    -- Highlight header (start + 2 = "You:" line)
+    highlight_text(start + 2, "AIChatUserHeader")
+    -- Highlight all user section lines with background
+    highlight_lines(start + 2, start + #lines, "AIChatUserBg")
 end
 
 --- Start an assistant response block in the chat buffer
 function M.start_assistant_message()
-    append_lines({ "**Assistant:**", "" })
+    local start = append_lines({ "", "Assistant:", "" })
+
+    -- Track assistant section start for post-processing
+    state.assistant_section_start = start + 2
+
+    -- Highlight header
+    highlight_text(start + 1, "AIChatAssistantHeader")
+
     state.is_streaming = true
     state.set_spinner_label = start_spinner()
 end
@@ -212,9 +384,6 @@ end
 --- @param text string The text chunk to append
 function M.append_delta(text)
     if not buf_is_valid() then return end
-
-    -- Replace <code>/<​/code> tags with markdown fences for display
-    text = text:gsub("<code>", "```"):gsub("</code>", "```")
 
     -- Switch spinner label from "Thinking..." to "Streaming..." on first delta
     if state.set_spinner_label then
@@ -273,19 +442,28 @@ function M.finish_assistant_message()
     stop_spinner()
     state.set_spinner_label = nil
     append_lines({ "", "" })
+
+    -- Post-process: strip markdown syntax and apply highlights
+    if state.assistant_section_start and buf_is_valid() then
+        local line_count = vim.api.nvim_buf_line_count(state.buf_id)
+        apply_markdown_highlights(state.assistant_section_start, line_count)
+    end
+
     state.is_streaming = false
 end
 
 --- Append a complete assistant message (for re-rendering saved conversations)
 --- @param text string The assistant's full response
 function M.append_assistant_content(text)
-    text = text:gsub("<code>", "```"):gsub("</code>", "```")
-    local lines = { "**Assistant:**", "" }
+    local lines = { "", "Assistant:", "" }
     for line in text:gmatch("([^\n]*)\n?") do
         table.insert(lines, line)
     end
     table.insert(lines, "")
-    append_lines(lines)
+    local start = append_lines(lines)
+
+    highlight_text(start + 1, "AIChatAssistantHeader")
+    apply_markdown_highlights(start + 2, start + #lines)
 end
 
 --- Show an error in the chat buffer
@@ -293,7 +471,8 @@ end
 function M.append_error(msg)
     stop_spinner()
     state.set_spinner_label = nil
-    append_lines({ "", "**Error:** " .. msg, "" })
+    local start = append_lines({ "", "Error: " .. msg, "" })
+    highlight_text(start + 1, "AIChatError")
     state.is_streaming = false
 end
 
@@ -301,7 +480,15 @@ end
 function M.append_interrupted()
     stop_spinner()
     state.set_spinner_label = nil
-    append_lines({ "", "", "*[interrupted]*", "" })
+
+    -- Post-process what we have so far before adding interrupted marker
+    if state.assistant_section_start and buf_is_valid() then
+        local line_count = vim.api.nvim_buf_line_count(state.buf_id)
+        apply_markdown_highlights(state.assistant_section_start, line_count)
+    end
+
+    local start = append_lines({ "", "", "[interrupted]", "" })
+    highlight_text(start + 2, "AIChatInterrupted")
     state.is_streaming = false
 end
 
@@ -309,7 +496,10 @@ end
 function M.clear()
     stop_spinner()
     state.set_spinner_label = nil
+    state.user_section_start = nil
+    state.assistant_section_start = nil
     if not buf_is_valid() then return end
+    vim.api.nvim_buf_clear_namespace(state.buf_id, ns, 0, -1)
     with_modifiable(function()
         vim.api.nvim_buf_set_lines(state.buf_id, 0, -1, false, { "" })
     end)
