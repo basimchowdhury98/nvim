@@ -72,11 +72,13 @@ function M.format_stats()
     end
 
     local parts = {}
-    table.insert(parts, format_tokens(totals.input) .. " in")
+    local total_in = totals.input + totals.cache_read + totals.cache_write
+    table.insert(parts, format_tokens(total_in) .. " in")
     table.insert(parts, format_tokens(totals.output) .. " out")
 
     if totals.cache_read > 0 then
-        table.insert(parts, format_tokens(totals.cache_read) .. " cached")
+        local pct = math.floor(totals.cache_read / total_in * 100)
+        table.insert(parts, pct .. "% cached")
     end
 
     if totals.cost > 0 then
@@ -102,7 +104,9 @@ function M.build_tabline()
 
     local content
     if stats ~= "" then
-        content = " " .. label .. " | " .. stats .. " "
+        -- Escape % for tabline (% is a special format char in statusline/tabline)
+        local safe_stats = stats:gsub("%%", "%%%%")
+        content = " " .. label .. " | " .. safe_stats .. " "
     else
         content = " " .. label .. " "
     end

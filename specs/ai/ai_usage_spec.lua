@@ -130,12 +130,20 @@ describe("AI Usage Formatting", function()
         assert(stats:find("300 out"), "Should contain output: " .. stats)
     end)
 
-    it("format_stats includes cache when present", function()
+    it("format_stats shows total input including cache", function()
+        usage.add({ tokens = { input = 100, output = 50, cache_read = 5000, cache_write = 200 } })
+
+        local stats = usage.format_stats()
+
+        assert(stats:find("5.3K in"), "Should show total input (uncached + cache read + cache write): " .. stats)
+    end)
+
+    it("format_stats shows cache percentage when present", function()
         usage.add({ tokens = { input = 100, output = 50, cache_read = 5000, cache_write = 0 } })
 
         local stats = usage.format_stats()
 
-        assert(stats:find("5.0K cached"), "Should contain cache: " .. stats)
+        assert(stats:find("98%% cached"), "Should show cache percentage: " .. stats)
     end)
 
     it("format_stats includes cost when present", function()
