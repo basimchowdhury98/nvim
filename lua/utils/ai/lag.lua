@@ -4,6 +4,7 @@
 
 local api = require("utils.ai.api")
 local debug = require("utils.ai.debug")
+local usage = require("utils.ai.usage")
 local M = {}
 
 -- Global state
@@ -669,13 +670,14 @@ on_save = function(bufnr)
                 fidget_handle.message = "Reviewing... (" .. state.queue_count .. " queued)"
             end
         end,
-        function()
+        function(metadata)
             state.processing = false
             clear_working_indicator(bufnr)
             if fidget_handle then
                 fidget_handle.message = "Done"
                 fidget_handle:finish()
             end
+            usage.add(metadata)
 
             local full_response = table.concat(response_chunks, "")
             debug.log("Lag: LLM response:\n" .. full_response)

@@ -6,6 +6,7 @@ local chat = require("utils.ai.chat")
 local input = require("utils.ai.input")
 local debug = require("utils.ai.debug")
 local lag = require("utils.ai.lag")
+local usage = require("utils.ai.usage")
 local M = {}
 
 local default_config = {
@@ -245,12 +246,13 @@ local function send_message(text, selection)
             chat.append_delta(delta)
         end,
         -- on_done
-        function()
+        function(metadata)
             local full_response = table.concat(response_chunks, "")
             debug.log("AI response:\n" .. full_response)
             table.insert(session.conversation, { role = "assistant", content = full_response })
             chat.finish_assistant_message()
             cancel_request = nil
+            usage.add(metadata)
 
             -- Auto-yank the first <code> block into the unnamed register
             local code = full_response:match("<code>\n?(.-)</code>")
@@ -350,6 +352,7 @@ function M.clear()
     local session = get_session()
     session.conversation = {}
     chat.close()
+    usage.reset()
     -- Reset last_project so next toggle doesn't think we switched
     last_project = get_project()
     vim.notify("AI: Conversation cleared for " .. get_project())
@@ -364,6 +367,7 @@ function M.reset_all()
     last_project = nil
     api.reset_alt()
     lag.reset()
+    usage.reset()
 end
 
 --- Interrupt the current in-flight request
@@ -448,10 +452,12 @@ function M.setup(opts)
 
     vim.api.nvim_create_user_command("LagStart", function()
         lag.start(M.build_context_block, M.get_session)
+        usage.update_tabline()
     end, { desc = "Lag: Start lag mode globally" })
 
     vim.api.nvim_create_user_command("LagStop", function()
         lag.stop()
+        usage.update_tabline()
     end, { desc = "Lag: Stop lag mode globally" })
 
     map("n", config.keymaps.lag_revert, lag.revert, { desc = "Lag: Revert nearest modification" })

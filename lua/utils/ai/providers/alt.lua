@@ -62,6 +62,7 @@ function M.stream(messages, config, callbacks)
         model = config.model,
         max_tokens = config.max_tokens,
         stream = true,
+        stream_options = { include_usage = true },
         messages = vim.list_extend(
             { { role = "system", content = config.system_prompt } },
             messages
@@ -83,6 +84,7 @@ function M.stream(messages, config, callbacks)
     local event_count = 0
     local last_event_time = vim.uv.hrtime()
     local start_time = last_event_time
+    local usage_data = nil
 
     local function log_timing(label)
         local now = vim.uv.hrtime()
@@ -122,13 +124,26 @@ function M.stream(messages, config, callbacks)
             if event == "done" then
                 log_timing("[DONE]")
                 done_called = true
+                local metadata = nil
+                if usage_data then
+                    metadata = { tokens = usage_data }
+                end
                 vim.schedule(function()
-                    callbacks.on_done()
+                    callbacks.on_done(metadata)
                 end)
                 return
             end
 
             log_timing("event: delta")
+
+            if event.usage then
+                usage_data = {
+                    input = event.usage.prompt_tokens or 0,
+                    output = event.usage.completion_tokens or 0,
+                    cache_read = 0,
+                    cache_write = 0,
+                }
+            end
 
             local delta = event.choices and event.choices[1] and event.choices[1].delta
             if delta and delta.content then
@@ -153,7 +168,7 @@ function M.stream(messages, config, callbacks)
             elseif not done_called then
                 debug.log("[alt] WARNING: process exited without [DONE], calling on_done as fallback")
                 vim.schedule(function()
-                    callbacks.on_done()
+                    callbacks.on_done(nil)
                 end)
             end
         end,

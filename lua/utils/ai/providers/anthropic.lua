@@ -81,6 +81,7 @@ function M.stream(messages, config, callbacks)
     local event_count = 0
     local last_event_time = vim.uv.hrtime()
     local start_time = last_event_time
+    local usage_data = { input = 0, output = 0, cache_read = 0, cache_write = 0 }
 
     local function log_timing(label)
         local now = vim.uv.hrtime()
@@ -120,7 +121,18 @@ function M.stream(messages, config, callbacks)
 
             log_timing("event: " .. tostring(event.type))
 
-            if event.type == "content_block_delta" then
+            if event.type == "message_start" then
+                local msg = event.message
+                if msg and msg.usage then
+                    usage_data.input = msg.usage.input_tokens or 0
+                    usage_data.cache_read = msg.usage.cache_read_input_tokens or 0
+                    usage_data.cache_write = msg.usage.cache_creation_input_tokens or 0
+                end
+            elseif event.type == "message_delta" then
+                if event.usage then
+                    usage_data.output = event.usage.output_tokens or 0
+                end
+            elseif event.type == "content_block_delta" then
                 local delta = event.delta
                 if delta and delta.type == "text_delta" and delta.text then
                     vim.schedule(function()
@@ -131,7 +143,7 @@ function M.stream(messages, config, callbacks)
                 log_timing("message_stop")
                 done_called = true
                 vim.schedule(function()
-                    callbacks.on_done()
+                    callbacks.on_done({ tokens = usage_data })
                 end)
             elseif event.type == "error" then
                 local msg = event.error and event.error.message or "Unknown API error"

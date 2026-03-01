@@ -92,8 +92,23 @@ function M.stream(messages, config, callbacks)
                 log_timing("step_finish reason=" .. reason)
                 if reason == "stop" then
                     done_called = true
+                    local metadata = nil
+                    if event.part then
+                        metadata = {}
+                        if event.part.tokens then
+                            metadata.tokens = {
+                                input = event.part.tokens.input or 0,
+                                output = event.part.tokens.output or 0,
+                                cache_read = event.part.tokens.cache and event.part.tokens.cache.read or 0,
+                                cache_write = event.part.tokens.cache and event.part.tokens.cache.write or 0,
+                            }
+                        end
+                        if event.part.cost then
+                            metadata.cost = event.part.cost
+                        end
+                    end
                     vim.schedule(function()
-                        callbacks.on_done()
+                        callbacks.on_done(metadata)
                     end)
                 end
             elseif event.type == "error" then
@@ -121,7 +136,7 @@ function M.stream(messages, config, callbacks)
             elseif not done_called then
                 debug.log("[opencode] WARNING: process exited without step_finish, calling on_done as fallback")
                 vim.schedule(function()
-                    callbacks.on_done()
+                    callbacks.on_done(nil)
                 end)
             end
         end,
