@@ -58,6 +58,9 @@ local function get_or_create_state(bufnr)
             ns = vim.api.nvim_create_namespace("ai_lag_" .. bufnr),
             active_index = nil,
             working_extmarks = {},
+            cancel_request = nil,
+            cancelled = false,
+            fidget_handle = nil,
         }
     end
     return buffers[bufnr]
@@ -632,15 +635,16 @@ on_save = function(bufnr)
     debug.log(string.format("Lag: %d diff region(s) in buffer %d", #diff_regions, bufnr))
 
     state.processing = true
+    state.cancelled = false
     state.queue_count = 0
 
     show_working_indicator(bufnr, diff_regions)
 
     -- Fidget progress spinner with queue count
     local f_ok, progress = pcall(require, "fidget.progress")
-    local fidget_handle = nil
+    state.fidget_handle = nil
     if f_ok then
-        fidget_handle = progress.handle.create({
+        state.fidget_handle = progress.handle.create({
             title = "Lag",
             message = "Reviewing...",
             lsp_client = { name = "Lag" },
@@ -657,21 +661,26 @@ on_save = function(bufnr)
     local prompt = build_lag_prompt(bufnr, snapshot_regions, context_block, session)
     local response_chunks = {}
 
-    api.stream(
+    state.cancel_request = api.stream(
         { { role = "user", content = prompt } },
         function(delta)
             table.insert(response_chunks, delta)
             -- Update fidget with queue count if saves came in
-            if fidget_handle and state.queue_count > 0 then
-                fidget_handle.message = "Reviewing... (" .. state.queue_count .. " queued)"
+            if state.fidget_handle and state.queue_count > 0 then
+                state.fidget_handle.message = "Reviewing... (" .. state.queue_count .. " queued)"
             end
         end,
         function(metadata)
+            state.cancel_request = nil
+            if state.cancelled then
+                return
+            end
             state.processing = false
             clear_working_indicator(bufnr)
-            if fidget_handle then
-                fidget_handle.message = "Done"
-                fidget_handle:finish()
+            if state.fidget_handle then
+                state.fidget_handle.message = "Done"
+                state.fidget_handle:finish()
+                state.fidget_handle = nil
             end
             usage.add(metadata)
 
@@ -710,11 +719,16 @@ on_save = function(bufnr)
             process_queue(bufnr)
         end,
         function(err)
+            state.cancel_request = nil
+            if state.cancelled then
+                return
+            end
             state.processing = false
             clear_working_indicator(bufnr)
-            if fidget_handle then
-                fidget_handle.message = "Error"
-                fidget_handle:finish()
+            if state.fidget_handle then
+                state.fidget_handle.message = "Error"
+                state.fidget_handle:finish()
+                state.fidget_handle = nil
             end
             debug.log("Lag: stream error: " .. err)
             vim.cmd("redraw")
@@ -806,6 +820,48 @@ local function teardown()
     get_context_fn = nil
     get_session_fn = nil
     running = false
+end
+
+--- Cancel all in-flight and queued lag requests without stopping lag mode.
+--- Preserves baseline (so diff regions are picked up again on next save),
+--- existing modifications, and autocmds.
+function M.cancel()
+    if not running then
+        return false
+    end
+
+    local cancelled_any = false
+    for bufnr, state in pairs(buffers) do
+        if state.processing then
+            state.cancelled = true
+            state.processing = false
+            state.pending_save = false
+            state.queue_count = 0
+
+            if state.cancel_request then
+                state.cancel_request()
+                state.cancel_request = nil
+            end
+
+            clear_working_indicator(bufnr)
+
+            if state.fidget_handle then
+                state.fidget_handle.message = "Cancelled"
+                state.fidget_handle:finish()
+                state.fidget_handle = nil
+            end
+
+            cancelled_any = true
+            debug.log("Lag: cancelled in-flight request for buffer " .. bufnr)
+        elseif state.pending_save then
+            state.pending_save = false
+            state.queue_count = 0
+            cancelled_any = true
+            debug.log("Lag: cleared queued save for buffer " .. bufnr)
+        end
+    end
+
+    return cancelled_any
 end
 
 --- Stop lag mode globally.

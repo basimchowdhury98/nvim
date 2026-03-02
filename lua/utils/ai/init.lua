@@ -249,11 +249,17 @@ local function send_message(text, selection)
         end,
         -- on_done
         function(metadata)
+            cancel_request = nil
             local full_response = table.concat(response_chunks, "")
             debug.log("AI response:\n" .. full_response)
-            table.insert(session.conversation, { role = "assistant", content = full_response })
-            chat.finish_assistant_message()
-            cancel_request = nil
+
+            if full_response == "" then
+                chat.append_error("Empty response from provider")
+                table.remove(session.conversation)
+            else
+                table.insert(session.conversation, { role = "assistant", content = full_response })
+                chat.finish_assistant_message()
+            end
             usage.add(metadata)
         end,
         -- on_error
@@ -384,16 +390,24 @@ function M.cancel()
     if not active then
         return
     end
-    if not kill_request() then
+
+    local cancelled_chat = kill_request()
+    local cancelled_lag = lag.cancel()
+
+    if not cancelled_chat and not cancelled_lag then
         return
     end
-    -- Discard the pending user message from history
-    local session = get_session()
-    if #session.conversation > 0 and session.conversation[#session.conversation].role == "user" then
-        table.remove(session.conversation)
+
+    if cancelled_chat then
+        -- Discard the pending user message from history
+        local session = get_session()
+        if #session.conversation > 0 and session.conversation[#session.conversation].role == "user" then
+            table.remove(session.conversation)
+        end
+        chat.append_interrupted()
     end
-    chat.append_interrupted()
-    debug.log("Request interrupted by user")
+
+    debug.log("Request interrupted by user (chat=" .. tostring(cancelled_chat) .. ", lag=" .. tostring(cancelled_lag) .. ")")
 end
 
 --- Send a message with an optional quoted selection (exposed for testing)

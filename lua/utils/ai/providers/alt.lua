@@ -29,6 +29,8 @@ local function parse_sse(line)
 end
 
 --- Parse a plain JSON error response from an OpenAI-compatible API
+--- Handles standard OpenAI format ({error: {message: ...}}) and
+--- non-standard formats ({detail: ...}, {message: ...}).
 --- @param line string
 --- @return string|nil error message
 local function parse_json_error(line)
@@ -41,6 +43,15 @@ local function parse_json_error(line)
     end
     if obj.error and obj.error.message then
         return obj.error.message
+    end
+    if obj.error and type(obj.error) == "string" then
+        return obj.error
+    end
+    if obj.detail and type(obj.detail) == "string" then
+        return obj.detail
+    end
+    if obj.message and type(obj.message) == "string" and not obj.choices then
+        return obj.message
     end
     return nil
 end
