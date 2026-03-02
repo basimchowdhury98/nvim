@@ -288,7 +288,9 @@ function M.open()
     vim.cmd("botright vsplit")
     state.win_id = vim.api.nvim_get_current_win()
     vim.api.nvim_win_set_buf(state.win_id, buf)
-    vim.api.nvim_win_set_width(state.win_id, config.split_width)
+    local editor_width = vim.o.columns
+    local width = math.min(config.split_width, math.floor(editor_width * 0.3))
+    vim.api.nvim_win_set_width(state.win_id, width)
 
     -- Window-local options
     vim.wo[state.win_id].number = false
