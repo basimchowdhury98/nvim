@@ -110,7 +110,7 @@ function M.stream(messages, on_delta, on_done, on_error, opts)
 
     return provider.stream(messages, provider_config, {
         on_delta = on_delta,
-        on_done = function(metadata) on_done(metadata) end,
+        on_done = on_done,
         on_error = on_error,
     })
 end

@@ -506,20 +506,6 @@ function M.clear()
     state.is_streaming = false
 end
 
---- Start the spinner (public, for tool-use gaps)
-function M.show_spinner()
-    if not state.spinner then
-        start_spinner()
-    end
-end
-
---- Stop the spinner (public, for tool-use gaps)
-function M.hide_spinner()
-    if state.spinner then
-        stop_spinner()
-    end
-end
-
 function M.is_streaming()
     return state.is_streaming
 end

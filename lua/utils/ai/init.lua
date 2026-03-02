@@ -411,17 +411,9 @@ function M.continue_response()
     send_message("continue")
 end
 
---- Get context block from open project buffers (exposed for lag mode)
---- @return string|nil
-function M.build_context_block()
-    return build_context_block()
-end
-
---- Get the current project session (exposed for lag mode)
---- @return table
-function M.get_session()
-    return get_session()
-end
+-- Expose for lag mode and context dump
+M.build_context_block = build_context_block
+M.get_session = get_session
 
 --- Whether the AI system is currently active
 --- @return boolean
@@ -458,127 +450,7 @@ end
 
 --- Dump full plugin state to a file in the log directory.
 function M.context_dump()
-    local snapshot = M.build_state_snapshot()
-    local lines = {}
-
-    local function add(text)
-        table.insert(lines, text)
-    end
-
-    local function add_separator()
-        add(string.rep("=", 72))
-    end
-
-    add_separator()
-    add("AI CONTEXT DUMP — " .. os.date("%Y-%m-%d %H:%M:%S"))
-    add_separator()
-
-    add("")
-    add("Project: " .. snapshot.project)
-    add("Active: " .. tostring(snapshot.active))
-    add("Provider: " .. snapshot.provider)
-
-    -- Usage
-    add("")
-    add_separator()
-    add("USAGE")
-    add_separator()
-    local u = snapshot.usage
-    add("Requests: " .. u.requests)
-    add("Input tokens: " .. u.input)
-    add("Output tokens: " .. u.output)
-    add("Cache read: " .. u.cache_read)
-    add("Cache write: " .. u.cache_write)
-    add("Cost: $" .. string.format("%.4f", u.cost))
-
-    -- Project buffers
-    add("")
-    add_separator()
-    add("PROJECT BUFFERS (" .. #snapshot.project_buffers .. ")")
-    add_separator()
-    if #snapshot.project_buffers == 0 then
-        add("(none)")
-    else
-        for _, name in ipairs(snapshot.project_buffers) do
-            add("  " .. name)
-        end
-    end
-
-    -- Conversation history
-    add("")
-    add_separator()
-    add("CONVERSATION (" .. #snapshot.conversation .. " messages)")
-    add_separator()
-    if #snapshot.conversation == 0 then
-        add("(empty)")
-    else
-        for i, msg in ipairs(snapshot.conversation) do
-            add("")
-            add("[" .. i .. "] " .. msg.role .. ":")
-            add(msg.content)
-        end
-    end
-
-    -- Buffer context (what gets injected into the first message)
-    add("")
-    add_separator()
-    add("BUFFER CONTEXT BLOCK")
-    add_separator()
-    if snapshot.buffer_context then
-        add(snapshot.buffer_context)
-    else
-        add("(none)")
-    end
-
-    -- Lag mode state
-    add("")
-    add_separator()
-    add("LAG MODE")
-    add_separator()
-    local lag_state = snapshot.lag
-    add("Running: " .. tostring(lag_state.running))
-    local buf_count = 0
-    for _ in pairs(lag_state.buffers) do
-        buf_count = buf_count + 1
-    end
-    add("Tracked buffers: " .. buf_count)
-    for name, bstate in pairs(lag_state.buffers) do
-        add("")
-        add("  Buffer: " .. name)
-        add("  Baseline lines: " .. bstate.baseline_lines)
-        add("  Processing: " .. tostring(bstate.processing))
-        add("  Pending save: " .. tostring(bstate.pending_save))
-        add("  Queue count: " .. bstate.queue_count)
-        add("  Active modification: " .. tostring(bstate.active_index))
-        add("  Modifications: " .. #bstate.modifications)
-        for j, mod in ipairs(bstate.modifications) do
-            add("    [" .. j .. "] line " .. mod.line .. " (original " .. mod.original_start .. "-" .. mod.original_end .. ")")
-            add("    original: " .. table.concat(mod.original_lines, "\n    "))
-            add("    new: " .. table.concat(mod.new_lines, "\n    "))
-        end
-    end
-
-    add("")
-    add_separator()
-
-    -- Write to file
-    local log_dir = debug.get_log_dir()
-    vim.fn.mkdir(log_dir, "p")
-    local dump_path = log_dir .. "/context_dump_" .. os.date("%Y%m%d_%H%M%S") .. ".txt"
-    local content = table.concat(lines, "\n") .. "\n"
-    local f = io.open(dump_path, "w")
-    if not f then
-        vim.notify("AI: Failed to write context dump", vim.log.levels.ERROR)
-        return
-    end
-    f:write(content)
-    f:close()
-
-    -- Open it in a split
-    vim.cmd("vsplit " .. vim.fn.fnameescape(dump_path))
-    vim.bo.modifiable = false
-    vim.bo.readonly = true
-    vim.notify("AI: Context dump written to " .. dump_path)
+    debug.write_dump(M.build_state_snapshot())
 end
 
 function M.setup(opts)

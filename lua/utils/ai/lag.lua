@@ -19,13 +19,12 @@ local get_session_fn = nil
 --   processing = bool,         -- LLM call in flight for this buffer
 --   pending_save = bool,       -- save queued while processing
 --   queue_count = number,      -- number of queued saves waiting
- --   modifications = table[],   -- applied modifications with original code for revert
+--   modifications = table[],   -- applied modifications with original code for revert
 --   ns = number,               -- extmark namespace for this buffer
 --   active_index = number|nil, -- index of nearest modification to cursor
 --   working_extmarks = table,  -- extmark ids for "working..." indicators
 -- }
 local buffers = {}
-
 
 
 -- Namespace for working indicators (shared)
@@ -34,14 +33,15 @@ local ns_working = vim.api.nvim_create_namespace("ai_lag_working")
 -- Diagnostic namespace (shared across all lag buffers)
 local ns_diagnostic = vim.api.nvim_create_namespace("ai_lag_diagnostic")
 
--- Define highlight groups
+-- Define highlight groups by linking to standard groups (adapts to any colorscheme)
 local function setup_highlights()
-    vim.api.nvim_set_hl(0, "AILagComment", { fg = "#6a6a6a", italic = true })
-    vim.api.nvim_set_hl(0, "AILagActiveComment", { fg = "#9a9a9a", bold = true, italic = true })
-    vim.api.nvim_set_hl(0, "AILagWorking", { fg = "#6a6a6a", italic = true })
-    vim.api.nvim_set_hl(0, "AILagWorkingLine", { bg = "#1a1a2e" })
-    vim.api.nvim_set_hl(0, "AILagLine", { bg = "#1a2e1a" })
-    vim.api.nvim_set_hl(0, "AILagActiveLine", { bg = "#253d25" })
+    local set = vim.api.nvim_set_hl
+    set(0, "AILagComment", { link = "Comment", default = true })
+    set(0, "AILagActiveComment", { link = "Title", default = true })
+    set(0, "AILagWorking", { link = "Comment", default = true })
+    set(0, "AILagWorkingLine", { link = "CursorLine", default = true })
+    set(0, "AILagLine", { link = "DiffAdd", default = true })
+    set(0, "AILagActiveLine", { link = "Visual", default = true })
 end
 
 --- Get or create per-buffer state.
@@ -296,11 +296,7 @@ local function prune_edited_modifications(bufnr)
 
     if pruned then
         state.modifications = kept
-        if #kept == 0 then
-            state.active_index = nil
-        else
-            state.active_index = nil
-        end
+        state.active_index = nil
         render_modifications(bufnr)
     end
 end
@@ -793,20 +789,13 @@ function M.start(get_context, get_session)
     vim.notify("Lag: started")
 end
 
---- Stop lag mode globally.
-function M.stop()
-    if not running then
-        vim.notify("Lag: not running", vim.log.levels.WARN)
-        return
-    end
-
-    -- Remove global autocmds
+--- Tear down all lag state: autocmds, buffer visuals, per-buffer data, callbacks.
+local function teardown()
     for _, id in ipairs(autocmd_ids) do
         pcall(vim.api.nvim_del_autocmd, id)
     end
     autocmd_ids = {}
 
-    -- Clean up all buffer state
     for bufnr, _ in pairs(buffers) do
         pcall(clear_modification_extmarks, bufnr)
         pcall(clear_working_indicator, bufnr)
@@ -817,7 +806,16 @@ function M.stop()
     get_context_fn = nil
     get_session_fn = nil
     running = false
+end
 
+--- Stop lag mode globally.
+function M.stop()
+    if not running then
+        vim.notify("Lag: not running", vim.log.levels.WARN)
+        return
+    end
+
+    teardown()
     debug.log("Lag: stopped")
     vim.notify("Lag: stopped")
 end
@@ -860,21 +858,7 @@ end
 
 --- Reset all lag state (for testing).
 function M.reset()
-    for _, id in ipairs(autocmd_ids) do
-        pcall(vim.api.nvim_del_autocmd, id)
-    end
-    autocmd_ids = {}
-
-    for bufnr, _ in pairs(buffers) do
-        pcall(clear_modification_extmarks, bufnr)
-        pcall(clear_working_indicator, bufnr)
-        pcall(vim.diagnostic.reset, ns_diagnostic, bufnr)
-    end
-    buffers = {}
-
-    get_context_fn = nil
-    get_session_fn = nil
-    running = false
+    teardown()
 end
 
 --- Check if lag mode is running globally.
