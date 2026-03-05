@@ -24,6 +24,10 @@ local config = vim.deepcopy(default_config)
 -- Whether the alt provider is active (only meaningful in work mode)
 local alt_mode = false
 
+-- Last request payloads for debugging dumps
+local last_chat_request = nil
+local last_lag_request = nil
+
 function M.setup(opts)
     config = vim.tbl_deep_extend("force", config, opts or {})
 end
@@ -108,6 +112,45 @@ function M.stream(messages, on_delta, on_done, on_error, opts)
 
     debug.log("using provider: " .. provider.name)
 
+    local source = opts and opts.source or nil
+    if source == "chat" or source == "lag" then
+        local stored = {
+            provider = provider_name,
+            endpoint = provider_config.endpoint or "(cli)",
+            model = provider_config.model or "(cli default)",
+        }
+
+        if provider_name == "anthropic" then
+            stored.body = {
+                model = provider_config.model,
+                max_tokens = provider_config.max_tokens,
+                system = provider_config.system_prompt,
+                stream = true,
+                messages = messages,
+            }
+        elseif provider_name == "alt" then
+            stored.body = {
+                model = provider_config.model,
+                max_tokens = provider_config.max_tokens,
+                stream = true,
+                stream_options = { include_usage = true },
+                messages = vim.list_extend(
+                    { { role = "system", content = provider_config.system_prompt } },
+                    vim.deepcopy(messages)
+                ),
+            }
+        else
+            local opencode = require("utils.ai.providers.opencode")
+            stored.body = opencode.build_prompt(messages, provider_config.system_prompt)
+        end
+
+        if source == "chat" then
+            last_chat_request = stored
+        else
+            last_lag_request = stored
+        end
+    end
+
     return provider.stream(messages, provider_config, {
         on_delta = on_delta,
         on_done = on_done,
@@ -131,6 +174,18 @@ end
 
 function M.get_config()
     return vim.deepcopy(config)
+end
+
+--- Get the last request payload sent via chat.
+--- @return table|nil
+function M.get_last_chat_request()
+    return last_chat_request
+end
+
+--- Get the last request payload sent via lag mode.
+--- @return table|nil
+function M.get_last_lag_request()
+    return last_lag_request
 end
 
 --- Reset alt mode (for testing)

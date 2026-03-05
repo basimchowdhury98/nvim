@@ -154,6 +154,28 @@ function M.format_snapshot(snapshot)
     return table.concat(lines, "\n") .. "\n"
 end
 
+--- Write a string to a named dump file in the log directory and open it.
+--- @param content string
+--- @param name string filename prefix (e.g. "chat_dump", "lag_dump")
+function M.write_dump_file(content, name)
+    local log_dir = M.get_log_dir()
+    vim.fn.mkdir(log_dir, "p")
+    local dump_path = log_dir .. "/" .. name .. "_" .. os.date("%Y%m%d_%H%M%S") .. ".txt"
+
+    local f = io.open(dump_path, "w")
+    if not f then
+        vim.notify("AI: Failed to write dump", vim.log.levels.ERROR)
+        return
+    end
+    f:write(content)
+    f:close()
+
+    vim.cmd("vsplit " .. vim.fn.fnameescape(dump_path))
+    vim.bo.modifiable = false
+    vim.bo.readonly = true
+    vim.notify("AI: Dump written to " .. dump_path)
+end
+
 --- Write a formatted snapshot to a file in the log directory and open it.
 --- @param snapshot table from init.build_state_snapshot()
 function M.write_dump(snapshot)

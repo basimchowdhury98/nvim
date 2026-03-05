@@ -269,7 +269,8 @@ local function send_message(text, selection)
             -- Remove the failed user message from history
             table.remove(session.conversation)
             cancel_request = nil
-        end
+        end,
+        { source = "chat" }
     )
 end
 
@@ -467,6 +468,47 @@ function M.context_dump()
     debug.write_dump(M.build_state_snapshot())
 end
 
+--- Format an API request body as a readable string.
+--- @param request table from api.get_last_*_request()
+--- @return string
+local function format_request_dump(request)
+    local lines = {}
+    table.insert(lines, "Provider: " .. request.provider)
+    table.insert(lines, "Endpoint: " .. request.endpoint)
+    table.insert(lines, "Model: " .. request.model)
+    table.insert(lines, "")
+
+    if type(request.body) == "string" then
+        table.insert(lines, "--- PROMPT (flattened text) ---")
+        table.insert(lines, request.body)
+    else
+        table.insert(lines, "--- REQUEST BODY (JSON) ---")
+        table.insert(lines, vim.fn.json_encode(request.body))
+    end
+
+    return table.concat(lines, "\n") .. "\n"
+end
+
+--- Dump the last chat API payload to a file.
+function M.chat_dump()
+    local request = api.get_last_chat_request()
+    if not request then
+        vim.notify("AI: No chat request sent yet", vim.log.levels.WARN)
+        return
+    end
+    debug.write_dump_file(format_request_dump(request), "chat_dump")
+end
+
+--- Dump the last lag API payload to a file.
+function M.lag_dump()
+    local request = api.get_last_lag_request()
+    if not request then
+        vim.notify("AI: No lag request sent yet", vim.log.levels.WARN)
+        return
+    end
+    debug.write_dump_file(format_request_dump(request), "lag_dump")
+end
+
 function M.setup(opts)
     config = vim.tbl_deep_extend("force", config, opts or {})
 
@@ -491,6 +533,14 @@ function M.setup(opts)
     vim.api.nvim_create_user_command("AIContextDump", function()
         M.context_dump()
     end, { desc = "AI: Dump full plugin state to log directory" })
+
+    vim.api.nvim_create_user_command("AIChatDump", function()
+        M.chat_dump()
+    end, { desc = "AI: Dump exact chat API payload" })
+
+    vim.api.nvim_create_user_command("AILagDump", function()
+        M.lag_dump()
+    end, { desc = "AI: Dump exact lag API payload (stubbed diff)" })
 
     vim.api.nvim_create_user_command("AIDebugLogs", function()
         local log_file = debug.get_log_dir() .. "/" .. os.date("%Y-%m-%d") .. ".log"

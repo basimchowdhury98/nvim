@@ -734,7 +734,7 @@ on_save = function(bufnr)
             vim.cmd("redraw")
             process_queue(bufnr)
         end,
-        { system_prompt = build_system_prompt() }
+        { system_prompt = build_system_prompt(), source = "lag" }
     )
 end
 

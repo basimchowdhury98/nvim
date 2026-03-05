@@ -20,7 +20,7 @@ local opencode_cli_name = "7619b34b-opencode-d0a72d8a"
 --- @param messages table[]
 --- @param system_prompt string
 --- @return string
-local function build_prompt(messages, system_prompt)
+function M.build_prompt(messages, system_prompt)
     local parts = {
         system_prompt,
         "This conversation uses " .. USER_DELIM .. " and " .. ASST_DELIM .. " delimiters.",
@@ -45,7 +45,7 @@ end
 function M.stream(messages, config, callbacks)
     debug.log("using opencode provider")
 
-    local prompt = build_prompt(messages, config.system_prompt)
+    local prompt = M.build_prompt(messages, config.system_prompt)
     debug.log("opencode prompt length: " .. #prompt)
 
     local tmp, err = job.write_temp(prompt)
