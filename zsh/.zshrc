@@ -34,6 +34,9 @@ gcoma() {
 gst() {
     git stash --include-untracked
 }
+grh() {
+    git reset --hard
+}
 alias dn='dotnet'
 dnt() {
     dotnet test

@@ -46,6 +46,10 @@ function gst {
     git stash --include-untracked
 }
 
+function grh {
+    git reset --hard
+}
+
 Set-Alias dn dotnet
 
 function dnt {
