@@ -785,6 +785,132 @@ describe("Lag Revert", function()
     end)
 end)
 
+describe("Lag Accept", function()
+    local ai = require("utils.ai")
+    ai.setup()
+    stub_api()
+    vim.notify = function() end
+
+    local test_bufs = {}
+
+    before_each(function()
+        lag.reset()
+        for _, buf in ipairs(test_bufs) do
+            if vim.api.nvim_buf_is_valid(buf) then
+                vim.api.nvim_buf_delete(buf, { force = true })
+            end
+        end
+        test_bufs = {}
+        stub_response = "[]"
+        stub_error = nil
+    end)
+
+    it("accepts the active modification keeping the AI code", function()
+        lag.start(noop_context, noop_session)
+        local buf = make_buf({ "a", "b", "c" })
+        table.insert(test_bufs, buf)
+        vim.api.nvim_set_current_buf(buf)
+        lag._get_or_create_state(buf)
+        vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "CHANGED" })
+        stub_response = '[{"start_line": 2, "end_line": 2, "replacement": "FIXED", "comment": "fix"}]'
+        lag._on_save(buf)
+        vim.api.nvim_win_set_cursor(0, { 2, 0 })
+        lag._update_active(buf)
+
+        local accepted = lag._accept_active(buf)
+
+        assert(accepted, "Should return true on successful accept")
+        local lines = get_buf_lines(buf)
+        eq("FIXED", lines[2], "Line 2 should keep the AI code after accept")
+    end)
+
+    it("removes the modification entry after accept", function()
+        lag.start(noop_context, noop_session)
+        local buf = make_buf({ "a", "b", "c" })
+        table.insert(test_bufs, buf)
+        vim.api.nvim_set_current_buf(buf)
+        lag._get_or_create_state(buf)
+        vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "CHANGED" })
+        stub_response = '[{"start_line": 2, "end_line": 2, "replacement": "FIXED", "comment": "fix"}]'
+        lag._on_save(buf)
+        vim.api.nvim_win_set_cursor(0, { 2, 0 })
+        lag._update_active(buf)
+
+        lag._accept_active(buf)
+
+        local state = lag.get_state(buf)
+        eq(0, #state.modifications, "Should have no modifications after accept")
+    end)
+
+    it("clears extmarks after accepting the last modification", function()
+        lag.start(noop_context, noop_session)
+        local buf = make_buf({ "a", "b", "c" })
+        table.insert(test_bufs, buf)
+        vim.api.nvim_set_current_buf(buf)
+        local state = lag._get_or_create_state(buf)
+        vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "CHANGED" })
+        stub_response = '[{"start_line": 2, "end_line": 2, "replacement": "FIXED", "comment": "fix"}]'
+        lag._on_save(buf)
+        vim.api.nvim_win_set_cursor(0, { 2, 0 })
+        lag._update_active(buf)
+
+        lag._accept_active(buf)
+
+        local extmarks = vim.api.nvim_buf_get_extmarks(buf, state.ns, { 0, 0 }, { -1, -1 }, {})
+        eq(0, #extmarks, "Extmarks should be cleared after accepting last modification")
+    end)
+
+    it("returns false when no modifications exist", function()
+        lag.start(noop_context, noop_session)
+        local buf = make_buf({ "a", "b" })
+        table.insert(test_bufs, buf)
+        vim.api.nvim_set_current_buf(buf)
+        lag._get_or_create_state(buf)
+
+        local accepted = lag._accept_active(buf)
+
+        assert(not accepted, "Should return false when no modifications to accept")
+    end)
+
+    it("after accept the next closest becomes active", function()
+        lag.start(noop_context, noop_session)
+        local buf = make_buf({ "a", "b", "c", "d", "e" })
+        table.insert(test_bufs, buf)
+        vim.api.nvim_set_current_buf(buf)
+        lag._get_or_create_state(buf)
+        vim.api.nvim_buf_set_lines(buf, 0, 5, false, { "A", "B", "C", "D", "E" })
+        stub_response = '[{"start_line": 1, "end_line": 1, "replacement": "FIX_A", "comment": "fix a"}, {"start_line": 5, "end_line": 5, "replacement": "FIX_E", "comment": "fix e"}]'
+        lag._on_save(buf)
+        vim.api.nvim_win_set_cursor(0, { 5, 0 })
+        lag._update_active(buf)
+        lag._accept_active(buf)
+
+        local state = lag.get_state(buf)
+
+        eq(1, #state.modifications, "Should have one modification left")
+        eq(1, state.active_index, "Active should be the remaining modification")
+    end)
+
+    it("does not change buffer lines unlike revert", function()
+        lag.start(noop_context, noop_session)
+        local buf = make_buf({ "a", "b", "c" })
+        table.insert(test_bufs, buf)
+        vim.api.nvim_set_current_buf(buf)
+        lag._get_or_create_state(buf)
+        vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "CHANGED" })
+        stub_response = '[{"start_line": 2, "end_line": 2, "replacement": "line1\\nline2\\nline3", "comment": "expanded"}]'
+        lag._on_save(buf)
+        local lines_before = get_buf_lines(buf)
+        vim.api.nvim_win_set_cursor(0, { 2, 0 })
+        lag._update_active(buf)
+
+        lag._accept_active(buf)
+
+        local lines_after = get_buf_lines(buf)
+        eq(lines_before, lines_after, "Buffer lines should be unchanged after accept")
+    end)
+end)
+
 describe("Lag Active Tracking", function()
     local ai = require("utils.ai")
     ai.setup()

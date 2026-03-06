@@ -107,10 +107,16 @@ function M.format_snapshot(snapshot)
             add("[" .. i .. "] " .. msg.role .. ":")
             if msg.thinking then
                 add("[thinking]")
-                add(msg.thinking)
+                local think_lines = vim.split(msg.thinking, "\n", { plain = true })
+                for _, line in ipairs(think_lines) do
+                    add("  " .. line)
+                end
                 add("[/thinking]")
             end
-            add(msg.content)
+            local content_lines = vim.split(msg.content, "\n", { plain = true })
+            for _, line in ipairs(content_lines) do
+                add(line)
+            end
         end
     end
 
@@ -120,7 +126,12 @@ function M.format_snapshot(snapshot)
     add("BUFFER CONTEXT BLOCK")
     add_separator()
     if snapshot.buffer_context then
-        add(snapshot.buffer_context)
+        local ok, parsed = pcall(vim.fn.json_decode, snapshot.buffer_context)
+        if ok then
+            add(vim.inspect(parsed))
+        else
+            add(snapshot.buffer_context)
+        end
     else
         add("(none)")
     end
@@ -178,6 +189,7 @@ function M.write_dump_file(content, name)
     vim.cmd("vsplit " .. vim.fn.fnameescape(dump_path))
     vim.bo.modifiable = false
     vim.bo.readonly = true
+    vim.wo.wrap = true
     vim.notify("AI: Dump written to " .. dump_path)
 end
 
@@ -201,6 +213,7 @@ function M.write_dump(snapshot)
     vim.cmd("vsplit " .. vim.fn.fnameescape(dump_path))
     vim.bo.modifiable = false
     vim.bo.readonly = true
+    vim.wo.wrap = true
     vim.notify("AI: Context dump written to " .. dump_path)
 end
 

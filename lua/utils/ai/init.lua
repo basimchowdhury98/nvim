@@ -19,6 +19,7 @@ local default_config = {
         cancel = "<leader>ix",
         continue_response = "<leader>in",
         lag_revert = "<leader>lr",
+        lag_accept = "<leader>la",
         toggle_thinking = "<leader>ir",
     },
 }
@@ -506,7 +507,13 @@ local function format_request_dump(request)
         table.insert(lines, request.body)
     else
         table.insert(lines, "--- REQUEST BODY (JSON) ---")
-        table.insert(lines, vim.fn.json_encode(request.body))
+        local json = vim.fn.json_encode(request.body)
+        local ok, formatted = pcall(vim.fn.json_decode, json)
+        if ok then
+            table.insert(lines, vim.inspect(formatted))
+        else
+            table.insert(lines, json)
+        end
     end
 
     return table.concat(lines, "\n") .. "\n"
@@ -553,6 +560,12 @@ function M.setup(opts)
         end
         lag.revert()
     end, { desc = "Lag: Revert nearest modification" })
+    map("n", config.keymaps.lag_accept, function()
+        if not active then
+            return
+        end
+        lag.accept()
+    end, { desc = "Lag: Accept nearest modification" })
 
     vim.api.nvim_create_user_command("AIContextDump", function()
         M.context_dump()
@@ -575,6 +588,7 @@ function M.setup(opts)
         vim.cmd("vsplit " .. vim.fn.fnameescape(log_file))
         vim.bo.modifiable = false
         vim.bo.readonly = true
+        vim.wo.wrap = true
     end, { desc = "AI: Open today's debug log in a split" })
 
     vim.api.nvim_create_user_command("AIAlt", function()
@@ -585,12 +599,12 @@ function M.setup(opts)
         M.stop()
     end, { desc = "AI: Stop everything and deactivate" })
 
-    vim.api.nvim_create_user_command("AILagClear", function()
+    vim.api.nvim_create_user_command("AILagAcceptAll", function()
         if not active then
             return
         end
         lag.clear()
-    end, { desc = "AI: Clear all lag modifications" })
+    end, { desc = "Lag: Accept all modifications" })
 end
 
 return M

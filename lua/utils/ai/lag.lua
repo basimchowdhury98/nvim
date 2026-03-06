@@ -550,6 +550,30 @@ local function revert_active(bufnr)
     return true
 end
 
+--- Accept the active modification (keep code, remove decorations).
+--- @param bufnr number
+--- @return boolean accepted
+local function accept_active(bufnr)
+    local state = buffers[bufnr]
+    if not state or #state.modifications == 0 or not state.active_index then
+        return false
+    end
+
+    local idx = state.active_index
+    table.remove(state.modifications, idx)
+
+    if #state.modifications == 0 then
+        state.active_index = nil
+        clear_modification_extmarks(bufnr)
+    else
+        state.active_index = nil
+        update_active(bufnr)
+        render_modifications(bufnr)
+    end
+
+    return true
+end
+
 --- Clear all modifications from a buffer without reverting.
 --- @param bufnr number
 local function clear_modifications(bufnr)
@@ -884,7 +908,28 @@ function M.revert()
     end
 end
 
---- Clear all modifications in the current buffer (without reverting).
+--- Accept the active modification in the current buffer (keep code, clear decorations).
+function M.accept()
+    local bufnr = vim.api.nvim_get_current_buf()
+    local state = buffers[bufnr]
+
+    if not state then
+        vim.notify("Lag: no modifications in this buffer", vim.log.levels.INFO)
+        return
+    end
+
+    if #state.modifications == 0 then
+        vim.notify("Lag: no modifications to accept", vim.log.levels.INFO)
+        return
+    end
+
+    if accept_active(bufnr) then
+        vim.cmd("redraw")
+        vim.notify("Lag: accepted modification")
+    end
+end
+
+--- Accept all modifications in the current buffer (keep code, clear all decorations).
 function M.clear()
     local bufnr = vim.api.nvim_get_current_buf()
     local state = buffers[bufnr]
@@ -896,7 +941,7 @@ function M.clear()
 
     clear_modifications(bufnr)
     vim.cmd("redraw")
-    vim.notify("Lag: cleared all modifications")
+    vim.notify("Lag: accepted all modifications")
 end
 
 --- Reset all lag state (for testing).
@@ -966,6 +1011,7 @@ M._filter_to_diff = filter_to_diff
 M._on_save = on_save
 M._apply_modifications = apply_modifications
 M._revert_active = revert_active
+M._accept_active = accept_active
 M._clear_modifications = clear_modifications
 M._update_active = update_active
 M._render_modifications = render_modifications
