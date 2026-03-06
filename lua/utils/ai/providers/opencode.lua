@@ -129,7 +129,11 @@ function M.stream(messages, config, callbacks)
             if stderr_msg ~= "" then
                 debug.log("[opencode] stderr: " .. stderr_msg)
             end
-            if exit_code ~= 0 then
+            if done_called then
+                return
+            end
+            if event_count == 0 and exit_code ~= 0 then
+                debug.log("[opencode] no events received, treating as error")
                 vim.schedule(function()
                     callbacks.on_error("opencode exited with code " .. exit_code .. ": " .. stderr_msg)
                 end)
