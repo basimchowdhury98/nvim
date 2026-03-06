@@ -23,6 +23,7 @@ local state = {
     set_spinner_label = nil, -- function to change spinner label text
     user_section_start = nil, -- 0-indexed line where user section begins
     assistant_section_start = nil, -- 0-indexed line where assistant section starts (for post-processing)
+    thinking_section_start = nil, -- 0-indexed line where thinking section starts
     thinking_expanded = false, -- whether thinking blocks are currently shown
     thinking_blocks = {}, -- {line = 0-indexed, content = string}[] for toggle
 }
@@ -378,6 +379,8 @@ function M.start_assistant_message()
 
     -- Track assistant section start for post-processing
     state.assistant_section_start = start + 2
+    -- Track thinking section (same line where response starts)
+    state.thinking_section_start = start + 2
 
     -- Highlight header
     highlight_text(start + 1, "AIChatAssistantHeader")
@@ -443,37 +446,107 @@ function M.append_delta(text)
     scroll_to_bottom()
 end
 
+--- Append a streaming thinking chunk to the chat (shows in real-time before response)
+--- @param text string The thinking text chunk to append
+function M.append_thinking(text)
+    if not buf_is_valid() then return end
+
+    -- Switch spinner label from "Thinking..." to "Streaming..." on first thinking
+    if state.set_spinner_label then
+        state.set_spinner_label("Thinking...")
+        state.set_spinner_label = nil
+    end
+
+    -- Remove spinner temporarily
+    remove_spinner_line()
+
+    -- Insert thinking before the assistant section (after "Assistant:" header)
+    local insert_line = state.thinking_section_start
+    if not insert_line then
+        return
+    end
+
+    local parts = {}
+    local i = 1
+    while i <= #text do
+        local nl = text:find("\n", i, true)
+        if nl then
+            table.insert(parts, text:sub(i, nl - 1))
+            i = nl + 1
+        else
+            table.insert(parts, text:sub(i))
+            i = #text + 1
+        end
+    end
+    if text:sub(-1) == "\n" then
+        table.insert(parts, "")
+    end
+
+    if #parts > 0 then
+        with_modifiable(function()
+            -- Get current thinking section line
+            local existing_line = vim.api.nvim_buf_get_lines(state.buf_id, insert_line, insert_line + 1, false)[1] or ""
+
+            -- Append first part to existing line
+            local new_existing = existing_line .. parts[1]
+            vim.api.nvim_buf_set_lines(state.buf_id, insert_line, insert_line + 1, false, { new_existing })
+
+            -- Add remaining parts as new lines
+            if #parts > 1 then
+                local new_lines = {}
+                for j = 2, #parts do
+                    table.insert(new_lines, parts[j])
+                end
+                local updated_count = vim.api.nvim_buf_line_count(state.buf_id)
+                vim.api.nvim_buf_set_lines(state.buf_id, updated_count, updated_count, false, new_lines)
+            end
+        end)
+    end
+
+    -- Re-add spinner line
+    if state.spinner then
+        add_spinner_line()
+    end
+    scroll_to_bottom()
+end
+
 --- Finish the current assistant response
 --- @param thinking string|nil The model's thinking/reasoning output, if any
 function M.finish_assistant_message(thinking)
     stop_spinner()
     state.set_spinner_label = nil
-    append_lines({ "", "" })
+
+    -- Calculate thinking line count from the thinking string
+    local thinking_line_count = 0
+    if thinking and #thinking > 0 then
+        for _ in thinking:gmatch("[^\n]+") do
+            thinking_line_count = thinking_line_count + 1
+        end
+    end
 
     -- Post-process: strip markdown syntax and apply highlights
+    -- We apply to the whole section, then replace thinking with indicator
     if state.assistant_section_start and buf_is_valid() then
         local line_count = vim.api.nvim_buf_line_count(state.buf_id)
         apply_markdown_highlights(state.assistant_section_start, line_count)
     end
 
-    -- Insert collapsed thinking indicator if thinking content exists
-    if thinking and #thinking > 0 and buf_is_valid() and state.assistant_section_start then
-        local thinking_lines = {}
-        for line in thinking:gmatch("([^\n]*)\n?") do
-            table.insert(thinking_lines, line)
-        end
-        -- Remove trailing empty line from gmatch
-        if #thinking_lines > 0 and thinking_lines[#thinking_lines] == "" then
-            table.remove(thinking_lines)
-        end
-        local line_count_label = #thinking_lines == 1 and "1 line" or (#thinking_lines .. " lines")
+    -- Replace streaming thinking with collapsed indicator if thinking exists
+    if thinking and #thinking > 0 and buf_is_valid() and state.thinking_section_start then
+        local line_count_label = thinking_line_count == 1 and "1 line" or (thinking_line_count .. " lines")
         local indicator = "  Thinking... (" .. line_count_label .. ")"
 
-        -- Insert the indicator line right before assistant content
-        local insert_line = state.assistant_section_start
+        local insert_line = state.thinking_section_start
+
         with_modifiable(function()
+            -- Delete the thinking lines that were added during streaming
+            local delete_end = insert_line + thinking_line_count
+            vim.api.nvim_buf_set_lines(state.buf_id, insert_line, delete_end, false, {})
+
+            -- Insert the indicator at the same position
             vim.api.nvim_buf_set_lines(state.buf_id, insert_line, insert_line, false, { indicator })
         end)
+
         highlight_text(insert_line, "AIChatThinkingIndicator")
 
         table.insert(state.thinking_blocks, {
@@ -481,9 +554,13 @@ function M.finish_assistant_message(thinking)
             content = thinking,
         })
 
-        -- Shift assistant_section_start to account for the inserted line
-        state.assistant_section_start = state.assistant_section_start + 1
+        -- Shift assistant_section_start: was at insert_line + thinking_line_count,
+        -- now indicator is at insert_line, so response starts at insert_line + 1
+        state.assistant_section_start = insert_line + 1
     end
+
+    -- Add trailing empty lines
+    append_lines({ "", "" })
 
     state.is_streaming = false
 end

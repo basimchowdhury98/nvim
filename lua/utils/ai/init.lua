@@ -285,6 +285,7 @@ local function send_message(text, selection)
             source = "chat",
             on_thinking = function(chunk)
                 table.insert(thinking_chunks, chunk)
+                chat.append_thinking(chunk)
             end,
         }
     )
