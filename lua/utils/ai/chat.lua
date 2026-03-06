@@ -584,8 +584,20 @@ end
 function M.append_error(msg)
     stop_spinner()
     state.set_spinner_label = nil
-    local start = append_lines({ "", "Error: " .. msg, "" })
-    highlight_text(start + 1, "AIChatError")
+    local error_lines = { "" }
+    local msg_lines = vim.split(msg, "\n", { plain = true })
+    for i, line in ipairs(msg_lines) do
+        if i == 1 then
+            table.insert(error_lines, "Error: " .. line)
+        else
+            table.insert(error_lines, line)
+        end
+    end
+    table.insert(error_lines, "")
+    local start = append_lines(error_lines)
+    for i = 1, #msg_lines do
+        highlight_text(start + i, "AIChatError")
+    end
     state.is_streaming = false
 end
 
