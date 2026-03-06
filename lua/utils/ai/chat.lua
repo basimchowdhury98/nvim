@@ -483,6 +483,7 @@ function M.append_thinking(text)
     end
 
     if #parts > 0 then
+        local line_count_before = vim.api.nvim_buf_line_count(state.buf_id)
         with_modifiable(function()
             -- Get current thinking section line
             local existing_line = vim.api.nvim_buf_get_lines(state.buf_id, insert_line, insert_line + 1, false)[1] or ""
@@ -501,6 +502,13 @@ function M.append_thinking(text)
                 vim.api.nvim_buf_set_lines(state.buf_id, updated_count, updated_count, false, new_lines)
             end
         end)
+
+        -- Apply thinking highlight to all thinking lines
+        local line_count_after = vim.api.nvim_buf_line_count(state.buf_id)
+        local thinking_end = insert_line + (line_count_after - line_count_before) + 1
+        for line = insert_line, thinking_end - 1 do
+            highlight_text(line, "AIChatThinkingContent")
+        end
     end
 
     -- Re-add spinner line
