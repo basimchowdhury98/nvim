@@ -169,9 +169,17 @@ function M.stream(messages, config, callbacks)
             if stderr_msg ~= "" then
                 debug.log("[anthropic] stderr: " .. stderr_msg)
             end
-            if exit_code ~= 0 and not done_called then
+            if done_called then
+                return
+            end
+            if exit_code ~= 0 then
                 vim.schedule(function()
                     callbacks.on_error("curl exited with code " .. exit_code .. ": " .. stderr_msg)
+                end)
+            else
+                debug.log("[anthropic] WARNING: process exited without [DONE], calling on_done as fallback")
+                vim.schedule(function()
+                    callbacks.on_done(nil)
                 end)
             end
         end,
