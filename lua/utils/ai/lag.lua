@@ -368,11 +368,49 @@ local function build_lag_prompt(bufnr, diff_regions, context_block, session)
     return table.concat(parts, "\n\n")
 end
 
+--- Find the JSON array by tracking bracket depth and ignoring brackets inside strings.
+--- @param response string
+--- @return string|nil json_str
+local function extract_json_array(response)
+    local start_idx = response:find("%[")
+    if not start_idx then
+        return nil
+    end
+
+    local depth = 0
+    local in_string = false
+    local string_char = nil
+
+    for i = start_idx, #response do
+        local c = response:sub(i, i)
+
+        if in_string then
+            if c == string_char and response:sub(i - 1, i - 1) ~= "\\" then
+                in_string = false
+            end
+        else
+            if c == '"' or c == "'" then
+                in_string = true
+                string_char = c
+            elseif c == "[" then
+                depth = depth + 1
+            elseif c == "]" then
+                depth = depth - 1
+                if depth == 0 then
+                    return response:sub(start_idx, i)
+                end
+            end
+        end
+    end
+
+    return nil
+end
+
 --- Parse the LLM response into a list of modifications.
 --- @param response string
 --- @return table[]|nil modifications, string|nil error
 local function parse_response(response)
-    local json_str = response:match("%[.-%]")
+    local json_str = extract_json_array(response)
     if not json_str then
         if response:match("^%s*$") then
             return {}, nil
