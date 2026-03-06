@@ -91,6 +91,53 @@ local function build_provider_config(provider_name)
     return base
 end
 
+--- Store the last request payload for dump commands
+--- @param provider_name string
+--- @param provider_config table
+--- @param messages table[]
+--- @param source string|nil
+local function store_request(provider_name, provider_config, messages, source)
+    if source ~= "chat" and source ~= "lag" then
+        return
+    end
+
+    local stored = {
+        provider = provider_name,
+        endpoint = provider_config.endpoint or "(cli)",
+        model = provider_config.model or "(cli default)",
+    }
+
+    if provider_name == "anthropic" then
+        stored.body = {
+            model = provider_config.model,
+            max_tokens = provider_config.max_tokens,
+            system = provider_config.system_prompt,
+            stream = true,
+            messages = messages,
+        }
+    elseif provider_name == "alt" then
+        stored.body = {
+            model = provider_config.model,
+            max_tokens = provider_config.max_tokens,
+            stream = true,
+            stream_options = { include_usage = true },
+            messages = vim.list_extend(
+                { { role = "system", content = provider_config.system_prompt } },
+                vim.deepcopy(messages)
+            ),
+        }
+    else
+        local opencode = require("utils.ai.providers.opencode")
+        stored.body = opencode.build_prompt(messages, provider_config.system_prompt)
+    end
+
+    if source == "chat" then
+        last_chat_request = stored
+    else
+        last_lag_request = stored
+    end
+end
+
 --- Send a streaming request to the active provider
 --- @param messages table[] Conversation messages [{role, content}, ...]
 --- @param on_delta fun(text: string) Called with each text chunk as it arrives
@@ -113,48 +160,38 @@ function M.stream(messages, on_delta, on_done, on_error, opts)
     debug.log("using provider: " .. provider.name)
 
     local source = opts and opts.source or nil
-    if source == "chat" or source == "lag" then
-        local stored = {
-            provider = provider_name,
-            endpoint = provider_config.endpoint or "(cli)",
-            model = provider_config.model or "(cli default)",
-        }
+    store_request(provider_name, provider_config, messages, source)
 
-        if provider_name == "anthropic" then
-            stored.body = {
-                model = provider_config.model,
-                max_tokens = provider_config.max_tokens,
-                system = provider_config.system_prompt,
-                stream = true,
-                messages = messages,
-            }
-        elseif provider_name == "alt" then
-            stored.body = {
-                model = provider_config.model,
-                max_tokens = provider_config.max_tokens,
-                stream = true,
-                stream_options = { include_usage = true },
-                messages = vim.list_extend(
-                    { { role = "system", content = provider_config.system_prompt } },
-                    vim.deepcopy(messages)
-                ),
-            }
-        else
-            local opencode = require("utils.ai.providers.opencode")
-            stored.body = opencode.build_prompt(messages, provider_config.system_prompt)
-        end
+    -- Wrap on_error with failover: if anthropic fails in work mode, retry with alt
+    local on_error_with_failover = on_error
+    if provider_name == "anthropic" and is_work_mode() then
+        on_error_with_failover = function(err)
+            debug.log("Anthropic failed, attempting failover to alt: " .. err)
+            vim.notify("AI: Anthropic failed, switching to alt provider", vim.log.levels.WARN)
 
-        if source == "chat" then
-            last_chat_request = stored
-        else
-            last_lag_request = stored
+            alt_mode = true
+            local alt_provider_name = "alt"
+            local alt_provider = providers.get(alt_provider_name)
+            local alt_config = build_provider_config(alt_provider_name)
+            if opts and opts.system_prompt then
+                alt_config.system_prompt = opts.system_prompt
+            end
+
+            store_request(alt_provider_name, alt_config, messages, source)
+
+            return alt_provider.stream(messages, alt_config, {
+                on_delta = on_delta,
+                on_done = on_done,
+                on_error = on_error,
+                on_thinking = opts and opts.on_thinking or nil,
+            })
         end
     end
 
     return provider.stream(messages, provider_config, {
         on_delta = on_delta,
         on_done = on_done,
-        on_error = on_error,
+        on_error = on_error_with_failover,
         on_thinking = opts and opts.on_thinking or nil,
     })
 end
