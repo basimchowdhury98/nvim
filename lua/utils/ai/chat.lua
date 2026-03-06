@@ -24,6 +24,7 @@ local state = {
     user_section_start = nil, -- 0-indexed line where user section begins
     assistant_section_start = nil, -- 0-indexed line where assistant section starts (for post-processing)
     thinking_section_start = nil, -- 0-indexed line where thinking section starts
+    thinking_end_line = nil, -- 0-indexed line of the last thinking line (for appending)
     thinking_expanded = false, -- whether thinking blocks are currently shown
     thinking_blocks = {}, -- {line = 0-indexed, content = string}[] for toggle
 }
@@ -381,6 +382,7 @@ function M.start_assistant_message()
     state.assistant_section_start = start + 2
     -- Track thinking section (same line where response starts)
     state.thinking_section_start = start + 2
+    state.thinking_end_line = start + 2
 
     -- Highlight header
     highlight_text(start + 1, "AIChatAssistantHeader")
@@ -483,30 +485,28 @@ function M.append_thinking(text)
     end
 
     if #parts > 0 then
-        local line_count_before = vim.api.nvim_buf_line_count(state.buf_id)
+        local append_line = state.thinking_end_line
+
         with_modifiable(function()
-            -- Get current thinking section line
-            local existing_line = vim.api.nvim_buf_get_lines(state.buf_id, insert_line, insert_line + 1, false)[1] or ""
+            local existing_line = vim.api.nvim_buf_get_lines(state.buf_id, append_line, append_line + 1, false)[1] or ""
 
-            -- Append first part to existing line
-            local new_existing = existing_line .. parts[1]
-            vim.api.nvim_buf_set_lines(state.buf_id, insert_line, insert_line + 1, false, { new_existing })
+            -- Append first part to the last thinking line
+            local new_last = existing_line .. parts[1]
+            vim.api.nvim_buf_set_lines(state.buf_id, append_line, append_line + 1, false, { new_last })
 
-            -- Add remaining parts as new lines
+            -- Add remaining parts as new lines right after
             if #parts > 1 then
                 local new_lines = {}
                 for j = 2, #parts do
                     table.insert(new_lines, parts[j])
                 end
-                local updated_count = vim.api.nvim_buf_line_count(state.buf_id)
-                vim.api.nvim_buf_set_lines(state.buf_id, updated_count, updated_count, false, new_lines)
+                vim.api.nvim_buf_set_lines(state.buf_id, append_line + 1, append_line + 1, false, new_lines)
+                state.thinking_end_line = append_line + #new_lines
             end
         end)
 
         -- Apply thinking highlight to all thinking lines
-        local line_count_after = vim.api.nvim_buf_line_count(state.buf_id)
-        local thinking_end = insert_line + (line_count_after - line_count_before) + 1
-        for line = insert_line, thinking_end - 1 do
+        for line = insert_line, state.thinking_end_line do
             highlight_text(line, "AIChatThinkingContent")
         end
     end
@@ -542,7 +542,7 @@ function M.finish_assistant_message(thinking)
     -- Replace streaming thinking with collapsed indicator if thinking exists
     if thinking and #thinking > 0 and buf_is_valid() and state.thinking_section_start then
         local line_count_label = thinking_line_count == 1 and "1 line" or (thinking_line_count .. " lines")
-        local indicator = "  Thinking... (" .. line_count_label .. ")"
+        local indicator = "Thinking... (" .. line_count_label .. ")"
 
         local insert_line = state.thinking_section_start
 
@@ -661,7 +661,7 @@ function M.toggle_thinking()
             end
 
             local line_count_label = #thinking_lines == 1 and "1 line" or (#thinking_lines .. " lines")
-            local indicator = "  Thinking... (" .. line_count_label .. ")"
+            local indicator = "Thinking... (" .. line_count_label .. ")"
 
             -- The expanded block spans from block.line to block.line + #thinking_lines
             with_modifiable(function()
