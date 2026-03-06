@@ -923,7 +923,6 @@ describe("Lag Diagnostics and Line Highlights", function()
     vim.notify = function() end
 
     local test_bufs = {}
-    local ns_diagnostic = vim.api.nvim_create_namespace("ai_lag_diagnostic")
 
     before_each(function()
         lag.reset()
@@ -937,68 +936,82 @@ describe("Lag Diagnostics and Line Highlights", function()
         stub_error = nil
     end)
 
-    it("sets HINT diagnostics on modified lines", function()
+    it("sets hidden info extmark on modified lines", function()
         lag.start(noop_context, noop_session)
         local buf = make_buf({ "a", "b", "c" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
-        lag._get_or_create_state(buf)
+        local state = lag._get_or_create_state(buf)
         vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "CHANGED" })
         stub_response = '[{"start_line": 2, "end_line": 2, "replacement": "FIXED", "comment": "bug fix"}]'
 
         lag._on_save(buf)
 
-        local diags = vim.diagnostic.get(buf, { namespace = ns_diagnostic })
-        eq(1, #diags, "Should have one diagnostic")
-        eq(vim.diagnostic.severity.HINT, diags[1].severity, "Diagnostic should be HINT severity")
-        eq("lag", diags[1].source, "Diagnostic source should be 'lag'")
+        local extmarks = vim.api.nvim_buf_get_extmarks(buf, state.ns, { 0, 0 }, { -1, -1 }, { details = true })
+        local found_virt_text = false
+        for _, extmark in ipairs(extmarks) do
+            if extmark[4].virt_text and #extmark[4].virt_text > 0 then
+                found_virt_text = true
+            end
+        end
+        eq(true, found_virt_text, "Should have one extmark with virt_text")
     end)
 
-    it("diagnostic message contains only original code", function()
+    it("virt_text contains original code", function()
         lag.start(noop_context, noop_session)
         local buf = make_buf({ "a", "b", "c" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
-        lag._get_or_create_state(buf)
+        local state = lag._get_or_create_state(buf)
         vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "CHANGED" })
         stub_response = '[{"start_line": 2, "end_line": 2, "replacement": "FIXED", "comment": "bug fix"}]'
 
         lag._on_save(buf)
 
-        local diags = vim.diagnostic.get(buf, { namespace = ns_diagnostic })
-        eq("CHANGED", diags[1].message, "Diagnostic message should be the original code only")
+        local extmarks = vim.api.nvim_buf_get_extmarks(buf, state.ns, { 0, 0 }, { -1, -1 }, { details = true })
+        local found_original = false
+        for _, extmark in ipairs(extmarks) do
+            if extmark[4].virt_text then
+                for _, vt in ipairs(extmark[4].virt_text) do
+                    if vt[1]:match("CHANGED") then
+                        found_original = true
+                    end
+                end
+            end
+        end
+        eq(true, found_original, "Virt text should contain original code 'CHANGED'")
     end)
 
-    it("clears diagnostics when modifications are cleared", function()
+    it("clears extmarks when modifications are cleared", function()
         lag.start(noop_context, noop_session)
         local buf = make_buf({ "a", "b", "c" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
-        lag._get_or_create_state(buf)
+        local state = lag._get_or_create_state(buf)
         vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "CHANGED" })
         stub_response = '[{"start_line": 2, "end_line": 2, "replacement": "FIXED", "comment": "fix"}]'
         lag._on_save(buf)
 
         lag._clear_modifications(buf)
 
-        local diags = vim.diagnostic.get(buf, { namespace = ns_diagnostic })
-        eq(0, #diags, "Diagnostics should be cleared after clear_modifications")
+        local extmarks = vim.api.nvim_buf_get_extmarks(buf, state.ns, { 0, 0 }, { -1, -1 }, {})
+        eq(0, #extmarks, "Extmarks should be cleared after clear_modifications")
     end)
 
-    it("clears diagnostics when lag is stopped", function()
+    it("clears extmarks when lag is stopped", function()
         lag.start(noop_context, noop_session)
         local buf = make_buf({ "a", "b", "c" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
-        lag._get_or_create_state(buf)
+        local state = lag._get_or_create_state(buf)
         vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "CHANGED" })
         stub_response = '[{"start_line": 2, "end_line": 2, "replacement": "FIXED", "comment": "fix"}]'
         lag._on_save(buf)
 
         lag.stop()
 
-        local diags = vim.diagnostic.get(buf, { namespace = ns_diagnostic })
-        eq(0, #diags, "Diagnostics should be cleared after stop")
+        local extmarks = vim.api.nvim_buf_get_extmarks(buf, state.ns, { 0, 0 }, { -1, -1 }, {})
+        eq(0, #extmarks, "Extmarks should be cleared after stop")
     end)
 
     it("sets line highlights on modified lines via extmarks", function()

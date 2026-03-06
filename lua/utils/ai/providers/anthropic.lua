@@ -134,7 +134,13 @@ function M.stream(messages, config, callbacks)
                 end
             elseif event.type == "content_block_delta" then
                 local delta = event.delta
-                if delta and delta.type == "text_delta" and delta.text then
+                if delta and delta.type == "thinking_delta" and delta.thinking then
+                    if callbacks.on_thinking then
+                        vim.schedule(function()
+                            callbacks.on_thinking(delta.thinking)
+                        end)
+                    end
+                elseif delta and delta.type == "text_delta" and delta.text then
                     vim.schedule(function()
                         callbacks.on_delta(delta.text)
                     end)

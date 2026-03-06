@@ -105,6 +105,11 @@ function M.format_snapshot(snapshot)
         for i, msg in ipairs(snapshot.conversation) do
             add("")
             add("[" .. i .. "] " .. msg.role .. ":")
+            if msg.thinking then
+                add("[thinking]")
+                add(msg.thinking)
+                add("[/thinking]")
+            end
             add(msg.content)
         end
     end

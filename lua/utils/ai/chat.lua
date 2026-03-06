@@ -23,6 +23,8 @@ local state = {
     set_spinner_label = nil, -- function to change spinner label text
     user_section_start = nil, -- 0-indexed line where user section begins
     assistant_section_start = nil, -- 0-indexed line where assistant section starts (for post-processing)
+    thinking_expanded = false, -- whether thinking blocks are currently shown
+    thinking_blocks = {}, -- {line = 0-indexed, content = string}[] for toggle
 }
 
 -- Define highlight groups by linking to standard groups (adapts to any colorscheme)
@@ -37,6 +39,8 @@ local function setup_highlights()
     set(0, "AIChatBold", { bold = true, default = true })
     set(0, "AIChatCodeBlock", { link = "CursorLine", default = true })
     set(0, "AIChatInlineCode", { link = "CursorLine", default = true })
+    set(0, "AIChatThinkingIndicator", { link = "Comment", default = true })
+    set(0, "AIChatThinkingContent", { link = "Comment", default = true })
 end
 
 function M.setup(opts)
@@ -440,7 +444,8 @@ function M.append_delta(text)
 end
 
 --- Finish the current assistant response
-function M.finish_assistant_message()
+--- @param thinking string|nil The model's thinking/reasoning output, if any
+function M.finish_assistant_message(thinking)
     stop_spinner()
     state.set_spinner_label = nil
     append_lines({ "", "" })
@@ -449,6 +454,35 @@ function M.finish_assistant_message()
     if state.assistant_section_start and buf_is_valid() then
         local line_count = vim.api.nvim_buf_line_count(state.buf_id)
         apply_markdown_highlights(state.assistant_section_start, line_count)
+    end
+
+    -- Insert collapsed thinking indicator if thinking content exists
+    if thinking and #thinking > 0 and buf_is_valid() and state.assistant_section_start then
+        local thinking_lines = {}
+        for line in thinking:gmatch("([^\n]*)\n?") do
+            table.insert(thinking_lines, line)
+        end
+        -- Remove trailing empty line from gmatch
+        if #thinking_lines > 0 and thinking_lines[#thinking_lines] == "" then
+            table.remove(thinking_lines)
+        end
+        local line_count_label = #thinking_lines == 1 and "1 line" or (#thinking_lines .. " lines")
+        local indicator = "  Thinking... (" .. line_count_label .. ")"
+
+        -- Insert the indicator line right before assistant content
+        local insert_line = state.assistant_section_start
+        with_modifiable(function()
+            vim.api.nvim_buf_set_lines(state.buf_id, insert_line, insert_line, false, { indicator })
+        end)
+        highlight_text(insert_line, "AIChatThinkingIndicator")
+
+        table.insert(state.thinking_blocks, {
+            line = insert_line,
+            content = thinking,
+        })
+
+        -- Shift assistant_section_start to account for the inserted line
+        state.assistant_section_start = state.assistant_section_start + 1
     end
 
     state.is_streaming = false
@@ -500,12 +534,68 @@ function M.clear()
     state.set_spinner_label = nil
     state.user_section_start = nil
     state.assistant_section_start = nil
+    state.thinking_blocks = {}
+    state.thinking_expanded = false
     if not buf_is_valid() then return end
     vim.api.nvim_buf_clear_namespace(state.buf_id, ns, 0, -1)
     with_modifiable(function()
         vim.api.nvim_buf_set_lines(state.buf_id, 0, -1, false, { "" })
     end)
     state.is_streaming = false
+end
+
+--- Toggle visibility of all thinking blocks in the chat buffer
+function M.toggle_thinking()
+    if not buf_is_valid() or #state.thinking_blocks == 0 then
+        return
+    end
+
+    if state.thinking_expanded then
+        -- Collapse: remove expanded thinking lines, restore indicators
+        -- Process blocks in reverse order to keep line numbers stable
+        for i = #state.thinking_blocks, 1, -1 do
+            local block = state.thinking_blocks[i]
+            local thinking_lines = {}
+            for line in block.content:gmatch("([^\n]*)\n?") do
+                table.insert(thinking_lines, line)
+            end
+            if #thinking_lines > 0 and thinking_lines[#thinking_lines] == "" then
+                table.remove(thinking_lines)
+            end
+
+            local line_count_label = #thinking_lines == 1 and "1 line" or (#thinking_lines .. " lines")
+            local indicator = "  Thinking... (" .. line_count_label .. ")"
+
+            -- The expanded block spans from block.line to block.line + #thinking_lines
+            with_modifiable(function()
+                vim.api.nvim_buf_set_lines(state.buf_id, block.line, block.line + #thinking_lines, false, { indicator })
+            end)
+            highlight_text(block.line, "AIChatThinkingIndicator")
+        end
+        state.thinking_expanded = false
+    else
+        -- Expand: replace indicator lines with full thinking content
+        -- Process blocks in reverse order to keep line numbers stable
+        for i = #state.thinking_blocks, 1, -1 do
+            local block = state.thinking_blocks[i]
+            local thinking_lines = {}
+            for line in block.content:gmatch("([^\n]*)\n?") do
+                table.insert(thinking_lines, line)
+            end
+            if #thinking_lines > 0 and thinking_lines[#thinking_lines] == "" then
+                table.remove(thinking_lines)
+            end
+
+            -- Replace the indicator line with thinking content
+            with_modifiable(function()
+                vim.api.nvim_buf_set_lines(state.buf_id, block.line, block.line + 1, false, thinking_lines)
+            end)
+            for j = 0, #thinking_lines - 1 do
+                highlight_text(block.line + j, "AIChatThinkingContent")
+            end
+        end
+        state.thinking_expanded = true
+    end
 end
 
 function M.is_streaming()

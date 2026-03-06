@@ -96,7 +96,7 @@ end
 --- @param on_delta fun(text: string) Called with each text chunk as it arrives
 --- @param on_done fun() Called when the response is complete
 --- @param on_error fun(err: string) Called on error
---- @param opts table|nil Optional overrides { system_prompt = "..." }
+--- @param opts table|nil Optional overrides { system_prompt = "...", on_thinking = fun(text) }
 --- @return fun()|nil cancel Function to cancel the request, or nil on error
 function M.stream(messages, on_delta, on_done, on_error, opts)
     debug.log("stream() called with " .. #messages .. " messages")
@@ -155,6 +155,7 @@ function M.stream(messages, on_delta, on_done, on_error, opts)
         on_delta = on_delta,
         on_done = on_done,
         on_error = on_error,
+        on_thinking = opts and opts.on_thinking or nil,
     })
 end
 

@@ -19,6 +19,7 @@ local default_config = {
         cancel = "<leader>ix",
         continue_response = "<leader>in",
         lag_revert = "<leader>lr",
+        toggle_thinking = "<leader>ir",
     },
 }
 
@@ -239,6 +240,7 @@ local function send_message(text, selection)
 
     -- Track assistant response for conversation history
     local response_chunks = {}
+    local thinking_chunks = {}
 
     cancel_request = api.stream(
         api_messages,
@@ -251,14 +253,22 @@ local function send_message(text, selection)
         function(metadata)
             cancel_request = nil
             local full_response = table.concat(response_chunks, "")
+            local full_thinking = table.concat(thinking_chunks, "")
+            if #full_thinking > 0 then
+                debug.log("AI thinking:\n" .. full_thinking)
+            end
             debug.log("AI response:\n" .. full_response)
 
             if full_response == "" then
                 chat.append_error("Empty response from provider")
                 table.remove(session.conversation)
             else
-                table.insert(session.conversation, { role = "assistant", content = full_response })
-                chat.finish_assistant_message()
+                local msg = { role = "assistant", content = full_response }
+                if #full_thinking > 0 then
+                    msg.thinking = full_thinking
+                end
+                table.insert(session.conversation, msg)
+                chat.finish_assistant_message(full_thinking)
             end
             usage.add(metadata)
         end,
@@ -270,7 +280,12 @@ local function send_message(text, selection)
             table.remove(session.conversation)
             cancel_request = nil
         end,
-        { source = "chat" }
+        {
+            source = "chat",
+            on_thinking = function(chunk)
+                table.insert(thinking_chunks, chunk)
+            end,
+        }
     )
 end
 
@@ -418,6 +433,14 @@ function M.send(text, selection)
     send_message(text, selection)
 end
 
+--- Toggle visibility of thinking/reasoning blocks in the chat (no-op when inactive)
+function M.toggle_thinking()
+    if not active then
+        return
+    end
+    chat.toggle_thinking()
+end
+
 --- Send a "continue" message to ask the LLM to keep going (no-op when inactive)
 function M.continue_response()
     if not active then
@@ -523,6 +546,7 @@ function M.setup(opts)
     map("v", config.keymaps.send, M.prompt, { desc = "AI: Send message with selection context" })
     map("n", config.keymaps.cancel, M.cancel, { desc = "AI: Interrupt streaming response" })
     map("n", config.keymaps.continue_response, M.continue_response, { desc = "AI: Continue response" })
+    map("n", config.keymaps.toggle_thinking, M.toggle_thinking, { desc = "AI: Toggle thinking/reasoning visibility" })
     map("n", config.keymaps.lag_revert, function()
         if not active then
             return

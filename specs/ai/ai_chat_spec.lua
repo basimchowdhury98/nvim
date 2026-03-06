@@ -1087,3 +1087,136 @@ describe("AI Context Dump", function()
         assert(content:find("LAG MODE", 1, true), "Dump should have lag section")
     end)
 end)
+
+describe("AI Chat Thinking", function()
+    local ai = require("utils.ai")
+    local chat = require("utils.ai.chat")
+    ai.setup()
+    vim.notify = function() end
+
+    local stub_thinking = nil
+
+    local function stub_api_with_thinking()
+        api.stream = function(messages, on_delta, on_done, on_error, opts)
+            stream_messages_spy = vim.deepcopy(messages)
+            if stub_error then
+                on_error(stub_error)
+                return function() end
+            end
+            if stub_thinking and opts and opts.on_thinking then
+                opts.on_thinking(stub_thinking)
+            end
+            on_delta(stub_response)
+            on_done()
+            return function() end
+        end
+    end
+
+    before_each(function()
+        vim.cmd("enew")
+        ai.reset_all()
+        ai.activate()
+        stub_response = "The answer is 42"
+        stub_thinking = nil
+        stub_error = nil
+        stream_messages_spy = nil
+        stub_api_with_thinking()
+    end)
+
+    after_each(function()
+        close_all_floats()
+    end)
+
+    it("stores thinking content in conversation history", function()
+        stub_thinking = "Let me reason about this"
+        send_user_message(ai, "what is the answer?")
+
+        local session = ai.get_session()
+        local assistant_msg = session.conversation[#session.conversation]
+
+        eq(assistant_msg.role, "assistant", "Last message should be assistant")
+        eq(assistant_msg.thinking, "Let me reason about this", "Should store thinking content")
+        eq(assistant_msg.content, "The answer is 42", "Should store content separately")
+    end)
+
+    it("omits thinking field when no thinking content", function()
+        stub_thinking = nil
+        send_user_message(ai, "quick question")
+
+        local session = ai.get_session()
+        local assistant_msg = session.conversation[#session.conversation]
+
+        eq(assistant_msg.role, "assistant", "Last message should be assistant")
+        eq(assistant_msg.thinking, nil, "Should not have thinking field when empty")
+    end)
+
+    it("shows collapsed thinking indicator in chat", function()
+        stub_thinking = "Step 1: analyze\nStep 2: conclude"
+        send_user_message(ai, "think about this")
+
+        assert(chat_contains("Thinking... (2 lines)"), "Should show collapsed thinking indicator with line count")
+    end)
+
+    it("shows 1 line label for single line thinking", function()
+        stub_thinking = "Just one thought"
+        send_user_message(ai, "think briefly")
+
+        assert(chat_contains("Thinking... (1 line)"), "Should show singular line label")
+    end)
+
+    it("toggle_thinking expands collapsed thinking block", function()
+        stub_thinking = "My reasoning here"
+        send_user_message(ai, "think about this")
+
+        ai.toggle_thinking()
+
+        assert(chat_contains("My reasoning here"), "Should show thinking content after expand")
+    end)
+
+    it("toggle_thinking collapses expanded thinking block", function()
+        stub_thinking = "My reasoning here"
+        send_user_message(ai, "think about this")
+
+        ai.toggle_thinking()
+        ai.toggle_thinking()
+
+        assert(chat_contains("Thinking... (1 line)"), "Should show collapsed indicator after collapse")
+        local found_content = false
+        for _, line in ipairs(get_chat_lines()) do
+            if line:find("My reasoning here", 1, true) then
+                found_content = true
+            end
+        end
+        assert(not found_content, "Thinking content should be hidden after collapse")
+    end)
+
+    it("toggle_thinking is a no-op when inactive", function()
+        ai.reset_all()
+
+        ai.toggle_thinking()
+
+        assert(not chat.is_open(), "Chat should not open when inactive")
+    end)
+
+    it("toggle_thinking is a no-op when no thinking blocks exist", function()
+        stub_thinking = nil
+        send_user_message(ai, "no thinking here")
+
+        ai.toggle_thinking()
+
+        local chat_state = chat.get_state()
+        eq(chat_state.thinking_expanded, false, "Should remain collapsed when no blocks")
+    end)
+
+    it("clear resets thinking state", function()
+        stub_thinking = "Some thoughts"
+        send_user_message(ai, "think first")
+
+        ai.toggle_thinking()
+        chat.clear()
+
+        local chat_state = chat.get_state()
+        eq(#chat_state.thinking_blocks, 0, "Thinking blocks should be empty after clear")
+        eq(chat_state.thinking_expanded, false, "Thinking expanded should be false after clear")
+    end)
+end)

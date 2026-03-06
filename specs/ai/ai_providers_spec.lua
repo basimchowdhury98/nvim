@@ -305,6 +305,153 @@ describe("AI Provider SSE Parsing", function()
         eq(deltas, { "actual" }, "Should only capture text deltas, not other event types")
         assert(done, "on_done should have been called")
     end)
+
+    it("anthropic parses thinking_delta into on_thinking", function()
+        local provider = providers_mod.get("anthropic")
+        local thinking_chunks = {}
+        local deltas = {}
+        local done = false
+        job.run = function(opts)
+            opts.on_stdout('data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"I need to"}}')
+            opts.on_stdout('data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":" think about this"}}')
+            opts.on_stdout('data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Here is my answer"}}')
+            opts.on_stdout('data: {"type":"message_stop"}')
+            opts.on_exit(0, "")
+            return function() end
+        end
+
+        provider.stream(
+            { { role = "user", content = "test" } },
+            { api_key = "test-key", model = "test", endpoint = "http://localhost",
+              api_version = "2023-06-01", system_prompt = "test", max_tokens = 100 },
+            {
+                on_delta = function(text) table.insert(deltas, text) end,
+                on_done = function() done = true end,
+                on_error = function() end,
+                on_thinking = function(text) table.insert(thinking_chunks, text) end,
+            }
+        )
+
+        eq(thinking_chunks, { "I need to", " think about this" }, "Should have received thinking deltas")
+        eq(deltas, { "Here is my answer" }, "Should have received text delta separately")
+        assert(done, "on_done should have been called")
+    end)
+
+    it("anthropic ignores thinking_delta when on_thinking is nil", function()
+        local provider = providers_mod.get("anthropic")
+        local deltas = {}
+        local done = false
+        job.run = function(opts)
+            opts.on_stdout('data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"secret thoughts"}}')
+            opts.on_stdout('data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"visible"}}')
+            opts.on_stdout('data: {"type":"message_stop"}')
+            opts.on_exit(0, "")
+            return function() end
+        end
+
+        provider.stream(
+            { { role = "user", content = "test" } },
+            { api_key = "test-key", model = "test", endpoint = "http://localhost",
+              api_version = "2023-06-01", system_prompt = "test", max_tokens = 100 },
+            {
+                on_delta = function(text) table.insert(deltas, text) end,
+                on_done = function() done = true end,
+                on_error = function() end,
+            }
+        )
+
+        eq(deltas, { "visible" }, "Should only have text deltas")
+        assert(done, "on_done should have been called")
+    end)
+
+    it("alt parses think tags into on_thinking", function()
+        local provider = providers_mod.get("alt")
+        local thinking_chunks = {}
+        local deltas = {}
+        local done = false
+        job.run = function(opts)
+            opts.on_stdout('data: {"choices":[{"delta":{"content":"<think>I am thinking"}}]}')
+            opts.on_stdout('data: {"choices":[{"delta":{"content":" more thoughts</think>"}}]}')
+            opts.on_stdout('data: {"choices":[{"delta":{"content":"The answer is 42"}}]}')
+            opts.on_stdout("data: [DONE]")
+            opts.on_exit(0, "")
+            return function() end
+        end
+
+        provider.stream(
+            { { role = "user", content = "test" } },
+            { api_key = "key", model = "m", endpoint = "http://localhost",
+              system_prompt = "test", max_tokens = 100 },
+            {
+                on_delta = function(text) table.insert(deltas, text) end,
+                on_done = function() done = true end,
+                on_error = function() end,
+                on_thinking = function(text) table.insert(thinking_chunks, text) end,
+            }
+        )
+
+        eq(thinking_chunks, { "I am thinking", " more thoughts" }, "Should have received thinking from think tags")
+        eq(deltas, { "The answer is 42" }, "Should have received text after think tags")
+        assert(done, "on_done should have been called")
+    end)
+
+    it("alt parses reasoning_content into on_thinking", function()
+        local provider = providers_mod.get("alt")
+        local thinking_chunks = {}
+        local deltas = {}
+        local done = false
+        job.run = function(opts)
+            opts.on_stdout('data: {"choices":[{"delta":{"reasoning_content":"step 1"}}]}')
+            opts.on_stdout('data: {"choices":[{"delta":{"reasoning_content":" then step 2"}}]}')
+            opts.on_stdout('data: {"choices":[{"delta":{"content":"final answer"}}]}')
+            opts.on_stdout("data: [DONE]")
+            opts.on_exit(0, "")
+            return function() end
+        end
+
+        provider.stream(
+            { { role = "user", content = "test" } },
+            { api_key = "key", model = "m", endpoint = "http://localhost",
+              system_prompt = "test", max_tokens = 100 },
+            {
+                on_delta = function(text) table.insert(deltas, text) end,
+                on_done = function() done = true end,
+                on_error = function() end,
+                on_thinking = function(text) table.insert(thinking_chunks, text) end,
+            }
+        )
+
+        eq(thinking_chunks, { "step 1", " then step 2" }, "Should have received reasoning_content as thinking")
+        eq(deltas, { "final answer" }, "Should have received content as delta")
+        assert(done, "on_done should have been called")
+    end)
+
+    it("alt handles think tags in a single chunk", function()
+        local provider = providers_mod.get("alt")
+        local thinking_chunks = {}
+        local deltas = {}
+        job.run = function(opts)
+            opts.on_stdout('data: {"choices":[{"delta":{"content":"<think>quick thought</think>answer"}}]}')
+            opts.on_stdout("data: [DONE]")
+            opts.on_exit(0, "")
+            return function() end
+        end
+
+        provider.stream(
+            { { role = "user", content = "test" } },
+            { api_key = "key", model = "m", endpoint = "http://localhost",
+              system_prompt = "test", max_tokens = 100 },
+            {
+                on_delta = function(text) table.insert(deltas, text) end,
+                on_done = function() end,
+                on_error = function() end,
+                on_thinking = function(text) table.insert(thinking_chunks, text) end,
+            }
+        )
+
+        eq(thinking_chunks, { "quick thought" }, "Should parse thinking from single chunk")
+        eq(deltas, { "answer" }, "Should parse content after closing think tag")
+    end)
 end)
 
 describe("AI Provider Dispatcher", function()
@@ -404,6 +551,35 @@ describe("AI Provider Dispatcher", function()
         assert(delta_called, "on_delta should be wired to the caller's function")
         captured_callbacks.on_done("test")
         assert(done_called, "on_done should be wired to the caller's function")
+        p.stream = original_stream
+        vim.fn.setenv("AI_WORK", original_env)
+    end)
+
+    it("stream passes on_thinking callback to provider", function()
+        local captured_callbacks = nil
+        local p = providers_mod.get("opencode")
+        local original_stream = p.stream
+        p.stream = function(_, _, callbacks)
+            captured_callbacks = callbacks
+            callbacks.on_done()
+            return function() end
+        end
+        local original_env = vim.fn.getenv("AI_WORK")
+        vim.fn.setenv("AI_WORK", vim.NIL)
+        local thinking_called = false
+
+        api.stream(
+            { { role = "user", content = "test" } },
+            function() end,
+            function() end,
+            function() end,
+            { on_thinking = function() thinking_called = true end }
+        )
+
+        assert(captured_callbacks, "Provider should receive callbacks table")
+        assert(type(captured_callbacks.on_thinking) == "function", "Callbacks should include on_thinking")
+        captured_callbacks.on_thinking("test thought")
+        assert(thinking_called, "on_thinking should be wired to the caller's function")
         p.stream = original_stream
         vim.fn.setenv("AI_WORK", original_env)
     end)

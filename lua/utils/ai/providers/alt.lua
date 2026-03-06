@@ -96,6 +96,7 @@ function M.stream(messages, config, callbacks)
     local last_event_time = vim.uv.hrtime()
     local start_time = last_event_time
     local usage_data = nil
+    local in_think_tag = false
 
     local function log_timing(label)
         local now = vim.uv.hrtime()
@@ -157,10 +158,80 @@ function M.stream(messages, config, callbacks)
             end
 
             local delta = event.choices and event.choices[1] and event.choices[1].delta
-            if delta and delta.content then
-                vim.schedule(function()
-                    callbacks.on_delta(delta.content)
-                end)
+            if delta then
+                -- OpenAI o-series: reasoning_content field
+                if delta.reasoning_content and callbacks.on_thinking then
+                    vim.schedule(function()
+                        callbacks.on_thinking(delta.reasoning_content)
+                    end)
+                end
+
+                if delta.content then
+                    -- DeepSeek / other models: <think> tags in content stream
+                    local content = delta.content
+                    if in_think_tag then
+                        local close_pos = content:find("</think>")
+                        if close_pos then
+                            local thinking_part = content:sub(1, close_pos - 1)
+                            local text_part = content:sub(close_pos + 8)
+                            if #thinking_part > 0 and callbacks.on_thinking then
+                                vim.schedule(function()
+                                    callbacks.on_thinking(thinking_part)
+                                end)
+                            end
+                            in_think_tag = false
+                            if #text_part > 0 then
+                                vim.schedule(function()
+                                    callbacks.on_delta(text_part)
+                                end)
+                            end
+                        else
+                            if callbacks.on_thinking then
+                                vim.schedule(function()
+                                    callbacks.on_thinking(content)
+                                end)
+                            end
+                        end
+                    else
+                        local open_pos = content:find("<think>")
+                        if open_pos then
+                            local text_before = content:sub(1, open_pos - 1)
+                            local after_tag = content:sub(open_pos + 7)
+                            if #text_before > 0 then
+                                vim.schedule(function()
+                                    callbacks.on_delta(text_before)
+                                end)
+                            end
+                            -- Check if closing tag is in same chunk
+                            local close_pos = after_tag:find("</think>")
+                            if close_pos then
+                                local thinking_part = after_tag:sub(1, close_pos - 1)
+                                local text_after = after_tag:sub(close_pos + 8)
+                                if #thinking_part > 0 and callbacks.on_thinking then
+                                    vim.schedule(function()
+                                        callbacks.on_thinking(thinking_part)
+                                    end)
+                                end
+                                if #text_after > 0 then
+                                    vim.schedule(function()
+                                        callbacks.on_delta(text_after)
+                                    end)
+                                end
+                            else
+                                in_think_tag = true
+                                if #after_tag > 0 and callbacks.on_thinking then
+                                    vim.schedule(function()
+                                        callbacks.on_thinking(after_tag)
+                                    end)
+                                end
+                            end
+                        else
+                            vim.schedule(function()
+                                callbacks.on_delta(content)
+                            end)
+                        end
+                    end
+                end
             end
         end,
         on_exit = function(exit_code, stderr_msg)

@@ -30,9 +30,6 @@ local buffers = {}
 -- Namespace for working indicators (shared)
 local ns_working = vim.api.nvim_create_namespace("ai_lag_working")
 
--- Diagnostic namespace (shared across all lag buffers)
-local ns_diagnostic = vim.api.nvim_create_namespace("ai_lag_diagnostic")
-
 -- Define highlight groups by linking to standard groups (adapts to any colorscheme)
 local function setup_highlights()
     local set = vim.api.nvim_set_hl
@@ -170,7 +167,6 @@ local function clear_modification_extmarks(bufnr)
     local state = buffers[bufnr]
     if not state then return end
     vim.api.nvim_buf_clear_namespace(bufnr, state.ns, 0, -1)
-    vim.diagnostic.reset(ns_diagnostic, bufnr)
 end
 
 --- Format original code for diagnostic message display.
@@ -183,7 +179,7 @@ local function format_old_code(original_lines)
     return table.concat(original_lines, "\n")
 end
 
---- Render virtual text comments, line highlights, and diagnostics for all modifications.
+--- Render virtual text comments, line highlights, and hidden info for all modifications.
 --- @param bufnr number
 local function render_modifications(bufnr)
     local state = buffers[bufnr]
@@ -192,8 +188,6 @@ local function render_modifications(bufnr)
     clear_modification_extmarks(bufnr)
 
     if #state.modifications == 0 then return end
-
-    local diagnostics = {}
 
     for i, mod in ipairs(state.modifications) do
         local line = mod.line - 1
@@ -217,19 +211,13 @@ local function render_modifications(bufnr)
                 })
             end
 
-            table.insert(diagnostics, {
-                bufnr = bufnr,
-                lnum = line,
-                end_lnum = math.min(line + #mod.new_lines - 1, line_count - 1),
-                col = 0,
-                severity = vim.diagnostic.severity.HINT,
-                source = "lag",
-                message = format_old_code(mod.original_lines),
+            vim.api.nvim_buf_set_extmark(bufnr, state.ns, end_line - 1, 0, {
+                virt_text = { { "── " .. format_old_code(mod.original_lines), "Comment" } },
+                virt_text_hide = true,
+                virt_text_pos = "eol",
             })
         end
     end
-
-    vim.diagnostic.set(ns_diagnostic, bufnr, diagnostics)
 end
 
 --- Update which modification is closest to the cursor.
@@ -813,7 +801,6 @@ local function teardown()
     for bufnr, _ in pairs(buffers) do
         pcall(clear_modification_extmarks, bufnr)
         pcall(clear_working_indicator, bufnr)
-        pcall(vim.diagnostic.reset, ns_diagnostic, bufnr)
     end
     buffers = {}
 
