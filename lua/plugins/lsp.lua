@@ -89,6 +89,13 @@ return {
             })
 
             -- Enable servers not managed by mason
+            vim.lsp.config.clangd = {
+                cmd = {
+                    'clangd',
+                    '--fallback-style=webkit'
+                },
+                filetypes = { 'c', 'cpp' }
+            }
             vim.lsp.enable('clangd')
 
             local telescope = require("telescope.builtin")
