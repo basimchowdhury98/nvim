@@ -50,6 +50,9 @@ make test
 
 # Run linter (luacheck + custom test convention checks)
 make lint
+
+# Run e2e tets
+make e2e
 ```
 
 ## Deployment

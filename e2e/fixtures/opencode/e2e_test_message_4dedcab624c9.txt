@@ -1,0 +1,6 @@
+{"type":"text","part":{"text":"Hello"}}
+{"type":"text","part":{"text":" from"}}
+{"type":"text","part":{"text":" the"}}
+{"type":"text","part":{"text":" mock"}}
+{"type":"text","part":{"text":" CLI."}}
+{"type":"step_finish","part":{"reason":"stop","tokens":{"input":42,"output":5,"cache":{"read":0,"write":0}},"cost":0.001}}
