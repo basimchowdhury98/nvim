@@ -44,14 +44,11 @@ and companion configs for WezTerm, Zsh, and PowerShell.
 
 ## Quality Check Scripts
 
+**Always run all three commands after any code change.** No exceptions.
+
 ```bash
-# Run all tests
 make test
-
-# Run linter (luacheck + custom test convention checks)
 make lint
-
-# Run e2e tets
 make e2e
 ```
 

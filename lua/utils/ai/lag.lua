@@ -120,6 +120,84 @@ local function get_indent(line)
     return line:match("^(%s*)") or ""
 end
 
+--- Get the wrap width from colorcolumn (first value), falling back to window width.
+--- @return number
+local function get_wrap_width()
+    local cc = vim.opt.colorcolumn:get()
+    if cc and #cc > 0 then
+        local first = tonumber(cc[1])
+        if first and first > 0 then return first end
+    end
+    return vim.api.nvim_win_get_width(0)
+end
+
+--- Wrap text into multiple lines that fit within a given width.
+--- The first line accounts for a prefix (e.g. indent + "Lag: "),
+--- continuation lines are indented to align with the first line's text.
+--- @param prefix string  the leading text (indent + "Lag: ")
+--- @param text string    the comment to wrap
+--- @param width number   the target column width
+--- @return string[]      list of lines (first includes prefix)
+local function wrap_comment(prefix, text, width)
+    local first_budget = width - #prefix
+    if first_budget <= 0 then first_budget = width end
+
+    -- continuation lines get same indent + spaces to align past "Lag: "
+    local cont_prefix = prefix:match("^(%s*)") or ""
+    cont_prefix = cont_prefix .. string.rep(" ", #prefix - #cont_prefix)
+    local cont_budget = width - #cont_prefix
+    if cont_budget <= 0 then cont_budget = width end
+
+    local lines = {}
+    local remaining = text
+
+    -- first line
+    if #remaining <= first_budget then
+        table.insert(lines, prefix .. remaining)
+        return lines
+    end
+
+    -- find last space within budget, or force-break
+    local break_at = first_budget
+    local space_pos = remaining:sub(1, first_budget):find("%s[^%s]*$")
+    if space_pos then break_at = space_pos - 1 end
+
+    table.insert(lines, prefix .. remaining:sub(1, break_at))
+    remaining = remaining:sub(break_at + 1):gsub("^%s+", "")
+
+    -- continuation lines
+    while #remaining > 0 do
+        if #remaining <= cont_budget then
+            table.insert(lines, cont_prefix .. remaining)
+            break
+        end
+
+        break_at = cont_budget
+        space_pos = remaining:sub(1, cont_budget):find("%s[^%s]*$")
+        if space_pos then break_at = space_pos - 1 end
+
+        table.insert(lines, cont_prefix .. remaining:sub(1, break_at))
+        remaining = remaining:sub(break_at + 1):gsub("^%s+", "")
+    end
+
+    return lines
+end
+
+--- Scroll the viewport to reveal virt_lines_above on row 0 if needed.
+--- @param bufnr number
+--- @param virt_line_count number  how many virtual lines are above row 0
+local function reveal_top_virtual_lines(bufnr, virt_line_count)
+    if virt_line_count <= 0 then return end
+    for _, win in ipairs(vim.fn.win_findbuf(bufnr)) do
+        local view = vim.api.nvim_win_call(win, function() return vim.fn.winsaveview() end)
+        if view.topline == 1 then
+            vim.api.nvim_win_call(win, function()
+                vim.fn.winrestview({ topline = 1, topfill = virt_line_count })
+            end)
+        end
+    end
+end
+
 --- Place "LAG: working..." virtual text and line highlights over diff regions.
 --- @param bufnr number
 --- @param regions table[] diff regions (1-indexed)
@@ -147,6 +225,14 @@ local function show_working_indicator(bufnr, regions)
                 line_hl_group = "AILagWorkingLine",
             })
             table.insert(state.working_extmarks, id)
+        end
+    end
+
+    -- If any region starts at line 1, scroll to reveal the virtual line above row 0
+    for _, region in ipairs(regions) do
+        if region[1] == 1 then
+            reveal_top_virtual_lines(bufnr, 1)
+            break
         end
     end
 end
@@ -199,9 +285,15 @@ local function render_modifications(bufnr)
             local comment_hl = is_active and "AILagActiveComment" or "AILagComment"
             local line_hl = is_active and "AILagActiveLine" or "AILagLine"
 
+            local prefix = indent .. "Lag: "
+            local wrapped = wrap_comment(prefix, mod.comment, get_wrap_width())
+            local virt_lines = {}
+            for _, vl in ipairs(wrapped) do
+                table.insert(virt_lines, { { vl, comment_hl } })
+            end
             vim.api.nvim_buf_set_extmark(bufnr, state.ns, line, 0, {
                 virt_lines_above = true,
-                virt_lines = { { { indent .. "Lag: " .. mod.comment, comment_hl } } },
+                virt_lines = virt_lines,
             })
 
             local end_line = math.min(line + #mod.new_lines, line_count)
@@ -216,6 +308,18 @@ local function render_modifications(bufnr)
                 virt_text_hide = true,
                 virt_text_pos = "eol",
             })
+        end
+    end
+
+    -- If any modification is on line 1, scroll to reveal virtual lines above row 0
+    for _, mod in ipairs(state.modifications) do
+        if mod.line == 1 then
+            local prefix = get_indent(
+                (vim.api.nvim_buf_get_lines(bufnr, 0, 1, false)[1] or "")
+            ) .. "Lag: "
+            local virt_count = #wrap_comment(prefix, mod.comment, get_wrap_width())
+            reveal_top_virtual_lines(bufnr, virt_count)
+            break
         end
     end
 end
@@ -925,6 +1029,18 @@ function M.stop()
     vim.notify("Lag: stopped")
 end
 
+--- Toggle lag mode on/off.
+--- @param get_context function  context builder (required when starting)
+--- @param get_session function  session accessor (required when starting)
+function M.toggle(get_context, get_session)
+    if running then
+        M.stop()
+    else
+        M.start(get_context, get_session)
+    end
+    require("utils.ai.usage").update_tabline()
+end
+
 --- Revert the active modification in the current buffer.
 function M.revert()
     local bufnr = vim.api.nvim_get_current_buf()
@@ -1023,6 +1139,36 @@ function M.get_all_state()
         running = running,
         buffers = buf_states,
     }
+end
+
+--- Populate the quickfix list with all pending lag modifications across buffers.
+function M.quickfix()
+    local items = {}
+    for bufnr, state in pairs(buffers) do
+        if vim.api.nvim_buf_is_valid(bufnr) and #state.modifications > 0 then
+            local filename = vim.api.nvim_buf_get_name(bufnr)
+            for _, mod in ipairs(state.modifications) do
+                table.insert(items, {
+                    filename = filename,
+                    lnum = mod.line,
+                    text = "Lag: " .. mod.comment,
+                })
+            end
+        end
+    end
+
+    if #items == 0 then
+        vim.notify("Lag: no pending modifications", vim.log.levels.INFO)
+        return
+    end
+
+    table.sort(items, function(a, b)
+        if a.filename ~= b.filename then return a.filename < b.filename end
+        return a.lnum < b.lnum
+    end)
+
+    vim.fn.setqflist({}, " ", { title = "Lag: pending modifications", items = items })
+    vim.cmd("copen")
 end
 
 --- Check if a buffer has lag state.

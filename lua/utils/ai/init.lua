@@ -20,6 +20,7 @@ local default_config = {
         continue_response = "<leader>in",
         lag_revert = "<leader>lr",
         lag_accept = "<leader>la",
+        lag_quickfix = "<leader>lq",
         toggle_thinking = "<leader>ir",
     },
 }
@@ -567,6 +568,12 @@ function M.setup(opts)
         end
         lag.accept()
     end, { desc = "Lag: Accept nearest modification" })
+    map("n", config.keymaps.lag_quickfix, function()
+        if not active then
+            return
+        end
+        lag.quickfix()
+    end, { desc = "Lag: Show pending modifications in quickfix" })
 
     vim.api.nvim_create_user_command("AIContextDump", function()
         M.context_dump()
@@ -606,6 +613,14 @@ function M.setup(opts)
         end
         lag.clear()
     end, { desc = "Lag: Accept all modifications" })
+
+    vim.api.nvim_create_user_command("AILagToggle", function()
+        if not active then
+            vim.notify("AI: Not active — send a message first", vim.log.levels.WARN)
+            return
+        end
+        lag.toggle(M.build_context_block, M.get_session)
+    end, { desc = "Lag: Toggle lag mode on/off (keeps chat)" })
 end
 
 return M

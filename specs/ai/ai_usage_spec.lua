@@ -91,6 +91,125 @@ describe("AI Usage Tracking", function()
     end)
 end)
 
+describe("AI Usage Last Request", function()
+    before_each(function()
+        usage.reset()
+        lag.reset()
+    end)
+
+    it("last_request is nil initially", function()
+        local lr = usage._get_last_request()
+
+        eq(nil, lr, "Should be nil before any add")
+    end)
+
+    it("last_request reflects the most recent call", function()
+        usage.add({ tokens = { input = 100, output = 50, cache_read = 200, cache_write = 10 } })
+        usage.add({ tokens = { input = 500, output = 25, cache_read = 0, cache_write = 0 } })
+
+        local lr = usage._get_last_request()
+
+        eq(500, lr.input, "Should reflect second call's input")
+        eq(25, lr.output, "Should reflect second call's output")
+        eq(0, lr.cache_read, "Should reflect second call's cache_read")
+    end)
+
+    it("last_request is nil after reset", function()
+        usage.add({ tokens = { input = 100, output = 50, cache_read = 0, cache_write = 0 } })
+        usage.reset()
+
+        local lr = usage._get_last_request()
+
+        eq(nil, lr, "Should be nil after reset")
+    end)
+
+    it("last_request is not set when metadata has no tokens", function()
+        usage.add({ cost = 0.01 })
+
+        local lr = usage._get_last_request()
+
+        eq(nil, lr, "Should remain nil without tokens")
+    end)
+end)
+
+describe("AI Usage Cache History", function()
+    before_each(function()
+        usage.reset()
+        lag.reset()
+    end)
+
+    it("cache_history is empty initially", function()
+        local ch = usage._get_cache_history()
+
+        eq({}, ch, "Should be empty before any add")
+    end)
+
+    it("cache_history records percentage when cache_read > 0", function()
+        usage.add({ tokens = { input = 100, output = 50, cache_read = 900, cache_write = 0 } })
+
+        local ch = usage._get_cache_history()
+
+        eq(1, #ch, "Should have one entry")
+        eq(90, ch[1], "Cache rate should be 90% (900/1000)")
+    end)
+
+    it("cache_history skips entries with zero cache_read", function()
+        usage.add({ tokens = { input = 100, output = 50, cache_read = 0, cache_write = 0 } })
+
+        local ch = usage._get_cache_history()
+
+        eq({}, ch, "Should be empty when no cache")
+    end)
+
+    it("cache_history accumulates up to 3 entries", function()
+        usage.add({ tokens = { input = 100, output = 10, cache_read = 900, cache_write = 0 } })
+        usage.add({ tokens = { input = 200, output = 10, cache_read = 800, cache_write = 0 } })
+        usage.add({ tokens = { input = 300, output = 10, cache_read = 700, cache_write = 0 } })
+
+        local ch = usage._get_cache_history()
+
+        eq(3, #ch, "Should have 3 entries")
+        eq(90, ch[1], "First entry: 900/1000")
+        eq(80, ch[2], "Second entry: 800/1000")
+        eq(70, ch[3], "Third entry: 700/1000")
+    end)
+
+    it("cache_history trims oldest when exceeding 3", function()
+        usage.add({ tokens = { input = 100, output = 10, cache_read = 900, cache_write = 0 } })
+        usage.add({ tokens = { input = 200, output = 10, cache_read = 800, cache_write = 0 } })
+        usage.add({ tokens = { input = 300, output = 10, cache_read = 700, cache_write = 0 } })
+        usage.add({ tokens = { input = 400, output = 10, cache_read = 600, cache_write = 0 } })
+
+        local ch = usage._get_cache_history()
+
+        eq(3, #ch, "Should cap at 3 entries")
+        eq(80, ch[1], "Oldest should be second request: 800/1000")
+        eq(70, ch[2], "Middle should be third request: 700/1000")
+        eq(60, ch[3], "Latest should be fourth request: 600/1000")
+    end)
+
+    it("cache_history is empty after reset", function()
+        usage.add({ tokens = { input = 100, output = 10, cache_read = 900, cache_write = 0 } })
+        usage.reset()
+
+        local ch = usage._get_cache_history()
+
+        eq({}, ch, "Should be empty after reset")
+    end)
+
+    it("cache_history only counts requests with cache data", function()
+        usage.add({ tokens = { input = 100, output = 10, cache_read = 900, cache_write = 0 } })
+        usage.add({ tokens = { input = 200, output = 10, cache_read = 0, cache_write = 0 } })
+        usage.add({ tokens = { input = 300, output = 10, cache_read = 700, cache_write = 0 } })
+
+        local ch = usage._get_cache_history()
+
+        eq(2, #ch, "Should only have 2 entries (skip zero-cache request)")
+        eq(90, ch[1], "First cached request")
+        eq(70, ch[2], "Second cached request")
+    end)
+end)
+
 describe("AI Usage Formatting", function()
     before_each(function()
         usage.reset()
@@ -121,13 +240,12 @@ describe("AI Usage Formatting", function()
         eq("", result, "Should be empty with no data")
     end)
 
-    it("format_stats shows input and output", function()
+    it("format_stats shows last request context size", function()
         usage.add({ tokens = { input = 1200, output = 300, cache_read = 0, cache_write = 0 } })
 
         local stats = usage.format_stats()
 
-        assert(stats:find("1.2K in"), "Should contain input: " .. stats)
-        assert(stats:find("300 out"), "Should contain output: " .. stats)
+        eq("1.2K/? ctx", stats, "Should show last request input as context size")
     end)
 
     it("format_stats shows total input including cache", function()
@@ -135,39 +253,16 @@ describe("AI Usage Formatting", function()
 
         local stats = usage.format_stats()
 
-        assert(stats:find("5.3K in"), "Should show total input (uncached + cache read + cache write): " .. stats)
+        eq("5.3K/? ctx", stats, "Should show total input (uncached + cache read + cache write)")
     end)
 
-    it("format_stats shows cache percentage when present", function()
-        usage.add({ tokens = { input = 100, output = 50, cache_read = 5000, cache_write = 0 } })
+    it("format_stats reflects last request only", function()
+        usage.add({ tokens = { input = 10000, output = 500, cache_read = 0, cache_write = 0 } })
+        usage.add({ tokens = { input = 200, output = 50, cache_read = 0, cache_write = 0 } })
 
         local stats = usage.format_stats()
 
-        assert(stats:find("98%% cached"), "Should show cache percentage: " .. stats)
-    end)
-
-    it("format_stats includes cost when present", function()
-        usage.add({ tokens = { input = 100, output = 50, cache_read = 0, cache_write = 0 }, cost = 0.15 })
-
-        local stats = usage.format_stats()
-
-        assert(stats:find("$0.15"), "Should contain cost: " .. stats)
-    end)
-
-    it("format_stats omits cache when zero", function()
-        usage.add({ tokens = { input = 100, output = 50, cache_read = 0, cache_write = 0 } })
-
-        local stats = usage.format_stats()
-
-        assert(not stats:find("cached"), "Should not contain cache: " .. stats)
-    end)
-
-    it("format_stats omits cost when zero", function()
-        usage.add({ tokens = { input = 100, output = 50, cache_read = 0, cache_write = 0 } })
-
-        local stats = usage.format_stats()
-
-        assert(not stats:find("%$"), "Should not contain cost: " .. stats)
+        eq("200/? ctx", stats, "Should show last request, not cumulative")
     end)
 end)
 
@@ -192,23 +287,23 @@ describe("AI Usage Tabline", function()
         assert(not tabline:find("|"), "Should not contain separator when no stats: " .. tabline)
     end)
 
-    it("shows AI label when usage exists without lag", function()
+    it("shows strikethrough Lag label when usage exists without lag", function()
         usage.add({ tokens = { input = 100, output = 50, cache_read = 0, cache_write = 0 } })
 
         local tabline = usage.build_tabline()
 
-        assert(tabline:find("AI"), "Should contain AI label: " .. tabline)
-        assert(tabline:find("|"), "Should contain separator with stats: " .. tabline)
+        assert(tabline:find("AILagOff"), "Should use strikethrough highlight: " .. tabline)
+        assert(tabline:find("Lag"), "Should still say Lag: " .. tabline)
     end)
 
-    it("shows Lag label with stats when both active", function()
+    it("shows Lag label with context size when both active", function()
         lag.start(function() end, function() return { conversation = {} } end)
         usage.add({ tokens = { input = 100, output = 50, cache_read = 0, cache_write = 0 } })
 
         local tabline = usage.build_tabline()
 
-        assert(tabline:find("Lag"), "Should show Lag not AI when lag is on: " .. tabline)
-        assert(tabline:find("100 in"), "Should contain stats: " .. tabline)
+        assert(tabline:find("Lag"), "Should show Lag when lag is on: " .. tabline)
+        assert(tabline:find("100/%? ctx"), "Should contain context size: " .. tabline)
     end)
 
     it("right-aligns content with %=", function()
@@ -217,5 +312,24 @@ describe("AI Usage Tabline", function()
         local tabline = usage.build_tabline()
 
         assert(tabline:find("^%%="), "Should start with %%= for right alignment: " .. tabline)
+    end)
+
+    it("includes cache history with dim highlights for older entries", function()
+        usage.add({ tokens = { input = 100, output = 10, cache_read = 900, cache_write = 0 } })
+        usage.add({ tokens = { input = 200, output = 10, cache_read = 800, cache_write = 0 } })
+        usage.add({ tokens = { input = 300, output = 10, cache_read = 700, cache_write = 0 } })
+
+        local tabline = usage.build_tabline()
+
+        assert(tabline:find("AILagDim"), "Should use dim highlight for older entries: " .. tabline)
+        assert(tabline:find("70%%%%"), "Should contain latest cache rate: " .. tabline)
+    end)
+
+    it("omits cache section when no cache history", function()
+        usage.add({ tokens = { input = 100, output = 50, cache_read = 0, cache_write = 0 } })
+
+        local tabline = usage.build_tabline()
+
+        assert(not tabline:find("AILagDim"), "Should not contain cache history section: " .. tabline)
     end)
 end)

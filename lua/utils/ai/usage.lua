@@ -12,6 +12,14 @@ local totals = {
     requests = 0,
 }
 
+--- Last request's token data (overwritten on each add).
+--- @type table|nil
+local last_request = nil
+
+--- Recent cache hit percentages (most recent last, max 3 entries).
+--- @type number[]
+local cache_history = {}
+
 --- Format a token count for display (e.g., 1234 -> "1.2K", 1234567 -> "1.2M")
 --- @param n number
 --- @return string
@@ -34,6 +42,22 @@ function M.add(metadata)
         totals.output = totals.output + (metadata.tokens.output or 0)
         totals.cache_read = totals.cache_read + (metadata.tokens.cache_read or 0)
         totals.cache_write = totals.cache_write + (metadata.tokens.cache_write or 0)
+
+        last_request = {
+            input = metadata.tokens.input or 0,
+            output = metadata.tokens.output or 0,
+            cache_read = metadata.tokens.cache_read or 0,
+            cache_write = metadata.tokens.cache_write or 0,
+        }
+
+        local total_in = last_request.input + last_request.cache_read + last_request.cache_write
+        if last_request.cache_read > 0 and total_in > 0 then
+            local pct = math.floor(last_request.cache_read / total_in * 100)
+            table.insert(cache_history, pct)
+            if #cache_history > 3 then
+                table.remove(cache_history, 1)
+            end
+        end
     end
     if metadata.cost then
         totals.cost = totals.cost + metadata.cost
@@ -49,6 +73,8 @@ function M.reset()
     totals.cache_write = 0
     totals.cost = 0
     totals.requests = 0
+    last_request = nil
+    cache_history = {}
     M.update_tabline()
 end
 
@@ -64,28 +90,15 @@ function M.has_data()
     return totals.requests > 0
 end
 
---- Build the stats string for display.
+--- Build the stats string for display (last request's context size).
 --- @return string
 function M.format_stats()
-    if totals.requests == 0 then
+    if not last_request then
         return ""
     end
 
-    local parts = {}
-    local total_in = totals.input + totals.cache_read + totals.cache_write
-    table.insert(parts, format_tokens(total_in) .. " in")
-    table.insert(parts, format_tokens(totals.output) .. " out")
-
-    if totals.cache_read > 0 then
-        local pct = math.floor(totals.cache_read / total_in * 100)
-        table.insert(parts, pct .. "% cached")
-    end
-
-    if totals.cost > 0 then
-        table.insert(parts, string.format("$%.2f", totals.cost))
-    end
-
-    return table.concat(parts, " / ")
+    local total_in = last_request.input + last_request.cache_read + last_request.cache_write
+    return format_tokens(total_in) .. "/? ctx"
 end
 
 --- Build the full tabline string.
@@ -99,14 +112,41 @@ function M.build_tabline()
         return ""
     end
 
-    local label = lag_on and "Lag" or "AI"
-    local stats = M.format_stats()
+    local label
+    if lag_on then
+        label = "Lag"
+    elseif has_usage then
+        vim.api.nvim_set_hl(0, "AILagOff", { strikethrough = true, default = true })
+        label = "%#AILagOff#Lag%*"
+    end
 
-    local content
+    local stats = M.format_stats()
+    local parts = {}
+
     if stats ~= "" then
         -- Escape % for tabline (% is a special format char in statusline/tabline)
         local safe_stats = stats:gsub("%%", "%%%%")
-        content = " " .. label .. " | " .. safe_stats .. " "
+        table.insert(parts, safe_stats)
+    end
+
+    if #cache_history > 0 then
+        vim.api.nvim_set_hl(0, "AILagDim", { link = "Comment", default = true })
+        local cache_parts = {}
+        for i, pct in ipairs(cache_history) do
+            if i == #cache_history then
+                -- Latest: normal text
+                table.insert(cache_parts, pct .. "%%%%")
+            else
+                -- Older: dimmed
+                table.insert(cache_parts, "%%#AILagDim#" .. pct .. "%%%%#*")
+            end
+        end
+        table.insert(parts, table.concat(cache_parts, " "))
+    end
+
+    local content
+    if #parts > 0 then
+        content = " " .. label .. " | " .. table.concat(parts, " | ") .. " "
     else
         content = " " .. label .. " "
     end
@@ -129,5 +169,7 @@ end
 
 -- Expose for testing
 M._format_tokens = format_tokens
+M._get_last_request = function() return last_request and vim.deepcopy(last_request) or nil end
+M._get_cache_history = function() return vim.deepcopy(cache_history) end
 
 return M
