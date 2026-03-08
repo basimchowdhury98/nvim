@@ -323,6 +323,10 @@ describe("AI Usage Tabline", function()
 
         assert(tabline:find("AILagDim"), "Should use dim highlight for older entries: " .. tabline)
         assert(tabline:find("70%%%%"), "Should contain latest cache rate: " .. tabline)
+        -- Latest (70%) should appear before older entries (80%, 90%)
+        local latest_pos = tabline:find("70%%%%")
+        local older_pos = tabline:find("AILagDim")
+        assert(latest_pos < older_pos, "Latest cache rate should be on the left: " .. tabline)
     end)
 
     it("omits cache section when no cache history", function()

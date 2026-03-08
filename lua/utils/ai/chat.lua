@@ -45,6 +45,16 @@ local function setup_highlights()
     set(0, "AIChatThinkingContent", { link = "Comment", default = true })
 end
 
+--- Build the chat panel statusline string.
+--- @return string
+function M.statusline()
+    local ok, lag = pcall(require, "utils.ai.lag")
+    if not ok then return "" end
+    local count = lag.pending_count()
+    if count == 0 then return "" end
+    return " Lag: " .. count .. " pending"
+end
+
 function M.setup(opts)
     config = vim.tbl_deep_extend("force", config, opts or {})
     setup_highlights()
@@ -305,6 +315,7 @@ function M.open()
     vim.wo[state.win_id].wrap = true
     vim.wo[state.win_id].linebreak = true
     vim.wo[state.win_id].cursorline = false
+    vim.wo[state.win_id].statusline = "%{%v:lua.require('utils.ai.chat').statusline()%}"
 
     scroll_to_bottom()
 

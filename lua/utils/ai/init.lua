@@ -89,15 +89,10 @@ local function is_includable(buf)
             return false
         end
     end
-    -- Must be within the current project directory
-    local cwd = vim.fn.getcwd()
-    if not name:find(cwd, 1, true) then
-        return false
-    end
     return true
 end
 
---- Get all open buffers that are within the current project
+--- Get all open buffers that are includable as context
 --- @return number[] buffer ids
 local function get_project_buffers()
     local bufs = {}
@@ -132,7 +127,7 @@ local function read_buf_context(buf)
     return string.format("Filename: %s\nLanguage: %s\n\n```%s\n%s\n```", name, ft, ft, content)
 end
 
---- Build a context block from all open project buffers (reads live content)
+--- Build a context block from all open buffers (reads live content)
 --- @return string|nil
 local function build_context_block()
     local parts = {}

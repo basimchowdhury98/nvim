@@ -1171,6 +1171,18 @@ function M.quickfix()
     vim.cmd("copen")
 end
 
+--- Count total pending modifications across all buffers.
+--- @return number
+function M.pending_count()
+    local count = 0
+    for bufnr, state in pairs(buffers) do
+        if vim.api.nvim_buf_is_valid(bufnr) then
+            count = count + #state.modifications
+        end
+    end
+    return count
+end
+
 --- Check if a buffer has lag state.
 --- @param bufnr number|nil defaults to current buffer
 --- @return boolean

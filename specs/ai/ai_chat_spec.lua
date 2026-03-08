@@ -403,22 +403,6 @@ describe("AI Chat Buffer Tracking", function()
         eq(count, 1, "Filename should appear exactly once in context")
     end)
 
-    it("excludes buffers outside of project directory", function()
-        local project_buf = create_named_buf("project_file.lua", "lua", { "project code" })
-        local outside_buf = create_named_buf("/tmp/outside_file.lua", "lua", { "outside code" })
-        table.insert(test_bufs, project_buf)
-        table.insert(test_bufs, outside_buf)
-        vim.api.nvim_set_current_buf(project_buf)
-
-        send_user_message(ai, "check")
-
-        local first_msg = stream_messages_spy[1]
-        assert(first_msg.content:find("project_file.lua", 1, true),
-            "Project file should be in context")
-        assert(not first_msg.content:find("outside_file.lua", 1, true),
-            "File outside project should not be in context")
-    end)
-
     it("only injects context into the first user message in the API payload", function()
         local buf = create_named_buf("ctx_check.lua", "lua", { "ctx content" })
         table.insert(test_bufs, buf)
@@ -670,26 +654,6 @@ describe("AI Project-Scoped Sessions", function()
             "Project B should not have project A's history in API messages")
         assert(first_msg.content:find("var question", 1, true),
             "Project B should have its own user message")
-    end)
-
-    it("buffer context is scoped to current project directory", function()
-        vim.fn.chdir("/tmp")
-        local buf_a = create_named_buf("/tmp/project_a.lua", "lua", { "project A code" })
-        table.insert(test_bufs, buf_a)
-        vim.api.nvim_set_current_buf(buf_a)
-        send_user_message(ai, "analyze A")
-
-        vim.fn.chdir("/var")
-        local buf_b = create_named_buf("/var/project_b.lua", "lua", { "project B code" })
-        table.insert(test_bufs, buf_b)
-        vim.api.nvim_set_current_buf(buf_b)
-        send_user_message(ai, "analyze B")
-
-        local first_msg = stream_messages_spy[1]
-        assert(not first_msg.content:find("project A code", 1, true),
-            "Project B context should not include project A buffers")
-        assert(first_msg.content:find("project B code", 1, true),
-            "Project B context should include project B buffers")
     end)
 
     it("stop only affects the current project's history", function()

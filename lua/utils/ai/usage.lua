@@ -124,21 +124,21 @@ function M.build_tabline()
     local parts = {}
 
     if stats ~= "" then
-        -- Escape % for tabline (% is a special format char in statusline/tabline)
-        local safe_stats = stats:gsub("%%", "%%%%")
-        table.insert(parts, safe_stats)
+        table.insert(parts, stats)
     end
 
     if #cache_history > 0 then
         vim.api.nvim_set_hl(0, "AILagDim", { link = "Comment", default = true })
         local cache_parts = {}
-        for i, pct in ipairs(cache_history) do
+        -- Latest first (left), oldest last (right, dimmed)
+        for i = #cache_history, 1, -1 do
+            local pct_str = cache_history[i] .. "%%"
             if i == #cache_history then
                 -- Latest: normal text
-                table.insert(cache_parts, pct .. "%%%%")
+                table.insert(cache_parts, pct_str)
             else
                 -- Older: dimmed
-                table.insert(cache_parts, "%%#AILagDim#" .. pct .. "%%%%#*")
+                table.insert(cache_parts, "%#AILagDim#" .. pct_str .. "%*")
             end
         end
         table.insert(parts, table.concat(cache_parts, " "))
