@@ -22,6 +22,7 @@ local get_session_fn = nil
 --   modifications = table[],   -- applied modifications with original code for revert
 --   ns = number,               -- extmark namespace for this buffer
 --   active_index = number|nil, -- index of nearest modification to cursor
+--   hovered_index = number|nil, -- index of modification whose first line cursor is on
 --   working_extmarks = table,  -- extmark ids for "working..." indicators
 -- }
 local buffers = {}
@@ -54,6 +55,7 @@ local function get_or_create_state(bufnr)
             modifications = {},
             ns = vim.api.nvim_create_namespace("ai_lag_" .. bufnr),
             active_index = nil,
+            hovered_index = nil,
             working_extmarks = {},
             cancel_request = nil,
             cancelled = false,
@@ -255,16 +257,6 @@ local function clear_modification_extmarks(bufnr)
     vim.api.nvim_buf_clear_namespace(bufnr, state.ns, 0, -1)
 end
 
---- Format original code for diagnostic message display.
---- @param original_lines string[]
---- @return string
-local function format_old_code(original_lines)
-    if #original_lines == 0 then
-        return "(empty)"
-    end
-    return table.concat(original_lines, "\n")
-end
-
 --- Render virtual text comments, line highlights, and hidden info for all modifications.
 --- @param bufnr number
 local function render_modifications(bufnr)
@@ -303,11 +295,15 @@ local function render_modifications(bufnr)
                 })
             end
 
-            vim.api.nvim_buf_set_extmark(bufnr, state.ns, end_line - 1, 0, {
-                virt_text = { { "── " .. format_old_code(mod.original_lines), "Comment" } },
-                virt_text_hide = true,
-                virt_text_pos = "eol",
-            })
+            if i == state.hovered_index and #mod.original_lines > 0 then
+                local orig_virt_lines = {}
+                for _, ol in ipairs(mod.original_lines) do
+                    table.insert(orig_virt_lines, { { ol, "Comment" } })
+                end
+                vim.api.nvim_buf_set_extmark(bufnr, state.ns, end_line - 1, 0, {
+                    virt_lines = orig_virt_lines,
+                })
+            end
         end
     end
 
@@ -324,7 +320,7 @@ local function render_modifications(bufnr)
     end
 end
 
---- Update which modification is closest to the cursor.
+--- Update which modification is closest to the cursor, and which is hovered.
 --- @param bufnr number
 local function update_active(bufnr)
     local state = buffers[bufnr]
@@ -333,6 +329,7 @@ local function update_active(bufnr)
     local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
     local min_dist = math.huge
     local closest = nil
+    local hovered = nil
 
     for i, mod in ipairs(state.modifications) do
         local dist = math.abs(cursor_line - mod.line)
@@ -340,10 +337,14 @@ local function update_active(bufnr)
             min_dist = dist
             closest = i
         end
+        if cursor_line == mod.line then
+            hovered = i
+        end
     end
 
-    if closest ~= state.active_index then
+    if closest ~= state.active_index or hovered ~= state.hovered_index then
         state.active_index = closest
+        state.hovered_index = hovered
         render_modifications(bufnr)
     end
 end
@@ -392,6 +393,7 @@ local function prune_edited_modifications(bufnr)
     if pruned then
         state.modifications = kept
         state.active_index = nil
+        state.hovered_index = nil
         render_modifications(bufnr)
     end
 end
@@ -682,9 +684,11 @@ local function revert_active(bufnr)
 
     if #state.modifications == 0 then
         state.active_index = nil
+        state.hovered_index = nil
         clear_modification_extmarks(bufnr)
     else
         state.active_index = nil
+        state.hovered_index = nil
         update_active(bufnr)
         render_modifications(bufnr)
     end
@@ -706,9 +710,11 @@ local function accept_active(bufnr)
 
     if #state.modifications == 0 then
         state.active_index = nil
+        state.hovered_index = nil
         clear_modification_extmarks(bufnr)
     else
         state.active_index = nil
+        state.hovered_index = nil
         update_active(bufnr)
         render_modifications(bufnr)
     end
@@ -724,6 +730,7 @@ local function clear_modifications(bufnr)
 
     state.modifications = {}
     state.active_index = nil
+    state.hovered_index = nil
     clear_modification_extmarks(bufnr)
 end
 

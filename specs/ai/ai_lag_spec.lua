@@ -1062,7 +1062,7 @@ describe("Lag Diagnostics and Line Highlights", function()
         stub_error = nil
     end)
 
-    it("sets hidden info extmark on modified lines", function()
+    it("shows original code dropdown when cursor is on first modified line", function()
         lag.start(noop_context, noop_session)
         local buf = make_buf({ "a", "b", "c" })
         table.insert(test_bufs, buf)
@@ -1070,20 +1070,22 @@ describe("Lag Diagnostics and Line Highlights", function()
         local state = lag._get_or_create_state(buf)
         vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "CHANGED" })
         stub_response = '[{"start_line": 2, "end_line": 2, "replacement": "FIXED", "comment": "bug fix"}]'
-
         lag._on_save(buf)
+
+        vim.api.nvim_win_set_cursor(0, { 2, 0 })
+        lag._update_active(buf)
 
         local extmarks = vim.api.nvim_buf_get_extmarks(buf, state.ns, { 0, 0 }, { -1, -1 }, { details = true })
-        local found_virt_text = false
+        local found_virt_lines = false
         for _, extmark in ipairs(extmarks) do
-            if extmark[4].virt_text and #extmark[4].virt_text > 0 then
-                found_virt_text = true
+            if extmark[4].virt_lines and #extmark[4].virt_lines > 0 then
+                found_virt_lines = true
             end
         end
-        eq(true, found_virt_text, "Should have one extmark with virt_text")
+        eq(true, found_virt_lines, "Should show virt_lines dropdown when cursor is on modified line")
     end)
 
-    it("virt_text contains original code", function()
+    it("dropdown contains original code lines", function()
         lag.start(noop_context, noop_session)
         local buf = make_buf({ "a", "b", "c" })
         table.insert(test_bufs, buf)
@@ -1091,21 +1093,49 @@ describe("Lag Diagnostics and Line Highlights", function()
         local state = lag._get_or_create_state(buf)
         vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "CHANGED" })
         stub_response = '[{"start_line": 2, "end_line": 2, "replacement": "FIXED", "comment": "bug fix"}]'
-
         lag._on_save(buf)
+
+        vim.api.nvim_win_set_cursor(0, { 2, 0 })
+        lag._update_active(buf)
 
         local extmarks = vim.api.nvim_buf_get_extmarks(buf, state.ns, { 0, 0 }, { -1, -1 }, { details = true })
         local found_original = false
         for _, extmark in ipairs(extmarks) do
-            if extmark[4].virt_text then
-                for _, vt in ipairs(extmark[4].virt_text) do
-                    if vt[1]:match("CHANGED") then
+            if extmark[4].virt_lines then
+                for _, vl in ipairs(extmark[4].virt_lines) do
+                    if vl[1] and vl[1][1] == "CHANGED" then
                         found_original = true
                     end
                 end
             end
         end
-        eq(true, found_original, "Virt text should contain original code 'CHANGED'")
+        eq(true, found_original, "Dropdown virt_lines should contain original code 'CHANGED'")
+    end)
+
+    it("hides dropdown when cursor moves off first modified line", function()
+        lag.start(noop_context, noop_session)
+        local buf = make_buf({ "a", "b", "c" })
+        table.insert(test_bufs, buf)
+        vim.api.nvim_set_current_buf(buf)
+        local state = lag._get_or_create_state(buf)
+        vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "CHANGED" })
+        stub_response = '[{"start_line": 2, "end_line": 2, "replacement": "FIXED", "comment": "bug fix"}]'
+        lag._on_save(buf)
+
+        vim.api.nvim_win_set_cursor(0, { 2, 0 })
+        lag._update_active(buf)
+
+        vim.api.nvim_win_set_cursor(0, { 1, 0 })
+        lag._update_active(buf)
+
+        local extmarks = vim.api.nvim_buf_get_extmarks(buf, state.ns, { 0, 0 }, { -1, -1 }, { details = true })
+        local found_dropdown = false
+        for _, extmark in ipairs(extmarks) do
+            if extmark[4].virt_lines and #extmark[4].virt_lines > 0 and not extmark[4].virt_lines_above then
+                found_dropdown = true
+            end
+        end
+        eq(false, found_dropdown, "Should hide dropdown when cursor moves off modified line")
     end)
 
     it("clears extmarks when modifications are cleared", function()
