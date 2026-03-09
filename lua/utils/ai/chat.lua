@@ -45,6 +45,21 @@ local function setup_highlights()
     set(0, "AIChatThinkingContent", { link = "Comment", default = true })
 end
 
+--- Split thinking content into lines consistently.
+--- Used by finish_assistant_message and toggle_thinking to avoid count mismatches.
+--- @param content string
+--- @return string[]
+local function split_thinking_lines(content)
+    local lines = {}
+    for line in content:gmatch("([^\n]*)\n?") do
+        table.insert(lines, line)
+    end
+    if #lines > 0 and lines[#lines] == "" then
+        table.remove(lines)
+    end
+    return lines
+end
+
 --- Build the chat panel statusline string.
 --- @return string
 function M.statusline()
@@ -535,14 +550,6 @@ function M.finish_assistant_message(thinking)
     stop_spinner()
     state.set_spinner_label = nil
 
-    -- Calculate thinking line count from the thinking string
-    local thinking_line_count = 0
-    if thinking and #thinking > 0 then
-        for _ in thinking:gmatch("[^\n]+") do
-            thinking_line_count = thinking_line_count + 1
-        end
-    end
-
     -- Post-process: strip markdown syntax and apply highlights
     -- We apply to the whole section, then replace thinking with indicator
     if state.assistant_section_start and buf_is_valid() then
@@ -552,14 +559,17 @@ function M.finish_assistant_message(thinking)
 
     -- Replace streaming thinking with collapsed indicator if thinking exists
     if thinking and #thinking > 0 and buf_is_valid() and state.thinking_section_start then
-        local line_count_label = thinking_line_count == 1 and "1 line" or (thinking_line_count .. " lines")
+        local thinking_lines = split_thinking_lines(thinking)
+        local line_count_label = #thinking_lines == 1 and "1 line" or (#thinking_lines .. " lines")
         local indicator = "Thinking... (" .. line_count_label .. ")"
 
         local insert_line = state.thinking_section_start
+        -- Use actual buffer lines inserted by append_thinking, not string line count
+        local buf_lines_to_delete = state.thinking_end_line - insert_line + 1
 
         with_modifiable(function()
             -- Delete the thinking lines that were added during streaming
-            local delete_end = insert_line + thinking_line_count
+            local delete_end = insert_line + buf_lines_to_delete
             vim.api.nvim_buf_set_lines(state.buf_id, insert_line, delete_end, false, {})
 
             -- Insert the indicator at the same position
@@ -573,8 +583,8 @@ function M.finish_assistant_message(thinking)
             content = thinking,
         })
 
-        -- Shift assistant_section_start: was at insert_line + thinking_line_count,
-        -- now indicator is at insert_line, so response starts at insert_line + 1
+        -- Shift assistant_section_start: thinking replaced by single indicator line,
+        -- so response starts at insert_line + 1
         state.assistant_section_start = insert_line + 1
     end
 
@@ -663,13 +673,7 @@ function M.toggle_thinking()
         -- Process blocks in reverse order to keep line numbers stable
         for i = #state.thinking_blocks, 1, -1 do
             local block = state.thinking_blocks[i]
-            local thinking_lines = {}
-            for line in block.content:gmatch("([^\n]*)\n?") do
-                table.insert(thinking_lines, line)
-            end
-            if #thinking_lines > 0 and thinking_lines[#thinking_lines] == "" then
-                table.remove(thinking_lines)
-            end
+            local thinking_lines = split_thinking_lines(block.content)
 
             local line_count_label = #thinking_lines == 1 and "1 line" or (#thinking_lines .. " lines")
             local indicator = "Thinking... (" .. line_count_label .. ")"
@@ -686,13 +690,7 @@ function M.toggle_thinking()
         -- Process blocks in reverse order to keep line numbers stable
         for i = #state.thinking_blocks, 1, -1 do
             local block = state.thinking_blocks[i]
-            local thinking_lines = {}
-            for line in block.content:gmatch("([^\n]*)\n?") do
-                table.insert(thinking_lines, line)
-            end
-            if #thinking_lines > 0 and thinking_lines[#thinking_lines] == "" then
-                table.remove(thinking_lines)
-            end
+            local thinking_lines = split_thinking_lines(block.content)
 
             -- Replace the indicator line with thinking content
             with_modifiable(function()
