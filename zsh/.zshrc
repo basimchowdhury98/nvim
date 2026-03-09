@@ -20,6 +20,7 @@ gk() {
     git push
 }
 gap() {
+    git status
     git add -p
 }
 ga.() {

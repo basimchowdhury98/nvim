@@ -27,6 +27,7 @@ function gk {
 }
 
 function gap {
+    git status
     git add -p
 }
 

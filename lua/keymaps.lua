@@ -47,11 +47,6 @@ map("i", "<S-CR>", "<Esc>$o", { desc = "From anywhere in line enter into a new l
 map("t", "<C-p>", "<Up>", { desc = "[P]revious terminal command" })
 map("t", "<C-n>", "<Down>", { desc = "[N]ext terminal command" })
 
--- Modes
-map({ "i" }, "jk", "<C-c>", { desc = "[E]xit from insert to normal mode", remap = true })
-map({ "t" }, "jk", "<Esc>", { desc = "[E]xit from terminal to normal mode", remap = true })
-map({ "i" }, "JK", "<C-c>", { desc = "[E]xit from insert to normal mode", remap = true })
-map({ "t" }, "JK", "<Esc>", { desc = "[E]xit from terminal to normal mode", remap = true })
 
 -- Buffer Edit
 map({ "n" }, "<C-s>", ":w<CR>", { desc = "[S]ave file/write buffer" })
