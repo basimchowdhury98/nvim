@@ -12,7 +12,7 @@ M.name = "opencode"
 local USER_DELIM = "<|user|>"
 local ASST_DELIM = "<|assistant|>"
 
-local opencode_cli_name = "7619b34b-opencode-d0a72d8a"
+local opencode_cli_name = "opencode"
 
 --- Build the user prompt from conversation messages.
 --- opencode run doesn't support multi-turn, so we flatten the
