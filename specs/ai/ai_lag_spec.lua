@@ -1124,7 +1124,6 @@ describe("Lag Diagnostics and Line Highlights", function()
 
         vim.api.nvim_win_set_cursor(0, { 2, 0 })
         lag._update_active(buf)
-
         vim.api.nvim_win_set_cursor(0, { 1, 0 })
         lag._update_active(buf)
 

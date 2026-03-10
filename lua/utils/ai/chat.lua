@@ -43,6 +43,11 @@ local function setup_highlights()
     set(0, "AIChatInlineCode", { link = "CursorLine", default = true })
     set(0, "AIChatThinkingIndicator", { link = "Comment", default = true })
     set(0, "AIChatThinkingContent", { link = "Comment", default = true })
+
+    -- Tool use highlights
+    set(0, "AIChatToolIcon", { link = "DiagnosticInfo", default = true })
+    set(0, "AIChatToolName", { link = "Special", default = true })
+    set(0, "AIChatToolTarget", { link = "Comment", default = true })
 end
 
 --- Split thinking content into lines consistently.
@@ -538,6 +543,68 @@ function M.append_thinking(text)
     end
 
     -- Re-add spinner line
+    if state.spinner then
+        add_spinner_line()
+    end
+    scroll_to_bottom()
+end
+
+--- Format the target string from tool_info input.
+--- Always returns a single line (newlines replaced with spaces).
+--- @param tool_info table {tool, status, input, output, title}
+--- @return string
+local function format_tool_target(tool_info)
+    local raw
+    if tool_info.input.filePath then
+        raw = tool_info.input.filePath
+    elseif tool_info.input.pattern then
+        raw = tool_info.input.pattern
+    elseif tool_info.input.command then
+        raw = tool_info.input.command
+    elseif tool_info.input.query then
+        raw = tool_info.input.query
+    else
+        raw = vim.inspect(tool_info.input)
+    end
+    return raw:gsub("\n", " ")
+end
+
+--- Append a tool use indicator inline in the assistant response.
+--- Style: "> tool_name target"
+--- @param tool_info table {tool, status, input, output, title}
+function M.append_tool_use(tool_info)
+    if not buf_is_valid() then return end
+
+    remove_spinner_line()
+
+    local tool_name = tool_info.tool
+    local target = format_tool_target(tool_info)
+    local line_text = "> " .. tool_name .. " " .. target
+
+    with_modifiable(function()
+        local line_count = vim.api.nvim_buf_line_count(state.buf_id)
+        vim.api.nvim_buf_set_lines(state.buf_id, line_count, line_count, false, { line_text, "" })
+        local line_idx = line_count
+
+        vim.api.nvim_buf_set_extmark(state.buf_id, ns, line_idx, 0, {
+            end_col = 1,
+            hl_group = "AIChatToolIcon",
+            priority = 200,
+        })
+        vim.api.nvim_buf_set_extmark(state.buf_id, ns, line_idx, 2, {
+            end_col = 2 + #tool_name,
+            hl_group = "AIChatToolName",
+            priority = 200,
+        })
+        if #target > 0 then
+            vim.api.nvim_buf_set_extmark(state.buf_id, ns, line_idx, 2 + #tool_name + 1, {
+                end_col = 2 + #tool_name + 1 + #target,
+                hl_group = "AIChatToolTarget",
+                priority = 200,
+            })
+        end
+    end)
+
     if state.spinner then
         add_spinner_line()
     end

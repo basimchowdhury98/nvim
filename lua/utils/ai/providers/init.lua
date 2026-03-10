@@ -29,7 +29,6 @@ local providers = {}
 local provider_modules = {
     opencode = "utils.ai.providers.opencode",
     anthropic = "utils.ai.providers.anthropic",
-    alt = "utils.ai.providers.alt",
 }
 
 --- Get a validated provider by name

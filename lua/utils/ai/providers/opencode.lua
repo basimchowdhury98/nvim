@@ -87,6 +87,18 @@ function M.stream(messages, config, callbacks)
                 vim.schedule(function()
                     callbacks.on_delta(event.part.text)
                 end)
+            elseif event.type == "tool_use" and event.part and callbacks.on_tool_use then
+                local tool_info = {
+                    tool = event.part.tool or "unknown",
+                    status = event.part.state and event.part.state.status or "unknown",
+                    input = event.part.state and event.part.state.input or {},
+                    output = event.part.state and event.part.state.output or nil,
+                    title = event.part.title or nil,
+                }
+                log_timing("tool_use: " .. tool_info.tool)
+                vim.schedule(function()
+                    callbacks.on_tool_use(tool_info)
+                end)
             elseif event.type == "step_finish" then
                 local reason = event.part and event.part.reason or "unknown"
                 log_timing("step_finish reason=" .. reason)

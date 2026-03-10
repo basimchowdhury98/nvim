@@ -12,17 +12,10 @@ local default_config = {
     max_tokens = 4096,
     endpoint = "https://api.anthropic.com/v1/messages",
     api_version = "2023-06-01",
-    system_prompt = "You are a helpful coding assistant embedded in a Neovim editor.\n\nRESPONSE LENGTH — THIS IS CRITICAL:\nKeep every response brief and focused. Short answers are always preferred.\nWhen a complete answer genuinely requires more detail, provide ONLY the first part and end with a short note like \"there's more — ask me to continue\". Then STOP. Do NOT continue until the user asks.\nThis is the most important rule. The user stays in their code editor and cannot comfortably read long responses. Violating this rule makes the tool unusable.",
-    -- Alt provider env var names (OpenAI-compatible, used when alt mode is toggled)
-    alt_url_env = "AI_ALT_URL",
-    alt_key_env = "AI_ALT_API_KEY",
-    alt_model_env = "AI_ALT_MODEL",
+    system_prompt = "You are a helpful coding assistant embedded in a Neovim editor.\n\nRESPONSE LENGTH — THIS IS CRITICAL:\nKeep every response brief and focused. Short answers are always preferred.\nWhen a complete answer genuinely requires more detail, provide ONLY the first part and end with a short note like \"there's more — ask me to continue\". Then STOP. Do NOT continue until the user asks.\nThis is the most important rule. The user stays in their code editor and cannot comfortably read long responses. Violating this rule makes the tool unusable.\n\nTOOLS:\nYou only have access to read-only tools: read, grep, glob, list, codesearch, webfetch, websearch. Do NOT attempt to use write, edit, bash, or any other tools — they are not available to you.",
 }
 
 local config = vim.deepcopy(default_config)
-
--- Whether the alt provider is active (only meaningful in work mode)
-local alt_mode = false
 
 -- Last request payloads for debugging dumps
 local last_chat_request = nil
@@ -38,17 +31,9 @@ local function is_work_mode()
     return val and val ~= "" and val ~= "false" and val ~= "0"
 end
 
---- Check if the alt OpenAI-compatible provider is active
-local function is_alt_mode()
-    return is_work_mode() and alt_mode
-end
-
 --- Resolve the current provider name
 --- @return string
 function M.get_provider()
-    if is_alt_mode() then
-        return "alt"
-    end
     return is_work_mode() and "anthropic" or "opencode"
 end
 
@@ -70,22 +55,6 @@ local function build_provider_config(provider_name)
         base.model = config.model
         base.endpoint = config.endpoint
         base.api_version = config.api_version
-    elseif provider_name == "alt" then
-        local url = os.getenv(config.alt_url_env)
-        local key = os.getenv(config.alt_key_env)
-        local model = os.getenv(config.alt_model_env)
-        if not url or url == "" then
-            vim.notify("AI: " .. config.alt_url_env .. " env var not set", vim.log.levels.ERROR)
-        end
-        if not key or key == "" then
-            vim.notify("AI: " .. config.alt_key_env .. " env var not set", vim.log.levels.ERROR)
-        end
-        if not model or model == "" then
-            vim.notify("AI: " .. config.alt_model_env .. " env var not set", vim.log.levels.ERROR)
-        end
-        base.endpoint = url
-        base.api_key = key
-        base.model = model
     end
 
     return base
@@ -115,17 +84,6 @@ local function store_request(provider_name, provider_config, messages, source)
             stream = true,
             messages = messages,
         }
-    elseif provider_name == "alt" then
-        stored.body = {
-            model = provider_config.model,
-            max_tokens = provider_config.max_tokens,
-            stream = true,
-            stream_options = { include_usage = true },
-            messages = vim.list_extend(
-                { { role = "system", content = provider_config.system_prompt } },
-                vim.deepcopy(messages)
-            ),
-        }
     else
         local opencode = require("utils.ai.providers.opencode")
         stored.body = opencode.build_prompt(messages, provider_config.system_prompt)
@@ -143,7 +101,7 @@ end
 --- @param on_delta fun(text: string) Called with each text chunk as it arrives
 --- @param on_done fun() Called when the response is complete
 --- @param on_error fun(err: string) Called on error
---- @param opts table|nil Optional overrides { system_prompt = "...", on_thinking = fun(text) }
+--- @param opts table|nil Optional overrides { system_prompt = "...", on_thinking = fun(text), on_tool_use = fun(tool_info) }
 --- @return fun()|nil cancel Function to cancel the request, or nil on error
 function M.stream(messages, on_delta, on_done, on_error, opts)
     debug.log("stream() called with " .. #messages .. " messages")
@@ -162,28 +120,28 @@ function M.stream(messages, on_delta, on_done, on_error, opts)
     local source = opts and opts.source or nil
     store_request(provider_name, provider_config, messages, source)
 
-    -- Wrap on_error with failover: if anthropic fails in work mode, retry with alt
+    -- Wrap on_error with failover: if anthropic fails in work mode, retry with opencode
     local on_error_with_failover = on_error
     if provider_name == "anthropic" and is_work_mode() then
         on_error_with_failover = function(err)
-            debug.log("Anthropic failed, attempting failover to alt: " .. err)
-            vim.notify("AI: Anthropic failed, switching to alt provider", vim.log.levels.WARN)
+            debug.log("Anthropic failed, attempting failover to opencode: " .. err)
+            vim.notify("AI: Anthropic failed, switching to opencode provider", vim.log.levels.WARN)
 
-            alt_mode = true
-            local alt_provider_name = "alt"
-            local alt_provider = providers.get(alt_provider_name)
-            local alt_config = build_provider_config(alt_provider_name)
+            local fallback_name = "opencode"
+            local fallback_provider = providers.get(fallback_name)
+            local fallback_config = build_provider_config(fallback_name)
             if opts and opts.system_prompt then
-                alt_config.system_prompt = opts.system_prompt
+                fallback_config.system_prompt = opts.system_prompt
             end
 
-            store_request(alt_provider_name, alt_config, messages, source)
+            store_request(fallback_name, fallback_config, messages, source)
 
-            return alt_provider.stream(messages, alt_config, {
+            return fallback_provider.stream(messages, fallback_config, {
                 on_delta = on_delta,
                 on_done = on_done,
                 on_error = on_error,
                 on_thinking = opts and opts.on_thinking or nil,
+                on_tool_use = opts and opts.on_tool_use or nil,
             })
         end
     end
@@ -193,21 +151,8 @@ function M.stream(messages, on_delta, on_done, on_error, opts)
         on_done = on_done,
         on_error = on_error_with_failover,
         on_thinking = opts and opts.on_thinking or nil,
+        on_tool_use = opts and opts.on_tool_use or nil,
     })
-end
-
---- Toggle the alt OpenAI-compatible provider (work mode only)
---- @return boolean new alt_mode state
-function M.toggle_alt()
-    if not is_work_mode() then
-        vim.notify("AI: Alt provider only available in work mode (AI_WORK)", vim.log.levels.WARN)
-        return false
-    end
-    alt_mode = not alt_mode
-    local provider = alt_mode and "alt" or "anthropic"
-    debug.log("Toggled provider to: " .. provider)
-    vim.notify("AI: Switched to " .. provider .. " provider")
-    return alt_mode
 end
 
 function M.get_config()
@@ -224,11 +169,6 @@ end
 --- @return table|nil
 function M.get_last_lag_request()
     return last_lag_request
-end
-
---- Reset alt mode (for testing)
-function M.reset_alt()
-    alt_mode = false
 end
 
 return M

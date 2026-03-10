@@ -15,10 +15,9 @@ describe("AI Provider Contract", function()
             lookup[name] = true
         end
 
-        assert(#provider_names >= 3, "Should have at least 3 providers, got " .. #provider_names)
+        assert(#provider_names >= 2, "Should have at least 2 providers, got " .. #provider_names)
         assert(lookup["opencode"], "Should include opencode provider")
         assert(lookup["anthropic"], "Should include anthropic provider")
-        assert(lookup["alt"], "Should include alt provider")
     end)
 
     for _, name in ipairs(provider_names) do
@@ -76,62 +75,6 @@ describe("AI Provider Streaming", function()
         assert(error_msg:find("API key"), "Error should mention API key, got: " .. error_msg)
     end)
 
-    it("alt calls on_error when endpoint is missing", function()
-        local provider = providers_mod.get("alt")
-        local error_msg = nil
-
-        local cancel = provider.stream(
-            { { role = "user", content = "hello" } },
-            { system_prompt = "test", max_tokens = 100 },
-            {
-                on_delta = function() end,
-                on_done = function() end,
-                on_error = function(err) error_msg = err end,
-            }
-        )
-
-        assert(cancel == nil, "Should return nil when alt is not configured")
-        assert(error_msg, "Should have called on_error")
-        assert(error_msg:find("not configured"), "Error should mention not configured, got: " .. error_msg)
-    end)
-
-    it("alt calls on_error when api_key is missing", function()
-        local provider = providers_mod.get("alt")
-        local error_msg = nil
-
-        local cancel = provider.stream(
-            { { role = "user", content = "hello" } },
-            { system_prompt = "test", max_tokens = 100, endpoint = "http://localhost", model = "test" },
-            {
-                on_delta = function() end,
-                on_done = function() end,
-                on_error = function(err) error_msg = err end,
-            }
-        )
-
-        assert(cancel == nil, "Should return nil when api_key is missing")
-        assert(error_msg, "Should have called on_error")
-        assert(error_msg:find("not configured"), "Error should mention not configured, got: " .. error_msg)
-    end)
-
-    it("alt calls on_error when model is missing", function()
-        local provider = providers_mod.get("alt")
-        local error_msg = nil
-
-        local cancel = provider.stream(
-            { { role = "user", content = "hello" } },
-            { system_prompt = "test", max_tokens = 100, endpoint = "http://localhost", api_key = "key" },
-            {
-                on_delta = function() end,
-                on_done = function() end,
-                on_error = function(err) error_msg = err end,
-            }
-        )
-
-        assert(cancel == nil, "Should return nil when model is missing")
-        assert(error_msg, "Should have called on_error")
-        assert(error_msg:find("not configured"), "Error should mention not configured, got: " .. error_msg)
-    end)
 end)
 
 describe("AI Provider SSE Parsing", function()
@@ -226,56 +169,6 @@ describe("AI Provider SSE Parsing", function()
         eq(error_msg, "invalid api key", "Should have parsed the JSON error response")
     end)
 
-    it("alt parses OpenAI-style SSE deltas into on_delta", function()
-        local provider = providers_mod.get("alt")
-        local deltas = {}
-        local done = false
-        job.run = function(opts)
-            opts.on_stdout('data: {"choices":[{"delta":{"content":"foo"}}]}')
-            opts.on_stdout('data: {"choices":[{"delta":{"content":"bar"}}]}')
-            opts.on_stdout("data: [DONE]")
-            opts.on_exit(0, "")
-            return function() end
-        end
-
-        provider.stream(
-            { { role = "user", content = "test" } },
-            { api_key = "key", model = "m", endpoint = "http://localhost",
-              system_prompt = "test", max_tokens = 100 },
-            {
-                on_delta = function(text) table.insert(deltas, text) end,
-                on_done = function() done = true end,
-                on_error = function() end,
-            }
-        )
-
-        eq(deltas, { "foo", "bar" }, "Should have received both deltas")
-        assert(done, "on_done should have been called on [DONE]")
-    end)
-
-    it("alt parses JSON error responses", function()
-        local provider = providers_mod.get("alt")
-        local error_msg = nil
-        job.run = function(opts)
-            opts.on_stdout('{"error":{"message":"bad request"}}')
-            opts.on_exit(0, "")
-            return function() end
-        end
-
-        provider.stream(
-            { { role = "user", content = "test" } },
-            { api_key = "key", model = "m", endpoint = "http://localhost",
-              system_prompt = "test", max_tokens = 100 },
-            {
-                on_delta = function() end,
-                on_done = function() end,
-                on_error = function(err) error_msg = err end,
-            }
-        )
-
-        eq(error_msg, "bad request", "Should have parsed the error message")
-    end)
-
     it("anthropic ignores non-text SSE events", function()
         local provider = providers_mod.get("anthropic")
         local deltas = {}
@@ -364,102 +257,103 @@ describe("AI Provider SSE Parsing", function()
         assert(done, "on_done should have been called")
     end)
 
-    it("alt parses think tags into on_thinking", function()
-        local provider = providers_mod.get("alt")
-        local thinking_chunks = {}
+    it("opencode parses tool_use events into on_tool_use", function()
+        local provider = providers_mod.get("opencode")
         local deltas = {}
+        local tool_uses = {}
         local done = false
         job.run = function(opts)
-            opts.on_stdout('data: {"choices":[{"delta":{"content":"<think>I am thinking"}}]}')
-            opts.on_stdout('data: {"choices":[{"delta":{"content":" more thoughts</think>"}}]}')
-            opts.on_stdout('data: {"choices":[{"delta":{"content":"The answer is 42"}}]}')
-            opts.on_stdout("data: [DONE]")
+            opts.on_stdout('{"type":"step_start","part":{"id":"prt_1"}}')
+            opts.on_stdout('{"type":"tool_use","part":{"tool":"read","state":{"status":"completed","input":{"filePath":"/workspace/foo.lua"},"output":"local x = 1"}}}')
+            opts.on_stdout('{"type":"step_finish","part":{"reason":"tool-calls","tokens":{"input":100,"output":10}}}')
+            opts.on_stdout('{"type":"step_start","part":{"id":"prt_2"}}')
+            opts.on_stdout('{"type":"text","part":{"text":"Here is the file content."}}')
+            opts.on_stdout('{"type":"step_finish","part":{"reason":"stop","tokens":{"input":200,"output":20}}}')
             opts.on_exit(0, "")
             return function() end
         end
 
         provider.stream(
             { { role = "user", content = "test" } },
-            { api_key = "key", model = "m", endpoint = "http://localhost",
-              system_prompt = "test", max_tokens = 100 },
+            { system_prompt = "test", max_tokens = 100 },
             {
                 on_delta = function(text) table.insert(deltas, text) end,
                 on_done = function() done = true end,
                 on_error = function() end,
-                on_thinking = function(text) table.insert(thinking_chunks, text) end,
+                on_tool_use = function(info) table.insert(tool_uses, vim.deepcopy(info)) end,
             }
         )
 
-        eq(thinking_chunks, { "I am thinking", " more thoughts" }, "Should have received thinking from think tags")
-        eq(deltas, { "The answer is 42" }, "Should have received text after think tags")
+        eq(#tool_uses, 1, "Should have received one tool_use event")
+        eq(tool_uses[1].tool, "read", "Tool name should be 'read'")
+        eq(tool_uses[1].status, "completed", "Tool status should be 'completed'")
+        eq(tool_uses[1].input.filePath, "/workspace/foo.lua", "Tool input should have filePath")
+        eq(deltas, { "Here is the file content." }, "Should have received text delta after tool use")
         assert(done, "on_done should have been called")
     end)
 
-    it("alt parses reasoning_content into on_thinking", function()
-        local provider = providers_mod.get("alt")
-        local thinking_chunks = {}
+    it("opencode skips tool_use when on_tool_use is nil", function()
+        local provider = providers_mod.get("opencode")
         local deltas = {}
         local done = false
         job.run = function(opts)
-            opts.on_stdout('data: {"choices":[{"delta":{"reasoning_content":"step 1"}}]}')
-            opts.on_stdout('data: {"choices":[{"delta":{"reasoning_content":" then step 2"}}]}')
-            opts.on_stdout('data: {"choices":[{"delta":{"content":"final answer"}}]}')
-            opts.on_stdout("data: [DONE]")
+            opts.on_stdout('{"type":"tool_use","part":{"tool":"read","state":{"status":"completed","input":{"filePath":"/workspace/foo.lua"},"output":"content"}}}')
+            opts.on_stdout('{"type":"text","part":{"text":"response"}}')
+            opts.on_stdout('{"type":"step_finish","part":{"reason":"stop","tokens":{"input":100,"output":10}}}')
             opts.on_exit(0, "")
             return function() end
         end
 
         provider.stream(
             { { role = "user", content = "test" } },
-            { api_key = "key", model = "m", endpoint = "http://localhost",
-              system_prompt = "test", max_tokens = 100 },
+            { system_prompt = "test", max_tokens = 100 },
             {
                 on_delta = function(text) table.insert(deltas, text) end,
                 on_done = function() done = true end,
                 on_error = function() end,
-                on_thinking = function(text) table.insert(thinking_chunks, text) end,
             }
         )
 
-        eq(thinking_chunks, { "step 1", " then step 2" }, "Should have received reasoning_content as thinking")
-        eq(deltas, { "final answer" }, "Should have received content as delta")
+        eq(deltas, { "response" }, "Should still receive text deltas")
         assert(done, "on_done should have been called")
     end)
 
-    it("alt handles think tags in a single chunk", function()
-        local provider = providers_mod.get("alt")
-        local thinking_chunks = {}
-        local deltas = {}
+    it("opencode parses multiple tool_use events", function()
+        local provider = providers_mod.get("opencode")
+        local tool_uses = {}
+        local done = false
         job.run = function(opts)
-            opts.on_stdout('data: {"choices":[{"delta":{"content":"<think>quick thought</think>answer"}}]}')
-            opts.on_stdout("data: [DONE]")
+            opts.on_stdout('{"type":"tool_use","part":{"tool":"read","state":{"status":"completed","input":{"filePath":"/workspace/a.lua"},"output":"a"}}}')
+            opts.on_stdout('{"type":"tool_use","part":{"tool":"grep","state":{"status":"completed","input":{"pattern":"foo"},"output":"match"}}}')
+            opts.on_stdout('{"type":"step_finish","part":{"reason":"tool-calls"}}')
+            opts.on_stdout('{"type":"text","part":{"text":"done"}}')
+            opts.on_stdout('{"type":"step_finish","part":{"reason":"stop","tokens":{"input":100,"output":10}}}')
             opts.on_exit(0, "")
             return function() end
         end
 
         provider.stream(
             { { role = "user", content = "test" } },
-            { api_key = "key", model = "m", endpoint = "http://localhost",
-              system_prompt = "test", max_tokens = 100 },
+            { system_prompt = "test", max_tokens = 100 },
             {
-                on_delta = function(text) table.insert(deltas, text) end,
-                on_done = function() end,
+                on_delta = function() end,
+                on_done = function() done = true end,
                 on_error = function() end,
-                on_thinking = function(text) table.insert(thinking_chunks, text) end,
+                on_tool_use = function(info) table.insert(tool_uses, vim.deepcopy(info)) end,
             }
         )
 
-        eq(thinking_chunks, { "quick thought" }, "Should parse thinking from single chunk")
-        eq(deltas, { "answer" }, "Should parse content after closing think tag")
+        eq(#tool_uses, 2, "Should have received two tool_use events")
+        eq(tool_uses[1].tool, "read", "First tool should be read")
+        eq(tool_uses[2].tool, "grep", "Second tool should be grep")
+        eq(tool_uses[2].input.pattern, "foo", "Grep input should have pattern")
+        assert(done, "on_done should have been called")
     end)
+
 end)
 
 describe("AI Provider Dispatcher", function()
     local api = require("utils.ai.api")
-
-    before_each(function()
-        api.reset_alt()
-    end)
 
     it("get_provider returns opencode by default", function()
         local original = vim.fn.getenv("AI_WORK")
@@ -478,17 +372,6 @@ describe("AI Provider Dispatcher", function()
         local provider = api.get_provider()
 
         eq(provider, "anthropic", "Provider should be anthropic in work mode")
-        vim.fn.setenv("AI_WORK", original)
-    end)
-
-    it("get_provider returns alt when AI_WORK is set and alt mode toggled", function()
-        local original = vim.fn.getenv("AI_WORK")
-        vim.fn.setenv("AI_WORK", "true")
-
-        api.toggle_alt()
-        local provider = api.get_provider()
-
-        eq(provider, "alt", "Provider should be alt after toggle")
         vim.fn.setenv("AI_WORK", original)
     end)
 

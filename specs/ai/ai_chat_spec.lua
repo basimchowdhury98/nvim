@@ -687,7 +687,7 @@ describe("AI Project-Scoped Sessions", function()
     end)
 end)
 
-describe("AI Alt Provider Toggle", function()
+describe("AI Provider Resolution", function()
     local ai = require("utils.ai")
     ai.setup()
     stub_api()
@@ -725,76 +725,6 @@ describe("AI Alt Provider Toggle", function()
 
         eq(provider, "anthropic", "Provider should be anthropic in work mode")
         vim.fn.setenv("AI_WORK", original)
-    end)
-
-    it("toggle_alt switches provider to 'alt' in work mode", function()
-        local original = vim.fn.getenv("AI_WORK")
-        vim.fn.setenv("AI_WORK", "true")
-
-        api.toggle_alt()
-
-        eq(api.get_provider(), "alt", "Provider should be alt after toggle")
-        vim.fn.setenv("AI_WORK", original)
-        api.reset_alt()
-    end)
-
-    it("toggle_alt switches back to 'anthropic' on second call", function()
-        local original = vim.fn.getenv("AI_WORK")
-        vim.fn.setenv("AI_WORK", "true")
-
-        api.toggle_alt()
-        api.toggle_alt()
-
-        eq(api.get_provider(), "anthropic", "Provider should be anthropic after double toggle")
-        vim.fn.setenv("AI_WORK", original)
-        api.reset_alt()
-    end)
-
-    it("toggle_alt is a no-op when AI_WORK is not set", function()
-        local original = vim.fn.getenv("AI_WORK")
-        vim.fn.setenv("AI_WORK", vim.NIL)
-
-        local result = api.toggle_alt()
-
-        eq(result, false, "toggle_alt should return false outside work mode")
-        eq(api.get_provider(), "opencode", "Provider should remain opencode")
-        vim.fn.setenv("AI_WORK", original)
-    end)
-
-    it("reset_alt clears alt mode", function()
-        local original = vim.fn.getenv("AI_WORK")
-        vim.fn.setenv("AI_WORK", "true")
-        api.toggle_alt()
-
-        api.reset_alt()
-
-        eq(api.get_provider(), "anthropic", "Provider should be anthropic after reset")
-        vim.fn.setenv("AI_WORK", original)
-    end)
-
-    it("reset_all on init module resets alt mode", function()
-        local original = vim.fn.getenv("AI_WORK")
-        vim.fn.setenv("AI_WORK", "true")
-        api.toggle_alt()
-
-        ai.reset_all()
-
-        eq(api.get_provider(), "anthropic", "Provider should be anthropic after reset_all")
-        vim.fn.setenv("AI_WORK", original)
-    end)
-
-    it("chat flow works with alt provider active via stub", function()
-        local original = vim.fn.getenv("AI_WORK")
-        vim.fn.setenv("AI_WORK", "true")
-        api.toggle_alt()
-        stub_api()
-
-        send_user_message(ai, "alt provider test")
-
-        assert(chat_contains("alt provider test"), "User message should appear in chat")
-        assert(chat_contains("I am a test response"), "Stub response should appear in chat")
-        vim.fn.setenv("AI_WORK", original)
-        api.reset_alt()
     end)
 end)
 
@@ -1182,5 +1112,154 @@ describe("AI Chat Thinking", function()
         local chat_state = chat.get_state()
         eq(#chat_state.thinking_blocks, 0, "Thinking blocks should be empty after clear")
         eq(chat_state.thinking_expanded, false, "Thinking expanded should be false after clear")
+    end)
+end)
+
+describe("AI Chat Tool Use Rendering", function()
+    local ai = require("utils.ai")
+    ai.setup()
+    vim.notify = function() end
+
+    local stub_tool_uses = nil
+
+    local function stub_api_with_tools()
+        api.stream = function(messages, on_delta, on_done, on_error, opts)
+            stream_messages_spy = vim.deepcopy(messages)
+            if stub_error then
+                on_error(stub_error)
+                return function() end
+            end
+            if stub_tool_uses and opts and opts.on_tool_use then
+                for _, tool_info in ipairs(stub_tool_uses) do
+                    opts.on_tool_use(tool_info)
+                end
+            end
+            on_delta(stub_response)
+            on_done()
+            return function() end
+        end
+    end
+
+    before_each(function()
+        vim.cmd("enew")
+        ai.reset_all()
+        ai.activate()
+        stub_response = "The file contains useful code"
+        stub_tool_uses = nil
+        stub_error = nil
+        stream_messages_spy = nil
+        stub_api_with_tools()
+    end)
+
+    after_each(function()
+        close_all_floats()
+    end)
+
+    it("renders tool use line in chat buffer", function()
+        stub_tool_uses = {
+            { tool = "read", status = "completed", input = { filePath = "/workspace/foo.lua" }, output = "local x = 1" },
+        }
+
+        send_user_message(ai, "read the file")
+        local lines = get_chat_lines()
+
+        local found = false
+        for _, line in ipairs(lines) do
+            if line:find("read", 1, true) and line:find("/workspace/foo.lua", 1, true) then
+                found = true
+                break
+            end
+        end
+        assert(found, "Chat should contain tool use line with tool name and path")
+    end)
+
+    it("renders tool use with pattern input", function()
+        stub_tool_uses = {
+            { tool = "grep", status = "completed", input = { pattern = "TODO" }, output = "matches" },
+        }
+
+        send_user_message(ai, "search for todos")
+        local lines = get_chat_lines()
+
+        local found = false
+        for _, line in ipairs(lines) do
+            if line:find("grep", 1, true) and line:find("TODO", 1, true) then
+                found = true
+                break
+            end
+        end
+        assert(found, "Chat should contain tool use line with grep and pattern")
+    end)
+
+    it("renders multiple tool uses inline before response", function()
+        stub_tool_uses = {
+            { tool = "read", status = "completed", input = { filePath = "/workspace/a.lua" }, output = "a" },
+            { tool = "read", status = "completed", input = { filePath = "/workspace/b.lua" }, output = "b" },
+        }
+
+        send_user_message(ai, "read both files")
+        local lines = get_chat_lines()
+
+        local tool_lines = 0
+        for _, line in ipairs(lines) do
+            if line:find("/workspace/a.lua", 1, true) or line:find("/workspace/b.lua", 1, true) then
+                tool_lines = tool_lines + 1
+            end
+        end
+        eq(tool_lines, 2, "Should have two tool use lines in the chat")
+    end)
+
+    it("tool use appears before the response text", function()
+        stub_tool_uses = {
+            { tool = "read", status = "completed", input = { filePath = "/workspace/foo.lua" }, output = "content" },
+        }
+
+        send_user_message(ai, "check the file")
+        local lines = get_chat_lines()
+
+        local tool_line_idx = nil
+        local response_line_idx = nil
+        for i, line in ipairs(lines) do
+            if line:find("/workspace/foo.lua", 1, true) and not tool_line_idx then
+                tool_line_idx = i
+            end
+            if line:find("The file contains useful code", 1, true) and not response_line_idx then
+                response_line_idx = i
+            end
+        end
+        assert(tool_line_idx, "Should find tool use line")
+        assert(response_line_idx, "Should find response line")
+        assert(tool_line_idx < response_line_idx, "Tool use should appear before response text")
+    end)
+
+    it("renders arrow style with tool name and target", function()
+        stub_tool_uses = {
+            { tool = "read", status = "completed", input = { filePath = "/workspace/foo.lua" }, output = "content" },
+        }
+
+        send_user_message(ai, "check the file")
+        local lines = get_chat_lines()
+
+        local found_arrow = false
+        for _, line in ipairs(lines) do
+            if line:find("> read /workspace/foo.lua", 1, true) then
+                found_arrow = true
+                break
+            end
+        end
+        assert(found_arrow, "Should render tool use with arrow style: > read /path")
+    end)
+
+    it("no tool use lines when no tools are called", function()
+        stub_tool_uses = nil
+
+        send_user_message(ai, "simple question")
+        local lines = get_chat_lines()
+
+        for _, line in ipairs(lines) do
+            assert(not line:find("read", 1, true) or line:find("read", 1, true) and not line:find("/workspace", 1, true),
+                "Should not have tool use lines when no tools were called")
+        end
+        assert(chat_contains("The file contains useful code"), "Should still have response")
     end)
 end)

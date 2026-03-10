@@ -283,6 +283,10 @@ local function send_message(text, selection)
                 table.insert(thinking_chunks, chunk)
                 chat.append_thinking(chunk)
             end,
+            on_tool_use = function(tool_info)
+                debug.log("Tool use: " .. tool_info.tool .. " " .. vim.inspect(tool_info.input))
+                chat.append_tool_use(tool_info)
+            end,
         }
     )
 end
@@ -394,7 +398,6 @@ function M.reset_all()
     sessions = {}
     last_project = nil
     active = false
-    api.reset_alt()
     lag.reset()
     usage.reset()
 end
@@ -593,10 +596,6 @@ function M.setup(opts)
         vim.bo.readonly = true
         vim.wo.wrap = true
     end, { desc = "AI: Open today's debug log in a split" })
-
-    vim.api.nvim_create_user_command("AIAlt", function()
-        api.toggle_alt()
-    end, { desc = "AI: Toggle alt OpenAI-compatible provider (work mode only)" })
 
     vim.api.nvim_create_user_command("AIStop", function()
         M.stop()
