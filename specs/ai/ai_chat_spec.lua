@@ -332,7 +332,7 @@ describe("AI Chat Buffer Tracking", function()
         close_all_floats()
     end)
 
-    it("includes open project buffer content in the first API message", function()
+    it("includes editor context metadata in user API messages", function()
         local buf = create_named_buf("test_track.lua", "lua", { "local x = 1" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
@@ -340,10 +340,12 @@ describe("AI Chat Buffer Tracking", function()
         send_user_message(ai, "explain this")
 
         local first_msg = stream_messages_spy[1]
+        assert(first_msg.content:find("EDITOR CONTEXT:", 1, true),
+            "First API message should contain editor context header")
         assert(first_msg.content:find("test_track.lua", 1, true),
             "First API message should contain the filename")
-        assert(first_msg.content:find("local x = 1", 1, true),
-            "First API message should contain the buffer content")
+        assert(not first_msg.content:find("local x = 1", 1, true),
+            "First API message should NOT contain file contents")
         assert(first_msg.content:find("explain this", 1, true),
             "First API message should contain the user text")
     end)
@@ -364,20 +366,20 @@ describe("AI Chat Buffer Tracking", function()
             "Context should contain second file")
     end)
 
-    it("sends updated buffer content on subsequent messages", function()
+    it("injects editor context into every user message", function()
         local buf = create_named_buf("evolving.lua", "lua", { "version 1" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
         send_user_message(ai, "first")
-        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "version 2" })
 
         send_user_message(ai, "second")
 
         local first_msg = stream_messages_spy[1]
-        assert(first_msg.content:find("version 2", 1, true),
-            "Context should contain the updated content")
-        assert(not first_msg.content:find("version 1", 1, true),
-            "Context should not contain the stale content")
+        local third_msg = stream_messages_spy[3]
+        assert(first_msg.content:find("EDITOR CONTEXT:", 1, true),
+            "First user message should have editor context")
+        assert(third_msg.content:find("EDITOR CONTEXT:", 1, true),
+            "Second user message should also have editor context")
     end)
 
     it("does not track buffers with no name or filetype", function()
@@ -391,7 +393,7 @@ describe("AI Chat Buffer Tracking", function()
         eq(first_msg.content, "hello", "Message should have no context prefix for unnamed buffers")
     end)
 
-    it("does not duplicate buffers in context", function()
+    it("lists buffer once in open buffers line", function()
         local buf = create_named_buf("once.lua", "lua", { "content" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
@@ -399,11 +401,13 @@ describe("AI Chat Buffer Tracking", function()
         send_user_message(ai, "check")
 
         local first_msg = stream_messages_spy[1]
-        local _, count = first_msg.content:gsub("once.lua", "")
-        eq(count, 1, "Filename should appear exactly once in context")
+        local open_line = first_msg.content:match("Open buffers: ([^\n]+)")
+        assert(open_line, "Should have an Open buffers line")
+        local _, count = open_line:gsub("once.lua", "")
+        eq(count, 1, "Filename should appear exactly once in open buffers")
     end)
 
-    it("only injects context into the first user message in the API payload", function()
+    it("injects context into all user messages in the API payload", function()
         local buf = create_named_buf("ctx_check.lua", "lua", { "ctx content" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
@@ -413,8 +417,10 @@ describe("AI Chat Buffer Tracking", function()
 
         local second_user_msg = stream_messages_spy[3]
         eq(second_user_msg.role, "user", "Third message should be user")
-        eq(second_user_msg.content, "second",
-            "Non-first user messages should not have context injected")
+        assert(second_user_msg.content:find("EDITOR CONTEXT:", 1, true),
+            "Second user message should have editor context")
+        assert(second_user_msg.content:find("second", 1, true),
+            "Second user message should contain the user text")
     end)
 
     it("excludes buffers with sensitive patterns from context", function()
@@ -429,12 +435,12 @@ describe("AI Chat Buffer Tracking", function()
         send_user_message(ai, "check my code")
 
         local first_msg = stream_messages_spy[1]
-        assert(not first_msg.content:find("SECRET_KEY", 1, true),
-            "Env file content should not be in context")
-        assert(not first_msg.content:find("password", 1, true),
-            "Appsettings content should not be in context")
-        assert(first_msg.content:find("safe content", 1, true),
-            "Normal file content should be in context")
+        assert(not first_msg.content:find(".env", 1, true),
+            "Env file should not appear in context")
+        assert(not first_msg.content:find("appsettings", 1, true),
+            "Appsettings file should not appear in context")
+        assert(first_msg.content:find("app.lua", 1, true),
+            "Normal file should appear in context")
     end)
 end)
 
@@ -937,16 +943,20 @@ describe("AI Context Dump", function()
         assert(found, "Project buffers should include the test buffer")
     end)
 
-    it("snapshot includes buffer context block", function()
+    it("snapshot includes editor context metadata", function()
         local buf = create_named_buf("ctx_dump.lua", "lua", { "local y = 2" })
         table.insert(test_bufs, buf)
         vim.api.nvim_set_current_buf(buf)
 
         local snapshot = ai.build_state_snapshot()
 
-        assert(snapshot.buffer_context ~= nil, "Buffer context should be present")
-        assert(snapshot.buffer_context:find("ctx_dump.lua", 1, true),
-            "Buffer context should contain the test file")
+        assert(snapshot.editor_context ~= nil, "Editor context should be present")
+        assert(snapshot.editor_context:find("ctx_dump.lua", 1, true),
+            "Editor context should mention the test file")
+        assert(snapshot.editor_context:find("EDITOR CONTEXT:", 1, true),
+            "Editor context should have the EDITOR CONTEXT header")
+        assert(not snapshot.editor_context:find("local y = 2", 1, true),
+            "Editor context should NOT contain file contents")
     end)
 
     it("snapshot includes lag state", function()
@@ -977,7 +987,7 @@ describe("AI Context Dump", function()
         local content = table.concat(vim.fn.readfile(files[#files]), "\n")
         assert(content:find("AI CONTEXT DUMP", 1, true), "Dump should have header")
         assert(content:find("dump test message", 1, true), "Dump should contain conversation")
-        assert(content:find("BUFFER CONTEXT BLOCK", 1, true), "Dump should have buffer context section")
+        assert(content:find("EDITOR CONTEXT", 1, true), "Dump should have editor context section")
         assert(content:find("LAG MODE", 1, true), "Dump should have lag section")
     end)
 end)

@@ -120,18 +120,13 @@ function M.format_snapshot(snapshot)
         end
     end
 
-    -- Buffer context (what gets injected into the first message)
+    -- Editor context (lightweight metadata injected into each message)
     add("")
     add_separator()
-    add("BUFFER CONTEXT BLOCK")
+    add("EDITOR CONTEXT")
     add_separator()
-    if snapshot.buffer_context then
-        local ok, parsed = pcall(vim.fn.json_decode, snapshot.buffer_context)
-        if ok then
-            add(vim.inspect(parsed))
-        else
-            add(snapshot.buffer_context)
-        end
+    if snapshot.editor_context then
+        add(snapshot.editor_context)
     else
         add("(none)")
     end

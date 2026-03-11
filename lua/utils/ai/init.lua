@@ -104,57 +104,82 @@ local function get_project_buffers()
     return bufs
 end
 
---- Read the current content of a buffer and format it as a context block
---- @param buf number
---- @return string|nil
-local function read_buf_context(buf)
-    if not vim.api.nvim_buf_is_valid(buf) then
-        return nil
+--- Make a buffer path relative to cwd, or return the full path if outside cwd
+--- @param fullpath string
+--- @return string
+local function relative_path(fullpath)
+    local cwd = vim.fn.getcwd()
+    -- Normalize: ensure cwd ends with separator for prefix match
+    if not cwd:match("[/\\]$") then
+        cwd = cwd .. "/"
     end
-    local name = vim.api.nvim_buf_get_name(buf)
-    local ft = vim.bo[buf].filetype
-    if name == "" or ft == "" then
-        return nil
+    if fullpath:sub(1, #cwd) == cwd then
+        return fullpath:sub(#cwd + 1)
     end
-
-    local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-    local content = table.concat(lines, "\n")
-
-    if #content > 50000 then
-        content = content:sub(1, 50000) .. "\n... (truncated)"
-    end
-
-    return string.format("Filename: %s\nLanguage: %s\n\n```%s\n%s\n```", name, ft, ft, content)
+    return fullpath
 end
 
---- Build a context block from all open buffers (reads live content)
+--- Build a lightweight editor context block (metadata only, no file contents).
+--- Lists open buffers, visible windows with line ranges, and cursor position.
 --- @return string|nil
-local function build_context_block()
-    local parts = {}
+local function build_editor_context()
+    local cwd = vim.fn.getcwd()
+
+    -- 1. Open buffers (just filenames)
+    local buf_names = {}
     for _, buf in ipairs(get_project_buffers()) do
-        local ctx = read_buf_context(buf)
-        if ctx then
-            table.insert(parts, ctx)
-        end
+        local name = vim.api.nvim_buf_get_name(buf)
+        table.insert(buf_names, relative_path(name))
     end
-    if #parts == 0 then
+    if #buf_names == 0 then
         return nil
     end
-    return "The user has the following files open:\n\n" .. table.concat(parts, "\n\n")
+
+    local lines = { "EDITOR CONTEXT:" }
+    table.insert(lines, "Project: " .. cwd)
+    table.insert(lines, "Open buffers: " .. table.concat(buf_names, ", "))
+
+    -- 2. Visible windows with buffer name and line range
+    local win_parts = {}
+    local cursor_info = nil
+    local current_win = vim.api.nvim_get_current_win()
+
+    for _, win in ipairs(vim.api.nvim_list_wins()) do
+        local buf = vim.api.nvim_win_get_buf(win)
+        if is_includable(buf) then
+            local name = relative_path(vim.api.nvim_buf_get_name(buf))
+            local top = vim.fn.line("w0", win)
+            local bot = vim.fn.line("w$", win)
+            table.insert(win_parts, name .. " (lines " .. top .. "-" .. bot .. ")")
+
+            if win == current_win then
+                local pos = vim.api.nvim_win_get_cursor(win)
+                cursor_info = name .. ":" .. pos[1] .. ":" .. (pos[2] + 1)
+            end
+        end
+    end
+
+    if #win_parts > 0 then
+        table.insert(lines, "Visible windows: " .. table.concat(win_parts, ", "))
+    end
+    if cursor_info then
+        table.insert(lines, "Cursor: " .. cursor_info)
+    end
+
+    return table.concat(lines, "\n")
 end
 
 --- Build the messages array to send to the API.
---- Injects the latest buffer context into the first user message.
+--- Prepends lightweight editor context to every user message so the LLM
+--- always has fresh metadata (opencode only sends the last message anyway).
 --- @return table[]
 local function build_api_messages()
     local session = get_session()
-    local ctx = build_context_block()
+    local ctx = build_editor_context()
     local messages = {}
-    local context_injected = false
     for _, msg in ipairs(session.conversation) do
-        if not context_injected and msg.role == "user" and ctx then
+        if msg.role == "user" and ctx then
             table.insert(messages, { role = "user", content = ctx .. "\n\n" .. msg.content })
-            context_injected = true
         else
             table.insert(messages, { role = msg.role, content = msg.content })
         end
@@ -347,7 +372,7 @@ function M.prompt()
             activate()
             local prefixed = "What we are working on this session: " .. text
             send_message(prefixed, selection)
-            lag.start(M.build_context_block, M.get_session)
+            lag.start(M.build_editor_context, M.get_session)
             usage.update_tabline()
         end, { title = " What are we working on? " })
     end
@@ -461,7 +486,7 @@ function M.continue_response()
 end
 
 -- Expose for lag mode and context dump
-M.build_context_block = build_context_block
+M.build_editor_context = build_editor_context
 M.get_session = get_session
 
 --- Whether the AI system is currently active
@@ -490,7 +515,7 @@ function M.build_state_snapshot()
         active = active,
         provider = api.get_provider(),
         conversation = vim.deepcopy(session.conversation),
-        buffer_context = build_context_block(),
+        editor_context = build_editor_context(),
         project_buffers = buf_names,
         lag = lag.get_all_state(),
         usage = usage.get_totals(),
@@ -623,7 +648,7 @@ function M.setup(opts)
             vim.notify("AI: Not active — send a message first", vim.log.levels.WARN)
             return
         end
-        lag.toggle(M.build_context_block, M.get_session)
+        lag.toggle(M.build_editor_context, M.get_session)
     end, { desc = "Lag: Toggle lag mode on/off (keeps chat)" })
 end
 
