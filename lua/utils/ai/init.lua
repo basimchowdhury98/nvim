@@ -377,6 +377,11 @@ function M.prompt()
         end, { title = " What are we working on? " })
     end
 
+    -- Open chat panel so the user can see the last exchange while typing
+    if not chat.is_open() then
+        chat.open()
+    end
+
     return input.open(function(text)
         send_message(text, selection)
     end)

@@ -141,7 +141,8 @@ describe("AI Chat Plugin", function()
 
         press("q")
 
-        assert(not chat.is_open(), "Chat should not have opened")
+        assert(chat.is_open(), "Chat should have opened to show previous context")
+        assert(stream_messages_spy == nil, "No message should have been sent to the provider")
     end)
 
     it("empty input does not send a message", function()
@@ -149,7 +150,8 @@ describe("AI Chat Plugin", function()
 
         press("<CR>")
 
-        assert(not chat.is_open(), "Chat should not have opened for empty input")
+        assert(chat.is_open(), "Chat should have opened to show previous context")
+        assert(stream_messages_spy == nil, "No message should have been sent to the provider")
     end)
 
     it("sending a message opens chat and shows user message with assistant response", function()
