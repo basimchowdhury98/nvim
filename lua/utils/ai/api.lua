@@ -166,6 +166,12 @@ function M.get_config()
     return vim.deepcopy(config)
 end
 
+--- Get the configured opencode server port
+--- @return number
+function M.get_opencode_port()
+    return config.opencode_port
+end
+
 --- Get the last request payload sent via chat.
 --- @return table|nil
 function M.get_last_chat_request()

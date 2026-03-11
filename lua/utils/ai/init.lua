@@ -7,6 +7,7 @@ local input = require("utils.ai.input")
 local debug = require("utils.ai.debug")
 local lag = require("utils.ai.lag")
 local usage = require("utils.ai.usage")
+local sessions_picker = require("utils.ai.sessions")
 local M = {}
 
 local default_config = {
@@ -18,6 +19,7 @@ local default_config = {
         send = "<leader>io",
         cancel = "<leader>ix",
         continue_response = "<leader>in",
+        sessions = "<leader>fi",
         lag_revert = "<leader>lr",
         lag_accept = "<leader>la",
         lag_quickfix = "<leader>lq",
@@ -263,6 +265,7 @@ local function send_message(text, selection)
     -- Track assistant response for conversation history
     local response_chunks = {}
     local thinking_chunks = {}
+    local tool_uses = {}
 
     cancel_request = api.stream(
         api_messages,
@@ -289,6 +292,9 @@ local function send_message(text, selection)
                 if #full_thinking > 0 then
                     msg.thinking = full_thinking
                 end
+                if #tool_uses > 0 then
+                    msg.tool_uses = tool_uses
+                end
                 table.insert(session.conversation, msg)
                 chat.finish_assistant_message(full_thinking)
             end
@@ -310,6 +316,11 @@ local function send_message(text, selection)
             end,
             on_tool_use = function(tool_info)
                 debug.log("Tool use: " .. tool_info.tool .. " " .. vim.inspect(tool_info.input))
+                table.insert(tool_uses, {
+                    tool = tool_info.tool,
+                    input = tool_info.input,
+                    title = tool_info.title,
+                })
                 chat.append_tool_use(tool_info)
             end,
         }
@@ -490,6 +501,76 @@ function M.continue_response()
     send_message("continue")
 end
 
+--- Resume a previous session by loading its conversation and setting it as active.
+--- @param session_id string The opencode session ID to resume
+--- @param conversation table[] Array of {role, content} messages
+function M.resume_session(session_id, conversation)
+    -- Stop any current session cleanly
+    if active then
+        kill_request()
+        lag.stop()
+        chat.clear()
+        chat.close()
+        local session = get_session()
+        session.conversation = {}
+        usage.reset()
+    end
+
+    -- Set the opencode provider to use this session
+    local ok, opencode = pcall(require, "utils.ai.providers.opencode")
+    if ok and opencode.set_session_id then
+        opencode.set_session_id(session_id)
+    end
+
+    -- Load conversation into the local session
+    local session = get_session()
+    session.conversation = conversation
+
+    -- Activate
+    active = true
+    last_project = get_project()
+
+    -- Open chat and replay conversation
+    chat.open()
+    chat.clear()
+    for _, msg in ipairs(conversation) do
+        if msg.role == "user" then
+            chat.append_user_message(msg.content)
+        elseif msg.role == "assistant" then
+            chat.append_assistant_content(msg.content, {
+                thinking = msg.thinking,
+                tool_uses = msg.tool_uses,
+            })
+        end
+    end
+
+    -- Start lag mode
+    lag.start(M.build_editor_context, M.get_session)
+    usage.update_tabline()
+
+    debug.log("Resumed session: " .. session_id .. " with " .. #conversation .. " messages")
+    vim.notify("AI: Session resumed", vim.log.levels.INFO)
+end
+
+--- Open the session picker to browse, resume, or delete previous sessions.
+function M.browse_sessions()
+    local port = api.get_opencode_port()
+
+    sessions_picker.pick({
+        port = port,
+        on_select = function(session_id, conversation)
+            M.resume_session(session_id, conversation)
+        end,
+        on_delete = function(session_id)
+            -- If we deleted the active session, deactivate
+            local ok, opencode = pcall(require, "utils.ai.providers.opencode")
+            if ok and opencode.get_session_id and opencode.get_session_id() == session_id then
+                M.stop()
+            end
+        end,
+    })
+end
+
 -- Expose for lag mode and context dump
 M.build_editor_context = build_editor_context
 M.get_session = get_session
@@ -594,6 +675,7 @@ function M.setup(opts)
     map("n", config.keymaps.cancel, M.cancel, { desc = "AI: Interrupt streaming response" })
     map("n", config.keymaps.continue_response, M.continue_response, { desc = "AI: Continue response" })
     map("n", config.keymaps.toggle_thinking, M.toggle_thinking, { desc = "AI: Toggle thinking/reasoning visibility" })
+    map("n", config.keymaps.sessions, M.browse_sessions, { desc = "AI: Browse previous sessions" })
     map("n", config.keymaps.lag_revert, function()
         if not active then
             return

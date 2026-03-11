@@ -104,19 +104,29 @@ function M.format_snapshot(snapshot)
     else
         for i, msg in ipairs(snapshot.conversation) do
             add("")
-            add("[" .. i .. "] " .. msg.role .. ":")
-            if msg.thinking then
-                add("[thinking]")
-                local think_lines = vim.split(msg.thinking, "\n", { plain = true })
-                for _, line in ipairs(think_lines) do
-                    add("  " .. line)
+        add("[" .. i .. "] " .. msg.role .. ":")
+        if msg.thinking then
+            add("[thinking]")
+            local think_lines = vim.split(msg.thinking, "\n", { plain = true })
+            for _, line in ipairs(think_lines) do
+                add("  " .. line)
+            end
+            add("[/thinking]")
+        end
+        if msg.tool_uses then
+            for _, tu in ipairs(msg.tool_uses) do
+                local target = ""
+                if tu.input then
+                    target = tu.input.filePath or tu.input.pattern
+                        or tu.input.command or tu.input.query or ""
                 end
-                add("[/thinking]")
+                add("> " .. tu.tool .. " " .. target)
             end
-            local content_lines = vim.split(msg.content, "\n", { plain = true })
-            for _, line in ipairs(content_lines) do
-                add(line)
-            end
+        end
+        local content_lines = vim.split(msg.content, "\n", { plain = true })
+        for _, line in ipairs(content_lines) do
+            add(line)
+        end
         end
     end
 

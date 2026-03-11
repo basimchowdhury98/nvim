@@ -131,6 +131,28 @@ function M.json_post_cmd(opts)
     }
 end
 
+--- Build a curl command for a JSON GET request
+--- @param url string
+--- @return string[]
+function M.json_get_cmd(url)
+    return {
+        "curl", "--silent", "--max-time", "10",
+        "-H", "Accept: application/json",
+        url,
+    }
+end
+
+--- Build a curl command for a JSON DELETE request
+--- @param url string
+--- @return string[]
+function M.json_delete_cmd(url)
+    return {
+        "curl", "--silent", "--max-time", "10",
+        "-X", "DELETE",
+        url,
+    }
+end
+
 --- Execute a synchronous curl request and return the response body.
 --- Uses vim.fn.system which works reliably in all Neovim contexts
 --- (including -c command processing and plenary test runners).

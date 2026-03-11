@@ -144,6 +144,78 @@ function M.get_session_id()
     return session_id
 end
 
+--- Set the active session ID (used when resuming a session)
+--- @param id string
+function M.set_session_id(id)
+    session_id = id
+    debug.log("[opencode] set session_id to " .. tostring(id))
+end
+
+--- List all sessions from the opencode server
+--- @param port number
+--- @return table[]|nil sessions, string|nil error
+function M.list_sessions(port)
+    if not ensure_server(port) then
+        return nil, "Server not running"
+    end
+    local url = base_url(port) .. "/session"
+    local cmd = job.json_get_cmd(url)
+    local resp, err = job.curl_sync(cmd)
+    if not resp then
+        return nil, "Failed to list sessions: " .. tostring(err)
+    end
+    local ok, data = pcall(vim.fn.json_decode, resp)
+    if not ok then
+        return nil, "Failed to parse session list: " .. tostring(data)
+    end
+    debug.log("[opencode] listed " .. #data .. " sessions")
+    return data, nil
+end
+
+--- Get messages for a session from the opencode server
+--- @param port number
+--- @param sid string session ID
+--- @return table[]|nil messages, string|nil error
+function M.get_messages(port, sid)
+    if not ensure_server(port) then
+        return nil, "Server not running"
+    end
+    local url = base_url(port) .. "/session/" .. sid .. "/message"
+    local cmd = job.json_get_cmd(url)
+    local resp, err = job.curl_sync(cmd)
+    if not resp then
+        return nil, "Failed to get messages: " .. tostring(err)
+    end
+    local ok, data = pcall(vim.fn.json_decode, resp)
+    if not ok then
+        return nil, "Failed to parse messages: " .. tostring(data)
+    end
+    debug.log("[opencode] got " .. #data .. " messages for session " .. sid)
+    return data, nil
+end
+
+--- Delete a session from the opencode server
+--- @param port number
+--- @param sid string session ID
+--- @return boolean success, string|nil error
+function M.delete_session(port, sid)
+    if not ensure_server(port) then
+        return false, "Server not running"
+    end
+    local url = base_url(port) .. "/session/" .. sid
+    local cmd = job.json_delete_cmd(url)
+    local resp, err = job.curl_sync(cmd)
+    if not resp then
+        return false, "Failed to delete session: " .. tostring(err)
+    end
+    debug.log("[opencode] deleted session: " .. sid)
+    -- If we deleted our active session, clear it
+    if session_id == sid then
+        session_id = nil
+    end
+    return true, nil
+end
+
 --- Parse an SSE data line and return the JSON payload or nil
 --- @param line string
 --- @return table|nil

@@ -490,9 +490,7 @@ function M.open()
     vim.cmd("botright vsplit")
     state.win_id = vim.api.nvim_get_current_win()
     vim.api.nvim_win_set_buf(state.win_id, buf)
-    local editor_width = vim.o.columns
-    local width = math.min(config.split_width, math.floor(editor_width * 0.3))
-    vim.api.nvim_win_set_width(state.win_id, width)
+    vim.api.nvim_win_set_width(state.win_id, config.split_width)
 
     -- Window-local options
     vim.wo[state.win_id].number = false
@@ -501,6 +499,7 @@ function M.open()
     vim.wo[state.win_id].wrap = true
     vim.wo[state.win_id].linebreak = true
     vim.wo[state.win_id].cursorline = false
+    vim.wo[state.win_id].winfixwidth = true
     vim.wo[state.win_id].statusline = "%{%v:lua.require('utils.ai.chat').statusline()%}"
 
     scroll_to_bottom()
@@ -749,17 +748,45 @@ function M.finish_assistant_message(thinking)
 end
 
 --- Append a complete assistant message (for re-rendering saved conversations)
+--- Renders tool uses, collapsed thinking indicator, and response text.
 --- @param text string The assistant's full response
-function M.append_assistant_content(text)
+--- @param opts table|nil {thinking = string|nil, tool_uses = table[]|nil}
+function M.append_assistant_content(text, opts)
+    opts = opts or {}
     local lines = { "", "Assistant:", "" }
-    for line in text:gmatch("([^\n]*)\n?") do
-        table.insert(lines, line)
-    end
-    table.insert(lines, "")
     local start = append_lines(lines)
-
     highlight_text(start + 1, "AIChatAssistantHeader")
-    apply_markdown_highlights(start + 2, start + #lines)
+
+    -- Render tool uses before the response text
+    if opts.tool_uses then
+        for _, tu in ipairs(opts.tool_uses) do
+            M.append_tool_use(tu)
+        end
+    end
+
+    -- Render collapsed thinking indicator
+    if opts.thinking and #opts.thinking > 0 then
+        local thinking_lines = split_thinking_lines(opts.thinking)
+        local line_count_label = #thinking_lines == 1 and "1 line" or (#thinking_lines .. " lines")
+        local indicator = "Thinking... (" .. line_count_label .. ")"
+
+        local indicator_start = append_lines({ indicator })
+        highlight_text(indicator_start, "AIChatThinkingIndicator")
+
+        table.insert(state.thinking_blocks, {
+            line = indicator_start,
+            content = opts.thinking,
+        })
+    end
+
+    -- Render the response text
+    local content_lines = {}
+    for line in text:gmatch("([^\n]*)\n?") do
+        table.insert(content_lines, line)
+    end
+    table.insert(content_lines, "")
+    local content_start = append_lines(content_lines)
+    apply_markdown_highlights(content_start, content_start + #content_lines)
 end
 
 --- Show an error in the chat buffer
