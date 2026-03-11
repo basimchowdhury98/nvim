@@ -1,5 +1,5 @@
 -- e2e/specs/chat_e2e_spec.lua
--- End-to-end tests: real provider pipeline with mock servers/CLI
+-- End-to-end tests: real provider pipeline with mock HTTP server
 
 local ai = require("utils.ai")
 local chat = require("utils.ai.chat")
@@ -7,6 +7,8 @@ local debug_mod = require("utils.ai.debug")
 
 -- Suppress debug logs during tests
 debug_mod.set_log_dir(vim.fn.tempname())
+
+local e2e_port = tonumber(os.getenv("OPENCODE_E2E_PORT")) or 42070
 
 local function wait_for_response(timeout_ms)
     timeout_ms = timeout_ms or 5000
@@ -32,13 +34,11 @@ local function lines_contain(lines, text)
     return false
 end
 
-describe("e2e: opencode provider chat", function()
+describe("e2e: opencode server chat", function()
     before_each(function()
         ai.reset_all()
-        -- Unset AI_WORK so opencode is the default provider
         vim.fn.setenv("AI_WORK", nil)
-
-        ai.setup({})
+        ai.setup({ api = { opencode_port = e2e_port } })
         ai.activate()
     end)
 

@@ -27,6 +27,9 @@ local state = {
     thinking_end_line = nil, -- 0-indexed line of the last thinking line (for appending)
     thinking_expanded = false, -- whether thinking blocks are currently shown
     thinking_blocks = {}, -- {line = 0-indexed, content = string}[] for toggle
+    drip_queue = {}, -- queued words to drip into the buffer
+    drip_timer = nil, -- uv timer for drip rendering
+    drip_mode = "text", -- "text" or "thinking" — where drip writes go
 }
 
 -- Define highlight groups by linking to standard groups (adapts to any colorscheme)
@@ -279,6 +282,169 @@ local function stop_spinner()
     remove_spinner_line()
 end
 
+local DRIP_INTERVAL_MS = 18
+
+--- Write a single text fragment directly to the buffer (no queueing)
+local function write_text_to_buffer(text)
+    if not buf_is_valid() or text == "" then return end
+
+    local parts = {}
+    local i = 1
+    while i <= #text do
+        local nl = text:find("\n", i, true)
+        if nl then
+            table.insert(parts, text:sub(i, nl - 1))
+            i = nl + 1
+        else
+            table.insert(parts, text:sub(i))
+            i = #text + 1
+        end
+    end
+    if text:sub(-1) == "\n" then
+        table.insert(parts, "")
+    end
+
+    if #parts > 0 then
+        with_modifiable(function()
+            local line_count = vim.api.nvim_buf_line_count(state.buf_id)
+            local last_line = vim.api.nvim_buf_get_lines(state.buf_id, line_count - 1, line_count, false)[1] or ""
+            local new_last = last_line .. parts[1]
+            vim.api.nvim_buf_set_lines(state.buf_id, line_count - 1, line_count, false, { new_last })
+            if #parts > 1 then
+                local new_lines = {}
+                for j = 2, #parts do
+                    table.insert(new_lines, parts[j])
+                end
+                local updated_count = vim.api.nvim_buf_line_count(state.buf_id)
+                vim.api.nvim_buf_set_lines(state.buf_id, updated_count, updated_count, false, new_lines)
+            end
+        end)
+    end
+    scroll_to_bottom()
+end
+
+--- Write a single text fragment to the thinking region of the buffer
+local function write_thinking_to_buffer(text)
+    if not buf_is_valid() or text == "" then return end
+
+    local insert_line = state.thinking_section_start
+    if not insert_line then return end
+
+    local parts = {}
+    local i = 1
+    while i <= #text do
+        local nl = text:find("\n", i, true)
+        if nl then
+            table.insert(parts, text:sub(i, nl - 1))
+            i = nl + 1
+        else
+            table.insert(parts, text:sub(i))
+            i = #text + 1
+        end
+    end
+    if text:sub(-1) == "\n" then
+        table.insert(parts, "")
+    end
+
+    if #parts > 0 then
+        local append_line = state.thinking_end_line
+
+        with_modifiable(function()
+            local existing_line = vim.api.nvim_buf_get_lines(state.buf_id, append_line, append_line + 1, false)[1] or ""
+            local new_last = existing_line .. parts[1]
+            vim.api.nvim_buf_set_lines(state.buf_id, append_line, append_line + 1, false, { new_last })
+
+            if #parts > 1 then
+                local new_lines = {}
+                for j = 2, #parts do
+                    table.insert(new_lines, parts[j])
+                end
+                vim.api.nvim_buf_set_lines(state.buf_id, append_line + 1, append_line + 1, false, new_lines)
+                state.thinking_end_line = append_line + #new_lines
+            end
+        end)
+
+        for line = insert_line, state.thinking_end_line do
+            highlight_text(line, "AIChatThinkingContent")
+        end
+    end
+    scroll_to_bottom()
+end
+
+--- Process one item from the drip queue
+local function drip_next()
+    if #state.drip_queue == 0 then
+        if state.drip_timer then
+            state.drip_timer:stop()
+            state.drip_timer:close()
+            state.drip_timer = nil
+        end
+        return
+    end
+    local word = table.remove(state.drip_queue, 1)
+    if state.drip_mode == "thinking" then
+        write_thinking_to_buffer(word)
+    else
+        write_text_to_buffer(word)
+    end
+end
+
+--- Start the drip timer if not already running
+local function ensure_drip_timer()
+    if state.drip_timer then return end
+    state.drip_timer = vim.uv.new_timer()
+    state.drip_timer:start(0, DRIP_INTERVAL_MS, vim.schedule_wrap(drip_next))
+end
+
+--- Flush all remaining words in the drip queue immediately
+local function flush_drip_queue()
+    if state.drip_timer then
+        state.drip_timer:stop()
+        state.drip_timer:close()
+        state.drip_timer = nil
+    end
+    if #state.drip_queue > 0 then
+        local remaining = table.concat(state.drip_queue)
+        state.drip_queue = {}
+        if state.drip_mode == "thinking" then
+            write_thinking_to_buffer(remaining)
+        else
+            write_text_to_buffer(remaining)
+        end
+    end
+end
+
+--- Queue text for word-by-word drip rendering
+--- @param text string The text chunk to queue
+local function queue_drip(text)
+    -- Split into words, keeping whitespace and newlines attached
+    -- "Hello world\nfoo" -> {"Hello ", "world", "\n", "foo"}
+    local pos = 1
+    while pos <= #text do
+        local nl = text:find("\n", pos, true)
+        local sp = text:find(" ", pos, true)
+
+        if nl and (not sp or nl <= sp) then
+            -- Newline comes first — emit text before it, then the newline
+            if nl > pos then
+                table.insert(state.drip_queue, text:sub(pos, nl - 1))
+            end
+            table.insert(state.drip_queue, "\n")
+            pos = nl + 1
+        elseif sp then
+            -- Space found — emit word + space as one chunk
+            table.insert(state.drip_queue, text:sub(pos, sp))
+            pos = sp + 1
+        else
+            -- No more spaces or newlines — emit remainder
+            table.insert(state.drip_queue, text:sub(pos))
+            pos = #text + 1
+        end
+    end
+
+    ensure_drip_timer()
+end
+
 --- Start an animated spinner on the last line of the chat buffer
 local function start_spinner()
     if not buf_is_valid() then return end
@@ -419,6 +585,7 @@ function M.start_assistant_message()
     highlight_text(start + 1, "AIChatAssistantHeader")
 
     state.is_streaming = true
+    state.drip_mode = "text"
     state.set_spinner_label = start_spinner()
 end
 
@@ -427,56 +594,23 @@ end
 function M.append_delta(text)
     if not buf_is_valid() then return end
 
-    -- Switch spinner label from "Thinking..." to "Streaming..." on first delta
-    if state.set_spinner_label then
-        state.set_spinner_label("Streaming...")
+    -- Transition from thinking to text: flush thinking drip, add separator line, switch mode
+    if state.drip_mode == "thinking" then
+        flush_drip_queue()
+        with_modifiable(function()
+            local line_count = vim.api.nvim_buf_line_count(state.buf_id)
+            vim.api.nvim_buf_set_lines(state.buf_id, line_count, line_count, false, { "" })
+        end)
+        state.drip_mode = "text"
+    end
+
+    -- Stop spinner on first text delta — just show text appearing
+    if state.spinner then
+        stop_spinner()
         state.set_spinner_label = nil
     end
 
-    -- Temporarily remove the spinner line so we append text above it
-    remove_spinner_line()
-
-    -- Split delta by newlines
-    local parts = {}
-    local i = 1
-    while i <= #text do
-        local nl = text:find("\n", i, true)
-        if nl then
-            table.insert(parts, text:sub(i, nl - 1))
-            i = nl + 1
-        else
-            table.insert(parts, text:sub(i))
-            i = #text + 1
-        end
-    end
-    if text:sub(-1) == "\n" then
-        table.insert(parts, "")
-    end
-
-    if #parts > 0 then
-        with_modifiable(function()
-            local line_count = vim.api.nvim_buf_line_count(state.buf_id)
-            local last_line = vim.api.nvim_buf_get_lines(state.buf_id, line_count - 1, line_count, false)[1] or ""
-
-            local new_last = last_line .. parts[1]
-            vim.api.nvim_buf_set_lines(state.buf_id, line_count - 1, line_count, false, { new_last })
-
-            if #parts > 1 then
-                local new_lines = {}
-                for j = 2, #parts do
-                    table.insert(new_lines, parts[j])
-                end
-                local updated_count = vim.api.nvim_buf_line_count(state.buf_id)
-                vim.api.nvim_buf_set_lines(state.buf_id, updated_count, updated_count, false, new_lines)
-            end
-        end)
-    end
-
-    -- Re-add spinner line below the new content
-    if state.spinner then
-        add_spinner_line()
-    end
-    scroll_to_bottom()
+    queue_drip(text)
 end
 
 --- Append a streaming thinking chunk to the chat (shows in real-time before response)
@@ -484,69 +618,20 @@ end
 function M.append_thinking(text)
     if not buf_is_valid() then return end
 
-    -- Switch spinner label from "Thinking..." to "Streaming..." on first thinking
-    if state.set_spinner_label then
-        state.set_spinner_label("Thinking...")
-        state.set_spinner_label = nil
+    -- On first thinking chunk: clear spinner label, remove spinner, switch to thinking drip mode
+    if state.drip_mode ~= "thinking" then
+        if state.set_spinner_label then
+            state.set_spinner_label = nil
+        end
+        remove_spinner_line()
+        state.drip_mode = "thinking"
     end
 
-    -- Remove spinner temporarily
-    remove_spinner_line()
-
-    -- Insert thinking before the assistant section (after "Assistant:" header)
-    local insert_line = state.thinking_section_start
-    if not insert_line then
+    if not state.thinking_section_start then
         return
     end
 
-    local parts = {}
-    local i = 1
-    while i <= #text do
-        local nl = text:find("\n", i, true)
-        if nl then
-            table.insert(parts, text:sub(i, nl - 1))
-            i = nl + 1
-        else
-            table.insert(parts, text:sub(i))
-            i = #text + 1
-        end
-    end
-    if text:sub(-1) == "\n" then
-        table.insert(parts, "")
-    end
-
-    if #parts > 0 then
-        local append_line = state.thinking_end_line
-
-        with_modifiable(function()
-            local existing_line = vim.api.nvim_buf_get_lines(state.buf_id, append_line, append_line + 1, false)[1] or ""
-
-            -- Append first part to the last thinking line
-            local new_last = existing_line .. parts[1]
-            vim.api.nvim_buf_set_lines(state.buf_id, append_line, append_line + 1, false, { new_last })
-
-            -- Add remaining parts as new lines right after
-            if #parts > 1 then
-                local new_lines = {}
-                for j = 2, #parts do
-                    table.insert(new_lines, parts[j])
-                end
-                vim.api.nvim_buf_set_lines(state.buf_id, append_line + 1, append_line + 1, false, new_lines)
-                state.thinking_end_line = append_line + #new_lines
-            end
-        end)
-
-        -- Apply thinking highlight to all thinking lines
-        for line = insert_line, state.thinking_end_line do
-            highlight_text(line, "AIChatThinkingContent")
-        end
-    end
-
-    -- Re-add spinner line
-    if state.spinner then
-        add_spinner_line()
-    end
-    scroll_to_bottom()
+    queue_drip(text)
 end
 
 --- Format the target string from tool_info input.
@@ -614,6 +699,8 @@ end
 --- Finish the current assistant response
 --- @param thinking string|nil The model's thinking/reasoning output, if any
 function M.finish_assistant_message(thinking)
+    flush_drip_queue()
+    state.drip_mode = "text"
     stop_spinner()
     state.set_spinner_label = nil
 
@@ -678,6 +765,8 @@ end
 --- Show an error in the chat buffer
 --- @param msg string Error message
 function M.append_error(msg)
+    flush_drip_queue()
+    state.drip_mode = "text"
     stop_spinner()
     state.set_spinner_label = nil
     local error_lines = { "" }
@@ -699,6 +788,8 @@ end
 
 --- Mark the current response as interrupted
 function M.append_interrupted()
+    flush_drip_queue()
+    state.drip_mode = "text"
     stop_spinner()
     state.set_spinner_label = nil
 
@@ -715,6 +806,8 @@ end
 
 --- Clear the chat buffer
 function M.clear()
+    flush_drip_queue()
+    state.drip_mode = "text"
     stop_spinner()
     state.set_spinner_label = nil
     state.user_section_start = nil

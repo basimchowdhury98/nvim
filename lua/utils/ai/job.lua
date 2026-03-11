@@ -107,4 +107,42 @@ function M.openai_curl_cmd(opts)
     }
 end
 
+--- Build a curl command for streaming SSE events (GET)
+--- @param url string
+--- @return string[]
+function M.sse_curl_cmd(url)
+    return {
+        "curl", "--silent", "--no-buffer",
+        "-H", "Accept: text/event-stream",
+        url,
+    }
+end
+
+--- Build a curl command for a JSON POST request
+--- @param opts table {url: string, body_file: string}
+--- @return string[]
+function M.json_post_cmd(opts)
+    return {
+        "curl", "--silent", "--no-buffer",
+        "-X", "POST",
+        opts.url,
+        "-H", "Content-Type: application/json",
+        "-d", "@" .. opts.body_file,
+    }
+end
+
+--- Execute a synchronous curl request and return the response body.
+--- Uses vim.fn.system which works reliably in all Neovim contexts
+--- (including -c command processing and plenary test runners).
+--- @param cmd string[] The curl command
+--- @return string|nil body, string|nil error
+function M.curl_sync(cmd)
+    local output = vim.fn.system(cmd)
+    local exit_code = vim.v.shell_error
+    if exit_code ~= 0 then
+        return nil, "curl failed (code " .. exit_code .. "): " .. (output or "")
+    end
+    return output, nil
+end
+
 return M

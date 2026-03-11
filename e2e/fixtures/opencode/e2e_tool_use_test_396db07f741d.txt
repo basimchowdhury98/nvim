@@ -1,6 +1,4 @@
-{"type":"step_start","part":{"id":"prt_1"}}
-{"type":"tool_use","part":{"tool":"list","state":{"status":"completed","input":{"directoryPath":"/workspace","recursive":false},"output":"file1.lua\nfile2.lua\nfile3.lua"}}}
-{"type":"step_finish","part":{"reason":"tool-calls","tokens":{"input":100,"output":10,"cache":{"read":0,"write":0}}}}
-{"type":"step_start","part":{"id":"prt_2"}}
-{"type":"text","part":{"text":"Found 3 files in the directory."}}
-{"type":"step_finish","part":{"reason":"stop","tokens":{"input":200,"output":15,"cache":{"read":0,"write":0}},"cost":0.002}}
+data: {"type":"message.part.updated","properties":{"part":{"id":"t1","sessionID":"SESSION_ID","messageID":"m1","type":"tool","callID":"c1","tool":"list","state":{"status":"completed","input":{"directoryPath":"/workspace","recursive":false},"output":"file1.lua\nfile2.lua\nfile3.lua","title":"List files","metadata":{},"time":{"start":1,"end":2}}}}}
+data: {"type":"message.part.updated","properties":{"part":{"id":"p1","sessionID":"SESSION_ID","messageID":"m1","type":"text"}}}
+data: {"type":"message.part.delta","properties":{"sessionID":"SESSION_ID","partID":"p1","messageID":"m1","delta":"Found 3 files in the directory.","field":"text"}}
+data: {"type":"message.part.updated","properties":{"part":{"id":"sf1","sessionID":"SESSION_ID","messageID":"m1","type":"step-finish","reason":"stop","tokens":{"input":200,"output":15,"reasoning":0,"cache":{"read":0,"write":0}},"cost":0.002}}}

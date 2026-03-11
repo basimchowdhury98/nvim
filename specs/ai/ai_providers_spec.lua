@@ -81,6 +81,7 @@ describe("AI Provider SSE Parsing", function()
     local job = require("utils.ai.job")
     local original_run = job.run
     local original_write_temp = job.write_temp
+    local original_curl_sync = job.curl_sync
     local original_schedule = vim.schedule
 
     before_each(function()
@@ -93,6 +94,7 @@ describe("AI Provider SSE Parsing", function()
     after_each(function()
         job.run = original_run
         job.write_temp = original_write_temp
+        job.curl_sync = original_curl_sync
         vim.schedule = original_schedule
     end)
 
@@ -257,97 +259,214 @@ describe("AI Provider SSE Parsing", function()
         assert(done, "on_done should have been called")
     end)
 
-    it("opencode parses tool_use events into on_tool_use", function()
-        local provider = providers_mod.get("opencode")
+    it("opencode parses text delta SSE events into on_delta", function()
+        local opencode = require("utils.ai.providers.opencode")
         local deltas = {}
-        local tool_uses = {}
-        local done = false
+        local done_metadata = nil
+        local sid = "test-session-1"
+        opencode.clear_session()
+        job.curl_sync = function(cmd)
+            local cmd_str = table.concat(cmd, " ")
+            if cmd_str:find("/global/health") then return '{"healthy":true,"version":"test"}', nil
+            elseif cmd_str:find("/prompt_async") then return "", nil
+            elseif cmd_str:find("POST") then return '{"id":"' .. sid .. '"}', nil
+            end
+            return "", nil
+        end
         job.run = function(opts)
-            opts.on_stdout('{"type":"step_start","part":{"id":"prt_1"}}')
-            opts.on_stdout('{"type":"tool_use","part":{"tool":"read","state":{"status":"completed","input":{"filePath":"/workspace/foo.lua"},"output":"local x = 1"}}}')
-            opts.on_stdout('{"type":"step_finish","part":{"reason":"tool-calls","tokens":{"input":100,"output":10}}}')
-            opts.on_stdout('{"type":"step_start","part":{"id":"prt_2"}}')
-            opts.on_stdout('{"type":"text","part":{"text":"Here is the file content."}}')
-            opts.on_stdout('{"type":"step_finish","part":{"reason":"stop","tokens":{"input":200,"output":20}}}')
-            opts.on_exit(0, "")
+            opts.on_stdout('data: {"type":"message.part.updated","properties":{"part":{"sessionID":"' .. sid .. '","type":"text"}}}')
+            opts.on_stdout('data: {"type":"message.part.delta","properties":{"sessionID":"' .. sid .. '","delta":"hello","field":"text"}}')
+            opts.on_stdout('data: {"type":"message.part.delta","properties":{"sessionID":"' .. sid .. '","delta":" world","field":"text"}}')
+            opts.on_stdout('data: {"type":"message.part.updated","properties":{"part":{"sessionID":"' .. sid .. '","type":"step-finish","tokens":{"input":42,"output":5,"reasoning":0,"cache":{"read":10,"write":2}},"cost":0.001}}}')
+            opts.on_stdout('data: {"type":"session.idle","properties":{"sessionID":"' .. sid .. '"}}')
             return function() end
         end
 
-        provider.stream(
+        providers_mod.get("opencode").stream(
             { { role = "user", content = "test" } },
-            { system_prompt = "test", max_tokens = 100 },
-            {
-                on_delta = function(text) table.insert(deltas, text) end,
-                on_done = function() done = true end,
-                on_error = function() end,
-                on_tool_use = function(info) table.insert(tool_uses, vim.deepcopy(info)) end,
-            }
+            { system_prompt = "test", max_tokens = 100, port = 99999 },
+            { on_delta = function(text) table.insert(deltas, text) end,
+              on_done = function(meta) done_metadata = meta end,
+              on_error = function() end }
+        )
+
+        eq(deltas, { "hello", " world" }, "Should have received both text deltas")
+        assert(done_metadata, "on_done should have been called with metadata")
+        eq(done_metadata.tokens.input, 42, "Should have parsed input tokens")
+        eq(done_metadata.tokens.cache_read, 10, "Should have parsed cache read tokens")
+        opencode.clear_session()
+    end)
+
+    it("opencode parses tool_use SSE events into on_tool_use", function()
+        local opencode = require("utils.ai.providers.opencode")
+        local deltas = {}
+        local tool_uses = {}
+        local done = false
+        local sid = "test-session-2"
+        opencode.clear_session()
+        job.curl_sync = function(cmd)
+            local cmd_str = table.concat(cmd, " ")
+            if cmd_str:find("/global/health") then return '{"healthy":true,"version":"test"}', nil
+            elseif cmd_str:find("/prompt_async") then return "", nil
+            elseif cmd_str:find("POST") then return '{"id":"' .. sid .. '"}', nil
+            end
+            return "", nil
+        end
+        job.run = function(opts)
+            opts.on_stdout('data: {"type":"message.part.updated","properties":{"part":{"sessionID":"' .. sid .. '","type":"tool","tool":"read","state":{"status":"completed","input":{"filePath":"/workspace/foo.lua"},"output":"local x = 1","title":"Read file","metadata":{},"time":{"start":1,"end":2}}}}}')
+            opts.on_stdout('data: {"type":"message.part.updated","properties":{"part":{"sessionID":"' .. sid .. '","type":"text"}}}')
+            opts.on_stdout('data: {"type":"message.part.delta","properties":{"sessionID":"' .. sid .. '","delta":"Here is the file.","field":"text"}}')
+            opts.on_stdout('data: {"type":"session.idle","properties":{"sessionID":"' .. sid .. '"}}')
+            return function() end
+        end
+
+        providers_mod.get("opencode").stream(
+            { { role = "user", content = "test" } },
+            { system_prompt = "test", max_tokens = 100, port = 99999 },
+            { on_delta = function(text) table.insert(deltas, text) end,
+              on_done = function() done = true end,
+              on_error = function() end,
+              on_tool_use = function(info) table.insert(tool_uses, vim.deepcopy(info)) end }
         )
 
         eq(#tool_uses, 1, "Should have received one tool_use event")
         eq(tool_uses[1].tool, "read", "Tool name should be 'read'")
         eq(tool_uses[1].status, "completed", "Tool status should be 'completed'")
-        eq(tool_uses[1].input.filePath, "/workspace/foo.lua", "Tool input should have filePath")
-        eq(deltas, { "Here is the file content." }, "Should have received text delta after tool use")
+        eq(deltas, { "Here is the file." }, "Should have received text delta after tool use")
         assert(done, "on_done should have been called")
+        opencode.clear_session()
     end)
 
-    it("opencode skips tool_use when on_tool_use is nil", function()
-        local provider = providers_mod.get("opencode")
+    it("opencode parses reasoning SSE events into on_thinking", function()
+        local opencode = require("utils.ai.providers.opencode")
+        local deltas = {}
+        local thinking_chunks = {}
+        local done = false
+        local sid = "test-session-3"
+        opencode.clear_session()
+        job.curl_sync = function(cmd)
+            local cmd_str = table.concat(cmd, " ")
+            if cmd_str:find("/global/health") then return '{"healthy":true,"version":"test"}', nil
+            elseif cmd_str:find("/prompt_async") then return "", nil
+            elseif cmd_str:find("POST") then return '{"id":"' .. sid .. '"}', nil
+            end
+            return "", nil
+        end
+        job.run = function(opts)
+            opts.on_stdout('data: {"type":"message.part.updated","properties":{"part":{"sessionID":"' .. sid .. '","type":"reasoning"}}}')
+            opts.on_stdout('data: {"type":"message.part.delta","properties":{"sessionID":"' .. sid .. '","delta":"I need to think","field":"text"}}')
+            opts.on_stdout('data: {"type":"message.part.delta","properties":{"sessionID":"' .. sid .. '","delta":" about this","field":"text"}}')
+            opts.on_stdout('data: {"type":"message.part.updated","properties":{"part":{"sessionID":"' .. sid .. '","type":"text"}}}')
+            opts.on_stdout('data: {"type":"message.part.delta","properties":{"sessionID":"' .. sid .. '","delta":"Answer","field":"text"}}')
+            opts.on_stdout('data: {"type":"session.idle","properties":{"sessionID":"' .. sid .. '"}}')
+            return function() end
+        end
+
+        providers_mod.get("opencode").stream(
+            { { role = "user", content = "test" } },
+            { system_prompt = "test", max_tokens = 100, port = 99999 },
+            { on_delta = function(text) table.insert(deltas, text) end,
+              on_done = function() done = true end,
+              on_error = function() end,
+              on_thinking = function(text) table.insert(thinking_chunks, text) end }
+        )
+
+        eq(thinking_chunks, { "I need to think", " about this" }, "Should have received thinking deltas")
+        eq(deltas, { "Answer" }, "Should have received text delta separately")
+        assert(done, "on_done should have been called")
+        opencode.clear_session()
+    end)
+
+    it("opencode filters SSE events by session ID", function()
+        local opencode = require("utils.ai.providers.opencode")
         local deltas = {}
         local done = false
+        local sid = "test-session-4"
+        opencode.clear_session()
+        job.curl_sync = function(cmd)
+            local cmd_str = table.concat(cmd, " ")
+            if cmd_str:find("/global/health") then return '{"healthy":true,"version":"test"}', nil
+            elseif cmd_str:find("/prompt_async") then return "", nil
+            elseif cmd_str:find("POST") then return '{"id":"' .. sid .. '"}', nil
+            end
+            return "", nil
+        end
         job.run = function(opts)
-            opts.on_stdout('{"type":"tool_use","part":{"tool":"read","state":{"status":"completed","input":{"filePath":"/workspace/foo.lua"},"output":"content"}}}')
-            opts.on_stdout('{"type":"text","part":{"text":"response"}}')
-            opts.on_stdout('{"type":"step_finish","part":{"reason":"stop","tokens":{"input":100,"output":10}}}')
-            opts.on_exit(0, "")
+            opts.on_stdout('data: {"type":"message.part.delta","properties":{"sessionID":"other-session","delta":"wrong","field":"text"}}')
+            opts.on_stdout('data: {"type":"message.part.updated","properties":{"part":{"sessionID":"' .. sid .. '","type":"text"}}}')
+            opts.on_stdout('data: {"type":"message.part.delta","properties":{"sessionID":"' .. sid .. '","delta":"right","field":"text"}}')
+            opts.on_stdout('data: {"type":"session.idle","properties":{"sessionID":"' .. sid .. '"}}')
             return function() end
         end
 
-        provider.stream(
+        providers_mod.get("opencode").stream(
             { { role = "user", content = "test" } },
-            { system_prompt = "test", max_tokens = 100 },
-            {
-                on_delta = function(text) table.insert(deltas, text) end,
-                on_done = function() done = true end,
-                on_error = function() end,
-            }
+            { system_prompt = "test", max_tokens = 100, port = 99999 },
+            { on_delta = function(text) table.insert(deltas, text) end,
+              on_done = function() done = true end,
+              on_error = function() end }
         )
 
-        eq(deltas, { "response" }, "Should still receive text deltas")
+        eq(deltas, { "right" }, "Should only receive deltas from our session")
         assert(done, "on_done should have been called")
+        opencode.clear_session()
     end)
 
-    it("opencode parses multiple tool_use events", function()
-        local provider = providers_mod.get("opencode")
-        local tool_uses = {}
-        local done = false
+    it("opencode calls on_error when server is unreachable", function()
+        local opencode = require("utils.ai.providers.opencode")
+        local error_msg = nil
+        local original_wait = vim.wait
+        local original_jobstart = vim.fn.jobstart
+        opencode.clear_session()
+        vim.wait = function() end
+        job.curl_sync = function() return nil, "connection refused" end
+        vim.fn.jobstart = function() return 1 end
+
+        local cancel = providers_mod.get("opencode").stream(
+            { { role = "user", content = "test" } },
+            { system_prompt = "test", max_tokens = 100, port = 99999 },
+            { on_delta = function() end, on_done = function() end,
+              on_error = function(err) error_msg = err end }
+        )
+
+        assert(cancel == nil, "Should return nil when server is unreachable")
+        assert(error_msg, "Should have called on_error")
+        assert(error_msg:find("Failed to start opencode server"), "Error should mention server failure, got: " .. error_msg)
+        vim.wait = original_wait
+        vim.fn.jobstart = original_jobstart
+        opencode.clear_session()
+    end)
+
+    it("opencode reuses session across multiple stream calls", function()
+        local opencode = require("utils.ai.providers.opencode")
+        local sid = "test-session-5"
+        local create_session_calls = 0
+        opencode.clear_session()
+        job.curl_sync = function(cmd)
+            local cmd_str = table.concat(cmd, " ")
+            if cmd_str:find("/global/health") then return '{"healthy":true,"version":"test"}', nil
+            elseif cmd_str:find("/prompt_async") then return "", nil
+            elseif cmd_str:find("POST") then
+                create_session_calls = create_session_calls + 1
+                return '{"id":"' .. sid .. '"}', nil
+            end
+            return "", nil
+        end
         job.run = function(opts)
-            opts.on_stdout('{"type":"tool_use","part":{"tool":"read","state":{"status":"completed","input":{"filePath":"/workspace/a.lua"},"output":"a"}}}')
-            opts.on_stdout('{"type":"tool_use","part":{"tool":"grep","state":{"status":"completed","input":{"pattern":"foo"},"output":"match"}}}')
-            opts.on_stdout('{"type":"step_finish","part":{"reason":"tool-calls"}}')
-            opts.on_stdout('{"type":"text","part":{"text":"done"}}')
-            opts.on_stdout('{"type":"step_finish","part":{"reason":"stop","tokens":{"input":100,"output":10}}}')
-            opts.on_exit(0, "")
+            opts.on_stdout('data: {"type":"message.part.updated","properties":{"part":{"sessionID":"' .. sid .. '","type":"text"}}}')
+            opts.on_stdout('data: {"type":"message.part.delta","properties":{"sessionID":"' .. sid .. '","delta":"ok","field":"text"}}')
+            opts.on_stdout('data: {"type":"session.idle","properties":{"sessionID":"' .. sid .. '"}}')
             return function() end
         end
 
-        provider.stream(
-            { { role = "user", content = "test" } },
-            { system_prompt = "test", max_tokens = 100 },
-            {
-                on_delta = function() end,
-                on_done = function() done = true end,
-                on_error = function() end,
-                on_tool_use = function(info) table.insert(tool_uses, vim.deepcopy(info)) end,
-            }
-        )
+        local cfg = { system_prompt = "test", max_tokens = 100, port = 99999 }
+        local cb = { on_delta = function() end, on_done = function() end, on_error = function() end }
+        providers_mod.get("opencode").stream({ { role = "user", content = "first" } }, cfg, cb)
+        providers_mod.get("opencode").stream({ { role = "user", content = "second" } }, cfg, cb)
 
-        eq(#tool_uses, 2, "Should have received two tool_use events")
-        eq(tool_uses[1].tool, "read", "First tool should be read")
-        eq(tool_uses[2].tool, "grep", "Second tool should be grep")
-        eq(tool_uses[2].input.pattern, "foo", "Grep input should have pattern")
-        assert(done, "on_done should have been called")
+        eq(create_session_calls, 1, "Should only create session once, reuse for second call")
+        eq(opencode.get_session_id(), sid, "Should still have the same session ID")
+        opencode.clear_session()
     end)
 
 end)
@@ -489,6 +608,7 @@ describe("AI Provider Dispatcher", function()
         assert(captured_config, "Provider should receive config")
         assert(captured_config.system_prompt, "Config should include system_prompt")
         assert(captured_config.max_tokens, "Config should include max_tokens")
+        assert(captured_config.port, "Config should include port for opencode")
         p.stream = original_stream
         vim.fn.setenv("AI_WORK", original_env)
     end)

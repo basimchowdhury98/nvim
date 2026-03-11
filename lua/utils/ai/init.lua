@@ -387,6 +387,11 @@ function M.stop()
     usage.reset()
     active = false
     last_project = get_project()
+    -- Clear the opencode server session so next activate gets a fresh one
+    local ok, opencode = pcall(require, "utils.ai.providers.opencode")
+    if ok and opencode.clear_session then
+        opencode.clear_session()
+    end
     vim.notify("AI: Session ended")
 end
 
@@ -400,6 +405,11 @@ function M.reset_all()
     active = false
     lag.reset()
     usage.reset()
+    -- Clear the opencode server session
+    local ok, opencode = pcall(require, "utils.ai.providers.opencode")
+    if ok and opencode.clear_session then
+        opencode.clear_session()
+    end
 end
 
 --- Interrupt the current in-flight request (no-op when inactive)

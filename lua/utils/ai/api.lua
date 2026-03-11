@@ -13,6 +13,8 @@ local default_config = {
     endpoint = "https://api.anthropic.com/v1/messages",
     api_version = "2023-06-01",
     system_prompt = "You are a helpful coding assistant embedded in a Neovim editor.\n\nRESPONSE LENGTH — THIS IS CRITICAL:\nKeep every response brief and focused. Short answers are always preferred.\nWhen a complete answer genuinely requires more detail, provide ONLY the first part and end with a short note like \"there's more — ask me to continue\". Then STOP. Do NOT continue until the user asks.\nThis is the most important rule. The user stays in their code editor and cannot comfortably read long responses. Violating this rule makes the tool unusable.\n\nTOOLS:\nYou only have access to read-only tools: read, grep, glob, list, codesearch, webfetch, websearch. Do NOT attempt to use write, edit, bash, or any other tools — they are not available to you.",
+    -- OpenCode server port
+    opencode_port = 42069,
 }
 
 local config = vim.deepcopy(default_config)
@@ -55,6 +57,8 @@ local function build_provider_config(provider_name)
         base.model = config.model
         base.endpoint = config.endpoint
         base.api_version = config.api_version
+    elseif provider_name == "opencode" then
+        base.port = config.opencode_port
     end
 
     return base
@@ -85,8 +89,11 @@ local function store_request(provider_name, provider_config, messages, source)
             messages = messages,
         }
     else
-        local opencode = require("utils.ai.providers.opencode")
-        stored.body = opencode.build_prompt(messages, provider_config.system_prompt)
+        stored.body = {
+            messages = messages,
+            system_prompt = provider_config.system_prompt,
+            port = provider_config.port,
+        }
     end
 
     if source == "chat" then
