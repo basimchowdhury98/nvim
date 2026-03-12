@@ -15,7 +15,7 @@ elseif vim.fn.has("linux") == 1 then
     vim.opt.shellquote = ""
     vim.opt.shellxquote = ""
 else
-    vim.opt.shell = "powershell"
+    vim.opt.shell = "pwsh"
     vim.opt.shellcmdflag = "-command"
     vim.opt.shellquote = "\""
     vim.opt.shellxquote = ""
