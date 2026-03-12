@@ -44,7 +44,7 @@ local function start_server(port)
     debug.log("[opencode] starting server on port " .. port)
     local cmd
     if vim.fn.has("win32") == 1 then
-        cmd = { "cmd", "/c", "start", "/b", "opencode", "serve", "--port", tostring(port) }
+        cmd = { "opencode", "serve", "--port", tostring(port) }
     else
         cmd = { "sh", "-c", "opencode serve --port " .. port .. " &" }
     end
