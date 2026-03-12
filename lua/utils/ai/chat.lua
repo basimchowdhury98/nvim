@@ -6,7 +6,7 @@ local spinner = require("utils.ai.spinner")
 local M = {}
 
 local default_config = {
-    split_width = 80,
+    split_width = 50,
     title = "AI Chat",
 }
 
