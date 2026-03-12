@@ -23,6 +23,7 @@ local default_config = {
         lag_revert = "<leader>lr",
         lag_accept = "<leader>la",
         lag_quickfix = "<leader>lq",
+        lag_toggle = "<leader>ll",
         toggle_thinking = "<leader>ir",
     },
 }
@@ -383,7 +384,6 @@ function M.prompt()
             activate()
             local prefixed = "What we are working on this session: " .. text
             send_message(prefixed, selection)
-            lag.start(M.build_editor_context, M.get_session)
             usage.update_tabline()
         end, { title = " What are we working on? " })
     end
@@ -544,8 +544,6 @@ function M.resume_session(session_id, conversation)
         end
     end
 
-    -- Start lag mode
-    lag.start(M.build_editor_context, M.get_session)
     usage.update_tabline()
 
     debug.log("Resumed session: " .. session_id .. " with " .. #conversation .. " messages")
@@ -694,6 +692,13 @@ function M.setup(opts)
         end
         lag.quickfix()
     end, { desc = "Lag: Show pending modifications in quickfix" })
+    map("n", config.keymaps.lag_toggle, function()
+        if not active then
+            vim.notify("AI: Not active — send a message first", vim.log.levels.WARN)
+            return
+        end
+        lag.toggle(M.build_editor_context, M.get_session)
+    end, { desc = "Lag: Toggle lag mode on/off" })
 
     vim.api.nvim_create_user_command("AIContextDump", function()
         M.context_dump()
@@ -730,13 +735,7 @@ function M.setup(opts)
         lag.clear()
     end, { desc = "Lag: Accept all modifications" })
 
-    vim.api.nvim_create_user_command("AILagToggle", function()
-        if not active then
-            vim.notify("AI: Not active — send a message first", vim.log.levels.WARN)
-            return
-        end
-        lag.toggle(M.build_editor_context, M.get_session)
-    end, { desc = "Lag: Toggle lag mode on/off (keeps chat)" })
+
 end
 
 return M

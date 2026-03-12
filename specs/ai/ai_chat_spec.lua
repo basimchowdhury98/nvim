@@ -824,10 +824,10 @@ describe("AI Activation Lifecycle", function()
             "First message should be prefixed with session context")
     end)
 
-    it("onboarding starts lag mode", function()
+    it("onboarding does not start lag mode", function()
         send_user_message(ai, "building a REST API")
 
-        assert(lag_mod.is_running(), "Lag mode should be running after onboarding")
+        assert(not lag_mod.is_running(), "Lag mode should not auto-start after onboarding")
     end)
 
     it("toggle works after activation", function()
