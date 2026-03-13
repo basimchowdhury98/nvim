@@ -423,6 +423,46 @@ describe("AI Provider SSE Parsing", function()
         opencode.clear_session()
     end)
 
+    it("opencode routes think-tagged text deltas to on_thinking across chunks", function()
+        local opencode = require("utils.ai.providers.opencode")
+        local deltas = {}
+        local thinking_chunks = {}
+        local done = false
+        local sid = "test-session-think-tags"
+        opencode.clear_session()
+        job.curl_sync = function(cmd)
+            local cmd_str = table.concat(cmd, " ")
+            if cmd_str:find("/global/health") then return '{"healthy":true,"version":"test"}', nil
+            elseif cmd_str:find("/prompt_async") then return "", nil
+            elseif cmd_str:find("POST") then return '{"id":"' .. sid .. '"}', nil
+            end
+            return "", nil
+        end
+        job.run = function(opts)
+            opts.on_stdout('data: {"type":"message.part.updated","properties":{"part":{"sessionID":"' .. sid .. '","type":"text"}}}')
+            opts.on_stdout('data: {"type":"message.part.delta","properties":{"sessionID":"' .. sid .. '","delta":"<think>first thought","field":"text"}}')
+            opts.on_stdout('data: {"type":"message.part.delta","properties":{"sessionID":"' .. sid .. '","delta":" second thought","field":"text"}}')
+            opts.on_stdout('data: {"type":"message.part.delta","properties":{"sessionID":"' .. sid .. '","delta":" final thought</think>The answer","field":"text"}}')
+            opts.on_stdout('data: {"type":"session.idle","properties":{"sessionID":"' .. sid .. '"}}')
+            return function() end
+        end
+
+        providers_mod.get("opencode").stream(
+            { { role = "user", content = "test" } },
+            { system_prompt = "test", max_tokens = 100, port = 99999 },
+            { on_delta = function(text) table.insert(deltas, text) end,
+              on_done = function() done = true end,
+              on_error = function() end,
+              on_thinking = function(text) table.insert(thinking_chunks, text) end }
+        )
+
+        eq(thinking_chunks, { "first thought", " second thought", " final thought" },
+            "All chunks between <think> and </think> should go to on_thinking")
+        eq(deltas, { "The answer" }, "Only content after </think> should go to on_delta")
+        assert(done, "on_done should have been called")
+        opencode.clear_session()
+    end)
+
     it("opencode filters SSE events by session ID", function()
         local opencode = require("utils.ai.providers.opencode")
         local deltas = {}

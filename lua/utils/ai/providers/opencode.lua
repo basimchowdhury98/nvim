@@ -404,11 +404,13 @@ function M.stream(messages, config, callbacks)
 
                 event_count = event_count + 1
 
-                -- Use the delta's own field property as the authoritative source
-                -- for whether this is reasoning or text. Fall back to in_think_tag
-                -- for models that embed <think> tags inside text streams.
-                local is_reasoning = props.field == "reasoning"
-                    or (props.field ~= "text" and (active_part_type == "reasoning" or in_think_tag))
+                -- in_think_tag always wins: the model is inside an explicit
+                -- <think> block embedded in the text stream regardless of field.
+                -- Otherwise use the delta's field property as the authoritative
+                -- source, falling back to active_part_type when field is absent.
+                local is_reasoning = in_think_tag
+                    or props.field == "reasoning"
+                    or (props.field ~= "text" and active_part_type == "reasoning")
                 if is_reasoning then
                     -- Handle </think> tag appearing inside thinking stream
                     local close_pos = delta:find("</think>")
