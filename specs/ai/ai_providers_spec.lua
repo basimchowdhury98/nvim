@@ -354,8 +354,8 @@ describe("AI Provider SSE Parsing", function()
         end
         job.run = function(opts)
             opts.on_stdout('data: {"type":"message.part.updated","properties":{"part":{"sessionID":"' .. sid .. '","type":"reasoning"}}}')
-            opts.on_stdout('data: {"type":"message.part.delta","properties":{"sessionID":"' .. sid .. '","delta":"I need to think","field":"text"}}')
-            opts.on_stdout('data: {"type":"message.part.delta","properties":{"sessionID":"' .. sid .. '","delta":" about this","field":"text"}}')
+            opts.on_stdout('data: {"type":"message.part.delta","properties":{"sessionID":"' .. sid .. '","delta":"I need to think","field":"reasoning"}}')
+            opts.on_stdout('data: {"type":"message.part.delta","properties":{"sessionID":"' .. sid .. '","delta":" about this","field":"reasoning"}}')
             opts.on_stdout('data: {"type":"message.part.updated","properties":{"part":{"sessionID":"' .. sid .. '","type":"text"}}}')
             opts.on_stdout('data: {"type":"message.part.delta","properties":{"sessionID":"' .. sid .. '","delta":"Answer","field":"text"}}')
             opts.on_stdout('data: {"type":"session.idle","properties":{"sessionID":"' .. sid .. '"}}')
@@ -373,6 +373,52 @@ describe("AI Provider SSE Parsing", function()
 
         eq(thinking_chunks, { "I need to think", " about this" }, "Should have received thinking deltas")
         eq(deltas, { "Answer" }, "Should have received text delta separately")
+        assert(done, "on_done should have been called")
+        opencode.clear_session()
+    end)
+
+    it("opencode routes post-tool reasoning to on_thinking not on_delta", function()
+        local opencode = require("utils.ai.providers.opencode")
+        local deltas = {}
+        local thinking_chunks = {}
+        local tool_uses = {}
+        local done = false
+        local sid = "test-session-reasoning"
+        opencode.clear_session()
+        job.curl_sync = function(cmd)
+            local cmd_str = table.concat(cmd, " ")
+            if cmd_str:find("/global/health") then return '{"healthy":true,"version":"test"}', nil
+            elseif cmd_str:find("/prompt_async") then return "", nil
+            elseif cmd_str:find("POST") then return '{"id":"' .. sid .. '"}', nil
+            end
+            return "", nil
+        end
+        job.run = function(opts)
+            opts.on_stdout('data: {"type":"message.part.updated","properties":{"part":{"sessionID":"' .. sid .. '","type":"reasoning"}}}')
+            opts.on_stdout('data: {"type":"message.part.delta","properties":{"sessionID":"' .. sid .. '","delta":"Let me check","field":"reasoning"}}')
+            opts.on_stdout('data: {"type":"message.part.updated","properties":{"part":{"sessionID":"' .. sid .. '","type":"tool","tool":"list","state":{"status":"completed","input":{"path":"/"},"output":"a.lua","title":"List /"},"callID":"c1"}}}')
+            opts.on_stdout('data: {"type":"message.part.updated","properties":{"part":{"sessionID":"' .. sid .. '","type":"step-start"}}}')
+            opts.on_stdout('data: {"type":"message.part.delta","properties":{"sessionID":"' .. sid .. '","delta":"Now I know","field":"reasoning"}}')
+            opts.on_stdout('data: {"type":"message.part.updated","properties":{"part":{"sessionID":"' .. sid .. '","type":"text"}}}')
+            opts.on_stdout('data: {"type":"message.part.delta","properties":{"sessionID":"' .. sid .. '","delta":"Here is the answer","field":"text"}}')
+            opts.on_stdout('data: {"type":"session.idle","properties":{"sessionID":"' .. sid .. '"}}')
+            return function() end
+        end
+
+        providers_mod.get("opencode").stream(
+            { { role = "user", content = "test" } },
+            { system_prompt = "test", max_tokens = 100, port = 99999 },
+            { on_delta = function(text) table.insert(deltas, text) end,
+              on_done = function() done = true end,
+              on_error = function() end,
+              on_thinking = function(text) table.insert(thinking_chunks, text) end,
+              on_tool_use = function(info) table.insert(tool_uses, info) end }
+        )
+
+        eq(thinking_chunks, { "Let me check", "Now I know" },
+            "Both pre-tool and post-tool reasoning should go to on_thinking")
+        eq(deltas, { "Here is the answer" }, "Only the final text should go to on_delta")
+        eq(#tool_uses, 1, "Should have one tool use")
         assert(done, "on_done should have been called")
         opencode.clear_session()
     end)

@@ -404,9 +404,12 @@ function M.stream(messages, config, callbacks)
 
                 event_count = event_count + 1
 
-                -- Route based on active_part_type (set by message.part.updated)
-                -- or in_think_tag (for models that embed <think> in text stream)
-                if active_part_type == "reasoning" or in_think_tag then
+                -- Use the delta's own field property as the authoritative source
+                -- for whether this is reasoning or text. Fall back to in_think_tag
+                -- for models that embed <think> tags inside text streams.
+                local is_reasoning = props.field == "reasoning"
+                    or (props.field ~= "text" and (active_part_type == "reasoning" or in_think_tag))
+                if is_reasoning then
                     -- Handle </think> tag appearing inside thinking stream
                     local close_pos = delta:find("</think>")
                     if close_pos then
