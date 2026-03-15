@@ -4,7 +4,8 @@ return {
         require('harpoon').setup({
             menu = {
                 width = 120
-            }
+            },
+            tabline = true
         })
         -- Monkey patching/wrapping original add file method to flash the text i harpooned
         local mark = require('harpoon.mark')
