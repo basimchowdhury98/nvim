@@ -51,6 +51,11 @@ function grh {
     git reset --hard
 }
 
+function glo {
+    param([int]$n = 5)
+    git log -n $n --oneline
+}
+
 Set-Alias dn dotnet
 
 function dnt {

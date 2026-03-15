@@ -38,6 +38,9 @@ gst() {
 grh() {
     git reset --hard
 }
+glo() {
+    git log -n ${1:-5} --oneline
+}
 alias dn='dotnet'
 dnt() {
     dotnet test
