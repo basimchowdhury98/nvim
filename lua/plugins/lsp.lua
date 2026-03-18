@@ -83,6 +83,7 @@ return {
             })
             require("mason-lspconfig").setup({
                 ensure_installed = {
+                    "angularls",
                     "lua_ls",
                     "ts_ls",
                 },
