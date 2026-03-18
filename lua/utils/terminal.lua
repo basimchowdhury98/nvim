@@ -3,11 +3,6 @@
 
 local M = {}
 
-local Mode = {
-	FLOAT = "float",
-	SNAPPED = "snapped",
-}
-
 if vim.fn.has("mac") == 1 then
 	vim.opt.shell = "/bin/zsh"
 	vim.opt.shellcmdflag = "-c"
@@ -36,7 +31,6 @@ local config = {
 local state = {
 	win_id = nil,
 	proj_current_term = {},
-	mode = Mode.FLOAT,
 }
 
 local proj_terms = {}
@@ -49,6 +43,19 @@ end
 
 local function window_is_open()
 	return state.win_id and vim.api.nvim_win_is_valid(state.win_id)
+end
+
+local function window_is_snapped()
+    if not state.win_id then
+        return false
+    end
+
+    local win_conf = vim.api.nvim_win_get_config(state.win_id)
+    if win_conf.relative == 'editor' then
+        return false
+    end
+
+    return true
 end
 
 local function calc_window_dims()
@@ -133,7 +140,6 @@ local function close_window()
 
 	vim.api.nvim_win_close(state.win_id, false)
 	state.win_id = nil
-	state.mode = Mode.FLOAT
 end
 
 local function rotate_next()
@@ -202,8 +208,8 @@ local function rotate_prev()
 end
 
 local function set_term_keymaps(term)
-	vim.keymap.set({ "t", "n" }, "<C-l>", rotate_next, { buffer = term.buf_id })
-	vim.keymap.set({ "t", "n" }, "<C-h>", rotate_prev, { buffer = term.buf_id })
+	vim.keymap.set({ "t", "n" }, "<C-f>", rotate_next, { buffer = term.buf_id })
+	vim.keymap.set({ "t", "n" }, "<C-a>", rotate_prev, { buffer = term.buf_id })
 end
 
 local function preload()
@@ -248,52 +254,26 @@ function M.setupForProject()
 end
 
 local function snap_to_vsplit()
+    close_window()
 	local curr_proj = get_curr_proj()
 	local buf_id = state.proj_current_term[curr_proj].buf_id
-
-	vim.api.nvim_win_close(state.win_id, false)
 
 	vim.cmd("botright vsplit")
 	state.win_id = vim.api.nvim_get_current_win()
+	vim.wo[state.win_id].winhighlight = "Normal:TelescopeNormal"
 	vim.api.nvim_win_set_buf(state.win_id, buf_id)
-	state.mode = Mode.SNAPPED
 
-	vim.cmd("startinsert")
-end
-
-local function snap_to_float()
-	local curr_proj = get_curr_proj()
-	local buf_id = state.proj_current_term[curr_proj].buf_id
-
-	vim.api.nvim_win_close(state.win_id, false)
-	state.win_id = nil
-	state.mode = Mode.FLOAT
-
-	local dims = calc_window_dims()
-	local win_opts = {
-		relative = "editor",
-		width = dims.width,
-		height = dims.height,
-		row = dims.row,
-		col = dims.col,
-		style = "minimal",
-		border = config.border,
-		title = config.title,
-		title_pos = "center",
-	}
-	state.win_id = vim.api.nvim_open_win(buf_id, true, win_opts)
-
-	vim.wo[state.win_id].winhighlight = "Normal:TelescopeNormal,FloatBorder:TelescopeBorder,Title:TelescopeTitle"
-	vim.cmd("startinsert")
+    vim.cmd('stopinsert')
 end
 
 function M.open()
 	local curr_proj = get_curr_proj()
 
 	if window_is_open() then
-		if state.mode == Mode.SNAPPED then
-			snap_to_float()
-		end
+        if window_is_snapped() then
+            close_window()
+            open_window()
+        end
 		return state.win_id
 	end
 	if state.proj_current_term[curr_proj] == nil then
@@ -360,7 +340,6 @@ function M.kill()
 
 	state.proj_current_term = nil
 	state.proj_current_term = {}
-	state.mode = Mode.FLOAT
 	proj_terms = {}
 	preloaded_terms = {}
 
@@ -410,11 +389,12 @@ function M.snap()
 		return
 	end
 
-	if state.mode == Mode.FLOAT then
-		snap_to_vsplit()
-	elseif state.mode == Mode.SNAPPED then
-		snap_to_float()
-	end
+    if window_is_snapped() then
+        close_window()
+        open_window()
+        return state.win_id
+    end
+	snap_to_vsplit()
 
 	return state.win_id
 end
@@ -424,9 +404,10 @@ vim.api.nvim_create_autocmd("VimResized", {
 		if not window_is_open() then
 			return
 		end
-		if state.mode ~= Mode.FLOAT then
+		if window_is_snapped() then
 			return
 		end
+
 		local dims = calc_window_dims()
 		vim.api.nvim_win_set_config(state.win_id, {
 			relative = "editor",

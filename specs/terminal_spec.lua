@@ -50,10 +50,14 @@ local function assert_terminal_opened_floating(win_id)
 end
 
 local function assert_terminal_opened_snapped(win_id)
-    local buf_id, config = assert_terminal_opened(win_id)
-    eq(config.relative, '', "Should open in a snapped window(vsplit botright)")
+	local buf_id, config = assert_terminal_opened(win_id)
+	eq(config.relative, '', "Should open in a snapped window(vsplit botright)")
+	local winhighlight = vim.wo[win_id].winhighlight
+	assert(winhighlight:find("Normal:TelescopeNormal"), "Snapped window should have TelescopeNormal winhighlight")
+	local mode = vim.api.nvim_get_mode().mode
+	assert(mode == 'n' or mode == 'nt', "Snapped window should be in normal mode, got: " .. mode)
 
-    return buf_id
+	return buf_id
 end
 
 local function assert_another_preloaded_ignoring(term_buf_to_skip)

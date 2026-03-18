@@ -41,16 +41,13 @@ map('n', '<leader>tj', function()
 end, { desc = 'Open terminal at file directory' })
 map('t', '<C-o>', terminal.open_new_terminal, { desc = "Open a new terminal" })
 map('t', '<C-d>', terminal.delete_curr, { desc = "Delete current terminal" })
-map('t', '<C-s>', terminal.snap, { desc = "Floating term - snap" })
+map({ 'n', 't' }, '<C-s>', terminal.snap, { desc = "Floating term - snap" })
 
 map("i", "<C-l>", "<Esc>la", { desc = "Move one char left in insert mode" })
 map("i", "<S-CR>", "<Esc>$o", { desc = "From anywhere in line enter into a new line in insert mode" })
 map("t", "<C-p>", "<Up>", { desc = "[P]revious terminal command" })
 map("t", "<C-n>", "<Down>", { desc = "[N]ext terminal command" })
 
-
--- Buffer Edit
-map({ "n" }, "<C-s>", ":w<CR>", { desc = "[S]ave file/write buffer" })
 
 -- Buffer nav
 map({ "n" }, "<leader>a", "ggVG", { desc = "[A]ll select" })
