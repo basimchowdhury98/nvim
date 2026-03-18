@@ -38,7 +38,7 @@ vim.api.nvim_create_autocmd("FileType", {
       ]])
 
       for _, node in query:iter_captures(root, 0) do
-        local row, col, _, end_col = node:range()
+        local row, col, _, _ = node:range()
         local text = vim.treesitter.get_node_text(node, 0)
 
         if text:match('^!') then

@@ -1,3 +1,5 @@
+---@diagnostic disable: duplicate-set-field, param-type-mismatch
+
 local eq = assert.are.same
 local function find_term_buffer(term_buf_to_ignore)
     local bufs = vim.api.nvim_list_bufs()
