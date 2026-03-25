@@ -1,3 +1,5 @@
+$env:OPENCODE_CONFIG_DIR = "$env:NVIM\opencode"
+
 Set-Alias d docker
 
 function di {

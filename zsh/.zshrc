@@ -1,3 +1,5 @@
+export OPENCODE_CONFIG_DIR="$NVIM/opencode"
+
 alias d='docker'
 di() {
     docker image "$@"

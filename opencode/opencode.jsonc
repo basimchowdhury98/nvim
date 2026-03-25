@@ -1,0 +1,17 @@
+{
+    "$schema": "https://opencode.ai/config.json",
+    "compaction": {
+        "auto": false,
+        "prune": true,
+        "reserved": 10000
+    },
+    "default_agent": "plan",
+    "agent": {
+        "plan": {
+            "color": "#16e04c"
+        },
+        "build": {
+            "color": "#7302c9"
+        }
+    }
+}
