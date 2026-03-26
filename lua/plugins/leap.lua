@@ -1,5 +1,5 @@
 return {
-    'ggandor/leap.nvim',
+    'https://codeberg.org/andyg/leap.nvim',
     config = function()
         require('leap').opts.safe_labels = {} -- disabled jumping to first match
         vim.api.nvim_set_hl(0, 'LeapBackdrop', { link = 'Comment' }) -- grey out search area
