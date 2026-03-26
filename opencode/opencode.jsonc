@@ -8,10 +8,10 @@
     "default_agent": "plan",
     "agent": {
         "plan": {
-            "color": "#16e04c"
+            "color": "#12a61c"
         },
         "build": {
-            "color": "#7302c9"
+            "color": "#bf3d55"
         }
     }
 }

@@ -1,3 +1,11 @@
+local function close_any_floats()
+    for _, win in pairs(vim.api.nvim_list_wins()) do
+        local config = vim.api.nvim_win_get_config(win)
+        if config.relative ~= '' then -- floating window
+            vim.api.nvim_win_close(win, false)
+        end
+    end
+end
 local map = vim.keymap.set
 
 map("v", "D", ":m '>+1<CR>gv=gv", { desc = "Move selected line down" })
@@ -6,10 +14,10 @@ map("n", "<C-d>", "<C-d>zz", { desc = "Scroll down" })
 map("n", "<C-u>", "<C-u>zz", { desc = "Scroll up" })
 map("n", "n", "nzzzv", { desc = "" })
 map("n", "N", "Nzzzv", { desc = "" })
-map("n", "]d", vim.diagnostic.goto_next, { desc = "Next diagnostic" })
-map("n", "[d", vim.diagnostic.goto_prev, { desc = "Previous diagnostic" })
+map("n", "]d", function() vim.diagnostic.jump({count=1, float=true}) end, { desc = "Next diagnostic" })
+map("n", "[d", function() vim.diagnostic.jump({count=-1, float=true}) end, { desc = "Previous diagnostic" })
 map("n", "<leader>dd", vim.diagnostic.open_float, { desc = "Opens float with all diags in buffer" })
-map('t', '<Esc>', '<C-\\><C-n>', { desc = 'Exit terminal mode' })
+map('t', '<C-Esc>', '<C-\\><C-n>', { desc = 'Exit terminal mode' })
 map('n', '<leader>cc', 'gcc', { remap = true, desc = 'Comment line' })
 map('v', '<leader>cc', 'gc', { remap = true, desc = 'Comment selection' })
 map('v', 'J', 'j', { remap = true, desc = 'Remapped J to j to stop merging line under on accident' })
@@ -21,14 +29,7 @@ map('n', '<leader>kp', function()
     vim.fn.setreg('"', path) -- default yank register
 end, { desc = "Copy current buffer path" })
 
-map('n', '<Esc><Esc>', function()
-    for _, win in pairs(vim.api.nvim_list_wins()) do
-        local config = vim.api.nvim_win_get_config(win)
-        if config.relative ~= '' then -- floating window
-            vim.api.nvim_win_close(win, false)
-        end
-    end
-end, { desc = 'Close floating windows' })
+map({ 'n', 't' }, '<Esc><Esc>', close_any_floats, { desc = 'Close floating windows' })
 
 local terminal = require('utils.terminal')
 map('n', '<leader>to', terminal.open, { desc = "Open the floating terminal" })

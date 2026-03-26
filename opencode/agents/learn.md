@@ -2,6 +2,7 @@
 description: Learning agent that builds a living HTML doc by embedding real documentation. Never answers directly — always researches and updates the doc file.
 mode: primary
 temperature: 0.1
+color: "#e8e5be"
 permission:
   edit:
     "*": deny
