@@ -21,7 +21,7 @@ map('t', '<C-Esc>', '<C-\\><C-n>', { desc = 'Exit terminal mode' })
 map('n', '<leader>cc', 'gcc', { remap = true, desc = 'Comment line' })
 map('v', '<leader>cc', 'gc', { remap = true, desc = 'Comment selection' })
 map('v', 'J', 'j', { remap = true, desc = 'Remapped J to j to stop merging line under on accident' })
-map('x', "<leader>p", "\"_dP", { desc = "Paste without copying whats pasted over" })
+map('x', "p", "\"_dP", { desc = "Paste without copying whats pasted over" })
 
 map('n', '<leader>kp', function()
     local path = vim.fn.expand('%:p')
@@ -69,3 +69,11 @@ map("n", "<C-Left>", ":vertical resize +2<CR>", { desc = "Decrease split width" 
 map("n", "<C-Right>", ":vertical resize -2<CR>", { desc = "Increase split width" })
 map("n", "<C-Down>", ":resize +2<CR>", { desc = "Decrease split height" })
 map("n", "<C-Up>", ":resize -2<CR>", { desc = "Increase split height" })
+
+-- Testing
+map("n", "<leader>x", function ()
+    local mut = 'utils.ai'
+    package.loaded[mut] = nil
+    require(mut)
+    vim.notify('Reloaded module: ' .. mut)
+end)

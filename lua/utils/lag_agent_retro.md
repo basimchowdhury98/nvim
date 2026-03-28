@@ -6,6 +6,8 @@ functional design, technical decisions, patterns, and lessons learned.
 
 ---
 
+See [myFunction](./ai/init.lua#L3)
+
 ## What We Built
 
 ### Chat Panel
@@ -453,3 +455,194 @@ e2e/
 
 Total: 261 unit tests, 4 e2e tests, ~6000 lines of plugin code, ~4000 lines of tests
 ```
+
+
+
+# MY AI Manifesto:
+ AI output should not be the output of the the system
+ User input should not be the input into the AI
+
+Rule - Reasoning
+AI is great at searching a lot of code THIS IS ITS STRENGTH - its amazing at crunching large sets of tokens
+Suspicious of generative AI, dont generate code - generated code doesnt just risk hdiden bugs or bad design decisions it limits the engineers ability to internalize the system
+AI should make the user faster and better at their task AND at their craft - ai doing the work for the eng will atrophy their skills
+
+---
+
+## Feature Ideas
+
+Every feature below uses AI for **reasoning/search over tokens**. None produce code as
+output. The engineer stays in the driver's seat.
+
+| # | Feature                  | AI Role                           | Output Mechanism                  |
+|---|--------------------------|-----------------------------------|-----------------------------------|
+| 1 | Diff Completer           | Pattern recognition + application | TBD (completion/virtual text)     |
+| 2 | Passive Observer         | Code analysis + annotation        | Virtual text + quickfix list      |
+| 3 | Codebase Cartographer    | Structural analysis               | Scratch buffer / float            |
+| 4 | Reviewer / Interrogator  | Critical analysis                 | Questions in chat/float           |
+| 5 | Symbol Tracer            | Data flow analysis                | Structured summary buffer         |
+| 6 | Commit Narrator          | Diff analysis                     | Scratch buffer                    |
+| 7 | Semantic Searcher        | Semantic matching                 | Telescope picker                  |
+
+### 1. Diff Completer
+
+Read the git diff (current file or whole repo), recognize the *pattern* of what the user
+is doing, and complete the remaining mechanical instances of that pattern.
+
+**Why it fits**: The user is the author — they wrote the first instances, establishing the
+pattern and design decisions. AI completes *their* pattern, not its own design. It's
+"intelligent find-and-apply-my-pattern" rather than "write code for me."
+
+**Design questions**:
+- Output: vim completion menu, inline virtual text to accept/reject, or direct apply?
+- Scope toggle: current file diff vs. whole repo diff
+- Should it show *where* it wants to apply changes before doing so?
+
+### 2. Passive Observer / Annotator
+
+Watch the repo and user editing activity. Read code, form observations, and leave notes
+as virtual text annotations throughout the codebase. These also populate a quickfix list
+for navigation.
+
+**Why it fits**: Annotations are *commentary*, not artifacts. It points things out the
+engineer might miss, teaches them about their own codebase. AI reads far more code than
+you can hold in your head and surfaces insights.
+
+**Possible note types**: inconsistencies, potential bugs, "this function is similar to X",
+dead code, missing error handling, style drift from the rest of the codebase.
+
+**Design questions**:
+- What triggers observation? File save? Periodic? On buffer enter?
+- Persistence — do notes survive sessions or are they ephemeral?
+- Staleness — how do notes get cleaned up when code changes?
+
+### 3. Codebase Cartographer
+
+On demand, read a module/directory/subsystem and produce a mental model summary: data
+flow, key abstractions, invariants, where state lives. Not code — a *map*. Displayed in a
+scratch buffer or floating window.
+
+**Why it fits**: Instead of the AI maintaining a persistent mental model for itself, it
+builds one *for the engineer*. Pure structural reasoning, no generation.
+
+**Design questions**:
+- Scope: single file, directory, or user-selected set of files?
+- Format: prose summary, ASCII diagram, structured outline?
+- Can it diff two maps to show how a subsystem changed over time?
+
+### 4. Reviewer / Interrogator
+
+You write code. You hit a keymap. The agent reads what you wrote and *asks you questions*
+about it. "What happens if this returns nil?" "Is this lock held across the await?" "This
+looks similar to the pattern in `utils/cache.lua:45` — intentional divergence?"
+
+**Why it fits**: It doesn't tell you what's wrong — it makes you *think* about whether
+something could be wrong. Socratic method. Sharpens the engineer's critical thinking
+instead of replacing it.
+
+**Design questions**:
+- Scope: visual selection, current function, whole buffer, staged diff?
+- Interaction: one-shot list of questions, or conversational back-and-forth?
+- Should it track which questions you've "resolved" vs. ignored?
+
+### 5. Symbol Tracer
+
+Cursor on a function/variable. Keymap. The agent traces all usages, call chains, data
+flow paths, and presents a structured summary. "This value originates at X, flows through
+Y and Z, is consumed at W. It can be nil if path P is taken."
+
+**Why it fits**: Pure analysis, no generation. Gives the engineer a view of the system
+they couldn't easily build manually without reading dozens of files.
+
+**Design questions**:
+- Depth: direct callers only, or full transitive trace?
+- Output: structured buffer, quickfix list of call sites, or both?
+- Should it integrate with LSP references as a starting point?
+
+### 6. Commit Narrator
+
+Before you commit, read your staged diff and describe what the changes do and why they
+might matter. Not a commit message — context that helps you write a better one. Also
+flags: "you changed X but didn't update the related Y."
+
+**Why it fits**: The engineer writes the commit message. The AI provides analysis of what
+changed to inform that message. AI reasons about the diff; engineer decides the narrative.
+
+**Design questions**:
+- Trigger: keymap, pre-commit hook, or automatic on `git add`?
+- Output: floating window, scratch buffer, or echo area?
+- Should it warn about suspicious omissions (changed a function but not its tests)?
+
+### 7. Semantic Searcher
+
+A Telescope-style picker where instead of grep (literal match) or filename fuzzy find,
+you type a *description of what you're looking for* in natural language and the AI finds
+files/symbols/code regions that match the *meaning*.
+
+Examples:
+- "where do we handle auth token refresh" → finds token refresh logic even if it's called
+  `renewCredentials` in `session_manager.lua`
+- "error recovery after network failure" → finds retry logic, reconnect handlers
+- "anything that mutates global state" → finds side-effectful functions
+
+**Why it fits**: AI's core strength — crunching large sets of tokens to find semantic
+matches. Output is a list of locations, not code. Surfaces code the engineer didn't know
+existed, expanding their mental model.
+
+**Implementation approaches**:
+- **Embedding-based**: Pre-compute vector embeddings, similarity search at query time.
+  Fast but requires indexing step + local vector store.
+- **LLM-as-judge**: Send query + batches of files to LLM, ask "which match?" Simpler,
+  no indexing, but slower and costs tokens per search.
+- **Hybrid**: Cheap heuristics (filenames, symbols, comments) narrow candidates, then
+  LLM-as-judge on the shortlist.
+
+**Design questions**:
+- Latency tolerance: 2-5 seconds? 10? Async results that populate as they come in?
+- Scope: whole repo, current directory subtree, configurable?
+- Output: Telescope picker with file paths + line ranges + match explanation?
+
+### 8. Smart Marks
+
+Neovim has marks (`ma`, `'a`) but they're manual and positional. The AI watches editing
+patterns and automatically places marks at **semantically significant locations** — the
+function you keep jumping back to, the config block you've edited 5 times this session,
+the boundary between "done" and "in progress" in a refactor.
+
+**Why it fits**: No generation. It observes behavior and makes navigation faster. The
+engineer is still doing all the work — the AI just noticed where attention keeps going.
+
+**Output**: Neovim marks (uppercase for cross-file, lowercase for in-buffer) + a quickfix
+list of "your hot spots."
+
+**Neovim integration**: `m` + uppercase letters for global marks, `getmarklist()` for
+introspection, sign column indicators for visibility.
+
+**Design questions**:
+- How many marks before it becomes noise? Cap at N most significant?
+- Should it explain *why* a location was marked? ("you've visited this 7 times")
+- Decay — do marks lose significance if you stop visiting them?
+
+### 9. LSP-Augmented Diagnostics Explainer
+
+LSP diagnostics are often terse and cryptic (`E0308: mismatched types`). The AI reads the
+diagnostic, the surrounding code, the type definitions, and the recent diff, then provides
+a **contextual explanation** as virtual text or a float.
+
+Not "here's the fix" — instead: "This expects `Option<String>` but you're passing
+`String` because `get_name()` on line 42 was changed from returning `String` to
+`Option<String>` in your current diff."
+
+**Why it fits**: Makes the engineer better at understanding type systems and error
+messages. Connects the diagnostic to *their recent changes* so they understand causality,
+not just symptoms.
+
+**Output**: Extended virtual text below the diagnostic line, or a float on keymap.
+
+**Neovim integration**: `vim.diagnostic.get()`, `vim.lsp.buf.hover()`, diagnostic
+handlers.
+
+**Design questions**:
+- Trigger: automatic on new diagnostics, or keymap on cursor over a diagnostic?
+- Should it cross-reference the git diff to explain *why* the error appeared?
+- Scope: single diagnostic under cursor, or batch-explain all diagnostics in buffer?

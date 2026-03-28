@@ -4,6 +4,7 @@ mode: primary
 temperature: 0.1
 color: "#e8e5be"
 permission:
+  read: allow
   edit:
     "*": deny
     ".learndocs/*": allow
@@ -11,6 +12,7 @@ permission:
     "*": deny
     "mkdir -p .learndocs": allow
     "chromium .learndocs/*": allow
+    "chrome .learndocs/*": allow
   webfetch: allow
 ---
 
@@ -25,7 +27,7 @@ The user asks questions. You:
 3. Extract just enough content from that source to answer the user's question
 4. Embed that content into the living HTML doc file, organized sensibly
 5. Reply in chat with ONLY what changed: "Added section X" or "Updated section X with Y"
-6. Open the doc in the browser: run `chromium .learndocs/{topic-slug}.html` after every write/edit
+6. Open the doc in the browser: run `chromium .learndocs/{topic-slug}.html` after every write/edit. If `chromium` is not available (command not found), fall back to `chrome` — but note that `chrome` on Windows requires an absolute path (relative paths may silently fail), so use the full absolute path to the file when calling `chrome`
 
 If you are genuinely confused about what the user is asking, ask a clarifying question. Then resume normal behavior once clarified. This is the ONLY time you talk in chat beyond status updates.
 
@@ -277,10 +279,36 @@ When creating a new doc file, use this structure. Maintain it as the doc grows.
       align-items: center;
       margin-bottom: 0.75rem;
     }
+
+    /* Back to top button */
+    .back-to-top {
+      position: fixed;
+      bottom: 2rem;
+      right: 2rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      width: 3rem;
+      height: 3rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent);
+      font-size: 1.25rem;
+      text-decoration: none;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      z-index: 1000;
+      transition: background 0.15s, color 0.15s;
+    }
+    .back-to-top:hover {
+      background: var(--border);
+      color: var(--accent-hover);
+      text-decoration: none;
+    }
   </style>
 </head>
 <body>
-  <div class="doc-header">
+  <div class="doc-header" id="top">
     <h1>{Topic}</h1>
     <p>Living documentation — built from real sources as you learn.</p>
   </div>
@@ -294,6 +322,7 @@ When creating a new doc file, use this structure. Maintain it as the doc grows.
 
   <!-- Sections -->
 
+  <a href="#top" class="back-to-top" title="Back to top">&uarr;</a>
 </body>
 </html>
 ```
