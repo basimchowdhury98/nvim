@@ -29,6 +29,7 @@ map('n', '<leader>kp', function()
     vim.fn.setreg('"', path) -- default yank register
 end, { desc = "Copy current buffer path" })
 
+
 map({ 'n', 't' }, '<Esc><Esc>', close_any_floats, { desc = 'Close floating windows' })
 
 local terminal = require('utils.terminal')

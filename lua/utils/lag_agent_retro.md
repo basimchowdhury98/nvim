@@ -646,3 +646,7 @@ handlers.
 - Trigger: automatic on new diagnostics, or keymap on cursor over a diagnostic?
 - Should it cross-reference the git diff to explain *why* the error appeared?
 - Scope: single diagnostic under cursor, or batch-explain all diagnostics in buffer?
+
+
+### dump:
+- ai powered snippets (eg vim.system({ 'curl', '-X', 'POST'....  can be created using a ai snippet vimssystem('curl -X POST') 
