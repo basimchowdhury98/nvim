@@ -190,7 +190,7 @@ return {
 		config = function()
 			require("plugins.lsp_custom.fidget_spinner"):init()
 			require("roslyn").setup({
-				filewatching = true,
+				filewatching = "off",
 			})
 		end,
 	},
