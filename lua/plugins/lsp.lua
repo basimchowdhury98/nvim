@@ -186,7 +186,6 @@ return {
 	},
 	{
 		"seblyng/roslyn.nvim",
-		ft = { "cs" },
 		config = function()
 			require("plugins.lsp_custom.fidget_spinner"):init()
 			require("roslyn").setup({
