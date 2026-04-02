@@ -1,4 +1,5 @@
 $env:OPENCODE_CONFIG_DIR = "$env:NVIM\opencode"
+$env:OPENCODE_ENABLE_EXA = 1
 
 Set-Alias d docker
 

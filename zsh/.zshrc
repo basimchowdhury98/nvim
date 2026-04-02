@@ -1,4 +1,5 @@
 export OPENCODE_CONFIG_DIR="$NVIM/opencode"
+export OPENCODE_ENABLE_EXA=1
 
 alias d='docker'
 di() {
