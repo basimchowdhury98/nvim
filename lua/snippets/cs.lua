@@ -37,7 +37,8 @@ return {
     s("propi", fmt("public {} {} {{ get; init; }}{}", { i(1, "string"), i(2, "PropertyName"), i(0) })),
     s("propir", fmt("public required {} {} {{ get; init; }}{}", { i(1, "string"), i(2, "PropertyName"), i(0) })),
     s("funfact", fmt("[Fact]\npublic async Task Given{}_When{}_Then{}()\n{{\n\t{}\n}}", { i(1), i(2), i(3), i(0) })),
-    s("dif", fmt("private readonly {} _{};", { i(1, "type"), fieldName(1) })),
+    s("field", fmt("private readonly {} _{};", { i(1, "type"), fieldName(1) })),
     s("debug", fmt('Console.WriteLine($"LOCAL_DEBUG: {}");', { i(1, 'string')})),
-    s("record", fmt("public record {}\n{{\n\t{}\n}}", { i(1, "RecordName"), i(0) }))
+    s("record", fmt("public record {}\n{{\n\t{}\n}}", { i(1, "RecordName"), i(0) })),
+    s("class", fmt("public class {}\n{{\n\t{}\n}}", { i(1, "ClassName"), i(0) }))
 }
