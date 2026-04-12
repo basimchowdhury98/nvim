@@ -60,7 +60,7 @@ local function set_term_keymaps(buf_id)
     local cs = 'F- Snap to split/snap back to float'
 	map({ 't', 'n' }, '<C-s>', function () M.snap() end, { buffer = buf_id, desc = cs })
     local co = 'Open a new nal'
-    map({ 't', 'n' }, '<C-o>', function () M.open_new_nal() end, { buffer = buf_id, desc = co })
+    map({ 't', 'n' }, '<C-o>', function () M.open_new_terminal() end, { buffer = buf_id, desc = co })
     local cd = 'F- Kill/Delete current nal'
     map({ 't', 'n' }, '<C-k>', function () M.delete_curr() end, { buffer = buf_id, desc = cd })
 end
@@ -248,6 +248,44 @@ local function preload()
 	preloaded_terms[curr_proj] = term
 end
 
+local function get_alternate_window()
+	local alt_winnr = vim.fn.winnr('#')
+	if alt_winnr == 0 then
+		return nil
+	end
+
+	local alt_win_id = vim.fn.win_getid(alt_winnr)
+	if alt_win_id == 0 or not vim.api.nvim_win_is_valid(alt_win_id) then
+		return nil
+	end
+
+	return alt_win_id
+end
+
+local function focus_snap_target(alternate_win_id, prior_wins)
+	local seen = {}
+	local candidates = {}
+
+	if alternate_win_id ~= nil then
+		table.insert(candidates, alternate_win_id)
+	end
+
+	for i = #prior_wins, 1, -1 do
+		table.insert(candidates, prior_wins[i])
+	end
+
+	for _, win_id in ipairs(candidates) do
+		if not seen[win_id]
+			and win_id ~= state.win_id
+			and vim.api.nvim_win_is_valid(win_id)
+		then
+			vim.api.nvim_set_current_win(win_id)
+			return
+		end
+		seen[win_id] = true
+	end
+end
+
 function M.open_new_terminal()
 	local curr_proj = get_curr_proj()
 
@@ -277,6 +315,8 @@ function M.setupForProject()
 end
 
 local function snap_to_vsplit()
+	local prior_wins = vim.api.nvim_list_wins()
+	local alternate_win_id = get_alternate_window()
     close_window()
 	local curr_proj = get_curr_proj()
 	local buf_id = state.proj_current_term[curr_proj].buf_id
@@ -287,6 +327,7 @@ local function snap_to_vsplit()
 	vim.api.nvim_win_set_buf(state.win_id, buf_id)
 
     vim.cmd('stopinsert')
+	focus_snap_target(alternate_win_id, prior_wins)
 end
 
 function M.open()

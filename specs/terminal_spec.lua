@@ -26,12 +26,27 @@ local function setup_path(path)
         vim.fn.mkdir(path, 'p')
     end
 end
-local function assert_terminal_opened(win_id)
+
+local function close_extra_windows()
+    local wins = vim.api.nvim_list_wins()
+    local current_win = vim.api.nvim_get_current_win()
+    if not vim.api.nvim_win_is_valid(current_win) then
+        current_win = wins[1]
+    end
+    for _, win in ipairs(wins) do
+        if win ~= current_win and vim.api.nvim_win_is_valid(win) then
+            pcall(vim.api.nvim_win_close, win, true)
+        end
+    end
+end
+
+local function assert_terminal_opened(win_id, expected_win_count)
+    expected_win_count = expected_win_count or 2
     assert(win_id ~= nil, "Terminal window should have been returned")
     local buf_id = vim.api.nvim_win_get_buf(win_id)
     assert(buf_id ~= nil, "Terminal window should have a buffer")
     local win_count_after = #vim.api.nvim_list_wins()
-    eq(win_count_after, 2, "One new window should be open after")
+    eq(win_count_after, expected_win_count, "One new window should be open after")
     local buftype = vim.api.nvim_get_option_value('buftype', { buf = buf_id })
     eq(buftype, 'terminal', "Buffer should be a terminal")
     local term_job_id = vim.b[buf_id].terminal_job_id
@@ -41,16 +56,16 @@ local function assert_terminal_opened(win_id)
     return buf_id, config
 end
 
-local function assert_terminal_opened_floating(win_id)
-    local buf_id, config = assert_terminal_opened(win_id)
+local function assert_terminal_opened_floating(win_id, expected_win_count)
+    local buf_id, config = assert_terminal_opened(win_id, expected_win_count)
     eq(config.relative, 'editor', "Should open in a floating window")
     eq(config.title[1][1], ' Terminal ', "Should have correct floating term title")
 
     return buf_id
 end
 
-local function assert_terminal_opened_snapped(win_id)
-	local buf_id, config = assert_terminal_opened(win_id)
+local function assert_terminal_opened_snapped(win_id, expected_win_count)
+	local buf_id, config = assert_terminal_opened(win_id, expected_win_count)
 	eq(config.relative, '', "Should open in a snapped window(vsplit botright)")
 	local winhighlight = vim.wo[win_id].winhighlight
 	assert(winhighlight:find("Normal:TelescopeNormal"), "Snapped window should have TelescopeNormal winhighlight")
@@ -98,6 +113,7 @@ describe("Floating terminal", function()
     spyOnNotify()
 
     before_each(function()
+        close_extra_windows()
         term.kill()
         vim.fn.chdir(test_proj)
         term_opt_spy = {}
@@ -156,6 +172,35 @@ describe("Floating terminal", function()
         local snapped_win_id = term.snap()
 
         assert_terminal_opened_snapped(snapped_win_id)
+    end)
+
+    it("snap focuses the previously active editor window", function ()
+        local original_win_id = vim.api.nvim_get_current_win()
+        local win_id = term.open()
+        assert_terminal_opened_floating(win_id)
+
+        local snapped_win_id = term.snap()
+
+        assert_terminal_opened_snapped(snapped_win_id)
+        eq(vim.api.nvim_get_current_win(), original_win_id, "Snap should return focus to the previous window")
+    end)
+
+    it("snap prefers the alternate window when multiple editor windows exist", function ()
+        local original_win_id = vim.api.nvim_get_current_win()
+        vim.cmd('vsplit')
+        local second_editor_win_id = vim.api.nvim_get_current_win()
+        vim.api.nvim_set_current_win(original_win_id)
+        local win_id = term.open()
+        assert_terminal_opened_floating(win_id, 3)
+        vim.api.nvim_set_current_win(second_editor_win_id)
+        vim.api.nvim_set_current_win(win_id)
+
+        local snapped_win_id = term.snap()
+
+        assert_terminal_opened_snapped(snapped_win_id, 3)
+        eq(vim.api.nvim_get_current_win(), second_editor_win_id,
+            "Snap should focus the alternate editor window when it is valid")
+        assert(second_editor_win_id ~= snapped_win_id, "Sanity check: alternate editor window should not be the snapped terminal")
     end)
 
     it("snap does nothing when no window is open", function ()
