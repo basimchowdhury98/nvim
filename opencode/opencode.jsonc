@@ -26,7 +26,7 @@
     },
     "command": {
         "build" : {
-            "template": "Build. $ARGUMENTS",
+            "template": "Go. $ARGUMENTS",
             "description": "Run build without switching to build agent",
             "agent": "build"
         }

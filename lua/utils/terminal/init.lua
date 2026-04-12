@@ -3,29 +3,29 @@
 
 local M = {}
 
-if vim.fn.has("mac") == 1 then
-	vim.opt.shell = "/bin/zsh"
-	vim.opt.shellcmdflag = "-c"
-	vim.opt.shellquote = ""
-	vim.opt.shellxquote = ""
-elseif vim.fn.has("linux") == 1 then
-	vim.opt.shell = "/bin/bash"
-	vim.opt.shellcmdflag = "-c"
-	vim.opt.shellquote = ""
-	vim.opt.shellxquote = ""
+if vim.fn.has('mac') == 1 then
+	vim.opt.shell = '/bin/zsh'
+	vim.opt.shellcmdflag = '-c'
+	vim.opt.shellquote = ''
+	vim.opt.shellxquote = ''
+elseif vim.fn.has('linux') == 1 then
+	vim.opt.shell = '/bin/bash'
+	vim.opt.shellcmdflag = '-c'
+	vim.opt.shellquote = ''
+	vim.opt.shellxquote = ''
 else
-	vim.opt.shell = "pwsh"
-	vim.opt.shellcmdflag = "-command"
+	vim.opt.shell = 'pwsh'
+	vim.opt.shellcmdflag = '-command'
 	vim.opt.shellquote = '"'
-	vim.opt.shellxquote = ""
+	vim.opt.shellxquote = ''
 end
 
 local config = {
 	width_ratio = 0.8,
 	height_ratio = 0.8,
-	border = "rounded",
-	title = " Terminal ",
-	prompt_title = " Command ",
+	border = 'rounded',
+	title = ' Terminal ',
+	prompt_title = ' Command ',
 }
 
 local state = {
@@ -36,6 +36,34 @@ local state = {
 local proj_terms = {}
 
 local preloaded_terms = {}
+
+local map = vim.keymap.set
+local lto = 'FTerm - Open'
+map('n', '<leader>to', function () M.open() end, { desc = lto })
+local ltk = 'FTerm - Kill all'
+map('n', '<leader>tk', function () M.kill() end, { desc = ltk })
+local ltd = 'FTerm - Debug'
+map('n', '<leader>td', function () M.debug() end, { desc = ltd })
+local ltj = 'FTerm - Open at file directory'
+map('n', '<leader>tj', function()
+    local file_dir = vim.fn.expand('%:p:h')
+    require('utils.terminal').open_at_path(file_dir)
+end, { desc = ltj })
+
+local function set_term_keymaps(buf_id)
+    local cf = 'FTerm - Rotate next'
+	map({ 't', 'n' }, '<C-f>', function () M.next() end, { buffer = buf_id, desc = cf })
+    local ca = 'F- Rotate prev'
+	map({ 't', 'n' }, '<C-a>', function () M.prev() end, { buffer = buf_id, desc = ca })
+    local ck = 'F- Escape mode to normal'
+	map('t', '<C-j>', '<C-\\><C-n>', { buffer = buf_id, desc = ck })
+    local cs = 'F- Snap to split/snap back to float'
+	map({ 't', 'n' }, '<C-s>', function () M.snap() end, { buffer = buf_id, desc = cs })
+    local co = 'Open a new nal'
+    map({ 't', 'n' }, '<C-o>', function () M.open_new_nal() end, { buffer = buf_id, desc = co })
+    local cd = 'F- Kill/Delete current nal'
+    map({ 't', 'n' }, '<C-k>', function () M.delete_curr() end, { buffer = buf_id, desc = cd })
+end
 
 local function get_curr_proj()
 	return vim.fn.getcwd()
@@ -68,8 +96,10 @@ end
 
 local function create_terminal_buffer(path)
 	local buf_id = vim.api.nvim_create_buf(false, true)
-	vim.bo[buf_id].bufhidden = "hide"
+	vim.bo[buf_id].bufhidden = 'hide'
 	vim.bo[buf_id].swapfile = false
+
+	set_term_keymaps(buf_id)
 
 	local term = {
 		buf_id = buf_id,
@@ -116,21 +146,21 @@ local function open_window()
 
 	-- Window options that match Telescope's style
 	local win_opts = {
-		relative = "editor",
+		relative = 'editor',
 		width = dims.width,
 		height = dims.height,
 		row = dims.row,
 		col = dims.col,
-		style = "minimal",
+		style = 'minimal',
 		border = config.border,
 		title = config.title,
-		title_pos = "center",
+		title_pos = 'center',
 	}
 	state.win_id = vim.api.nvim_open_win(state.proj_current_term[curr_proj].buf_id, true, win_opts)
 
 	-- Set window options to match Telescope using modern API
-	vim.wo[state.win_id].winhighlight = "Normal:TelescopeNormal,FloatBorder:TelescopeBorder,Title:TelescopeTitle"
-	vim.cmd("startinsert")
+	vim.wo[state.win_id].winhighlight = 'Normal:TelescopeNormal,FloatBorder:TelescopeBorder,Title:TelescopeTitle'
+	vim.cmd('startinsert')
 end
 
 local function close_window()
@@ -148,14 +178,14 @@ local function rotate_next()
 	end
 
 	if next(proj_terms) == nil then
-		vim.notify("No terminals spawned")
+		vim.notify('No terminals spawned')
 		return
 	end
 	local proj = get_curr_proj()
 
 	local terms = proj_terms[proj]
 	if #terms == 0 then
-		vim.notify("No terminals for this project spawned")
+		vim.notify('No terminals for this project spawned')
 		return
 	end
 
@@ -180,14 +210,14 @@ local function rotate_prev()
 	end
 
 	if next(proj_terms) == nil then
-		vim.notify("No terminals spawned")
+		vim.notify('No terminals spawned')
 		return
 	end
 	local proj = get_curr_proj()
 
 	local terms = proj_terms[proj]
 	if #terms == 0 then
-		vim.notify("No terminals for this project spawned")
+		vim.notify('No terminals for this project spawned')
 		return
 	end
 
@@ -207,11 +237,6 @@ local function rotate_prev()
 	refresh_window()
 end
 
-local function set_term_keymaps(term)
-	vim.keymap.set({ "t", "n" }, "<C-f>", rotate_next, { buffer = term.buf_id })
-	vim.keymap.set({ "t", "n" }, "<C-a>", rotate_prev, { buffer = term.buf_id })
-end
-
 local function preload()
 	local curr_proj = get_curr_proj()
 	local existing = preloaded_terms[curr_proj]
@@ -220,7 +245,6 @@ local function preload()
 	end
 
 	local term = create_terminal_buffer()
-	set_term_keymaps(term)
 	preloaded_terms[curr_proj] = term
 end
 
@@ -233,7 +257,6 @@ function M.open_new_terminal()
 		preloaded_terms[curr_proj] = nil
 	else
 		term = create_terminal_buffer()
-		set_term_keymaps(term)
 	end
 
 	attach_term(term)
@@ -258,9 +281,9 @@ local function snap_to_vsplit()
 	local curr_proj = get_curr_proj()
 	local buf_id = state.proj_current_term[curr_proj].buf_id
 
-	vim.cmd("botright vsplit")
+	vim.cmd('botright vsplit')
 	state.win_id = vim.api.nvim_get_current_win()
-	vim.wo[state.win_id].winhighlight = "Normal:TelescopeNormal"
+	vim.wo[state.win_id].winhighlight = 'Normal:TelescopeNormal'
 	vim.api.nvim_win_set_buf(state.win_id, buf_id)
 
     vim.cmd('stopinsert')
@@ -343,7 +366,7 @@ function M.kill()
 	proj_terms = {}
 	preloaded_terms = {}
 
-	vim.notify("Killed floating terminal")
+	vim.notify('Killed floating terminal')
 end
 
 function M.next()
@@ -355,29 +378,28 @@ function M.prev()
 end
 
 function M.debug()
-	print("Proj terms: " .. vim.inspect(proj_terms))
-	print("State: " .. vim.inspect(state))
-	print("Preloaded: " .. vim.inspect(preloaded_terms))
+	print('Proj terms: ' .. vim.inspect(proj_terms))
+	print('State: ' .. vim.inspect(state))
+	print('Preloaded: ' .. vim.inspect(preloaded_terms))
 end
 
 function M.open_at_path(path)
 	local curr_proj = get_curr_proj()
 
-	local normalized_path = vim.fs.normalize(vim.fn.fnamemodify(path, ":p"))
-	local normalized_proj = vim.fs.normalize(vim.fn.fnamemodify(curr_proj, ":p"))
-	if not vim.endswith(normalized_proj, "/") then
-		normalized_proj = normalized_proj .. "/"
+	local normalized_path = vim.fs.normalize(vim.fn.fnamemodify(path, ':p'))
+	local normalized_proj = vim.fs.normalize(vim.fn.fnamemodify(curr_proj, ':p'))
+	if not vim.endswith(normalized_proj, '/') then
+		normalized_proj = normalized_proj .. '/'
 	end
 	if not vim.startswith(normalized_path, normalized_proj) then
 		vim.notify(
-			string.format("Path '%s' is not within project '%s'", normalized_path, normalized_proj),
+			string.format('Path "%s" is not within project "%s"', normalized_path, normalized_proj),
 			vim.log.levels.WARN
 		)
 		return
 	end
 
 	local term = create_terminal_buffer(path)
-	set_term_keymaps(term)
 	attach_term(term)
 	open_window()
 
@@ -399,7 +421,7 @@ function M.snap()
 	return state.win_id
 end
 
-vim.api.nvim_create_autocmd("VimResized", {
+vim.api.nvim_create_autocmd('VimResized', {
 	callback = function()
 		if not window_is_open() then
 			return
@@ -410,7 +432,7 @@ vim.api.nvim_create_autocmd("VimResized", {
 
 		local dims = calc_window_dims()
 		vim.api.nvim_win_set_config(state.win_id, {
-			relative = "editor",
+			relative = 'editor',
 			width = dims.width,
 			height = dims.height,
 			row = dims.row,

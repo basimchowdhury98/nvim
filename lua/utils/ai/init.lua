@@ -4,8 +4,8 @@ local ai_win
 
 local function create_status_buf()
 	local buf_id = vim.api.nvim_create_buf(false, false)
-	vim.bo[buf_id].buftype = 'nofile'
-	vim.bo[buf_id].bufhidden = 'wipe'
+	vim.bo[buf_id].buftype = "nofile"
+	vim.bo[buf_id].bufhidden = "wipe"
 	vim.bo[buf_id].swapfile = false
 	vim.bo[buf_id].modifiable = false
 	vim.bo[buf_id].buflisted = false
@@ -14,7 +14,7 @@ local function create_status_buf()
 end
 
 local function open_status_win(buf_id)
-	vim.cmd('botright vsplit')
+	vim.cmd("botright vsplit")
 	local win_id = vim.api.nvim_get_current_win()
 	vim.api.nvim_win_set_buf(win_id, buf_id)
 	vim.api.nvim_win_set_width(win_id, 30)

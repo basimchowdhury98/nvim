@@ -86,6 +86,7 @@ return {
 					"angularls",
 					"lua_ls",
 					"ts_ls",
+					"basedpyright",
 				},
 			})
 
@@ -98,7 +99,15 @@ return {
 				filetypes = { "c", "cpp" },
 			}
 			vim.lsp.enable("clangd")
-
+			vim.lsp.config.basedpyright = {
+				settings = {
+					basedpyright = {
+						analysis = {
+							diagnosticMode = "workspace",
+						},
+					},
+				},
+			}
 			local telescope = require("telescope.builtin")
 			vim.api.nvim_create_autocmd("LspAttach", {
 				group = vim.api.nvim_create_augroup("lsp-keymaps", { clear = true }),
@@ -201,7 +210,7 @@ return {
 				-- Load luvit types when the `vim.uv` word is found
 				{ path = "${3rd}/luv/library", words = { "vim%.uv" } },
 				{ path = "${3rd}/busted/library", words = { "describe" } },
-                { path = '${3rd}/luassert/library', words = { 'describe' } }
+				{ path = "${3rd}/luassert/library", words = { "describe" } },
 			},
 		},
 	},
