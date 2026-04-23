@@ -650,3 +650,5 @@ handlers.
 
 ### dump:
 - ai powered snippets (eg vim.system({ 'curl', '-X', 'POST'....  can be created using a ai snippet vimssystem('curl -X POST') 
+- To accomplish the "ai output is not system output"; i could follow the what, why, link approach: type the what and the AI color codes if it makes sense
+or some other visual indicator of correctness; basically the ai doesnt output answers, it verifies mine. ELIMINATE AI OUTPUT
