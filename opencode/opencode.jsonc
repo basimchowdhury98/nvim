@@ -17,10 +17,7 @@
     "mcp": {
         "playwright": {
             "type": "local",
-            // Chromium (requires: npx playwright install chromium)
-            "command": ["npx", "@playwright/mcp@latest", "--caps", "vision"],
-            // Chrome (uses system-installed Chrome, no download needed)
-            // "command": ["npx", "@playwright/mcp@latest", "--browser", "chrome", "--caps", "vision"],
+            "command": ["npx", "@playwright/mcp@latest", "--browser", "chromium", "--caps", "vision"],
             "enabled": true
         }
     },
