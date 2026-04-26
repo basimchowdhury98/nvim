@@ -24,6 +24,7 @@ gk() {
 }
 gap() {
     git status
+    git add -N .
     git add -p
 }
 ga.() {
