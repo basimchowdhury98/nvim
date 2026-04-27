@@ -55,3 +55,7 @@ dnb() {
 dnr() {
     dotnet run
 }
+
+oc() {
+    opencode
+}

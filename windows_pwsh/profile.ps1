@@ -74,4 +74,8 @@ function dnr {
     dotnet run
 }
 
+function oc {
+    opencode
+}
+
 Remove-PSReadLineKeyHandler -Chord 'Ctrl+v'
