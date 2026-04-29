@@ -1,8 +1,9 @@
 {
   "$schema": "https://opencode.ai/tui.json",
   "keybinds": {
-    "agent_cycle": "<leader>tab",
-    "agent_cycle_reverse": "<leader>shift+tab",
-    "session_interrupt": "tab"
+    "agent_cycle": "tab",
+    "agent_cycle_reverse": "shift+tab",
+    "session_interrupt": "ctrl+tab",
+    "display_thinking": "<leader>t"
   }
 }
