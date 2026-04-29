@@ -1,31 +1,36 @@
 return {
 	{
 		"nvim-treesitter/nvim-treesitter",
-		branch = "master",
-		lazy = false,
-		build = ":TSUpdate",
-		config = function()
-			require("nvim-treesitter.configs").setup({
-				ensure_installed = {
-					"c",
-					"lua",
-					"vim",
-					"vimdoc",
-					"markdown",
-					"markdown_inline",
-					"typescript",
-					"javascript",
-					"tsx",
-					"c_sharp",
-					"angular",
-					"go",
-				},
-				sync_install = false,
-				auto_install = true,
-				highlight = {
-					enable = true,
-					additional_vim_regex_highlighting = false,
-				},
+		branch = "main",
+		init = function()
+			local ensureInstalled = {
+				"c",
+				"lua",
+				"vim",
+				"vimdoc",
+				"markdown",
+				"markdown_inline",
+				"typescript",
+				"javascript",
+				"tsx",
+				"c_sharp",
+				"angular",
+				"go",
+                "python"
+			}
+			local alreadyInstalled = require("nvim-treesitter.config").get_installed()
+			local parsersToInstall = vim.iter(ensureInstalled)
+				:filter(function(parser)
+					return not vim.tbl_contains(alreadyInstalled, parser)
+				end)
+				:totable()
+			require("nvim-treesitter").install(parsersToInstall)
+			vim.api.nvim_create_autocmd("FileType", {
+				callback = function()
+					pcall(vim.treesitter.start)
+					-- Enable treesitter-based indentation
+					vim.bo.indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
+				end,
 			})
 		end,
 	},

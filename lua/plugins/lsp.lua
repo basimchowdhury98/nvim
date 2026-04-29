@@ -9,6 +9,9 @@ return {
 			"rafamadriz/friendly-snippets", --premade snippets
 			{
 				"saghen/blink.cmp",
+				dependencies = {
+					"saghen/blink.lib",
+				},
 				opts = {
 					keymap = {
 						preset = "default",
@@ -158,7 +161,7 @@ return {
 					-- Starting semantics token so treesitter can color better
 					local client = vim.lsp.get_client_by_id(event.data.client_id)
 					if client and client.server_capabilities.semanticTokensProvider then
-						vim.lsp.semantic_tokens.start(event.buf, client.id)
+                        vim.lsp.semantic_tokens.enable(true, { bufnr = event.buf })
 					end
 
 					if
