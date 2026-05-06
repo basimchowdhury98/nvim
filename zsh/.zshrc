@@ -45,6 +45,18 @@ grh() {
 glo() {
     git log -n ${1:-5} --oneline
 }
+gtorch() {
+    read "confirm?Are you sure? [y/N] "
+    case "$confirm" in
+        y|Y|yes|YES|Yes)
+            git reset --hard
+            git clean -f -d
+            ;;
+        *)
+            printf '%s\n' 'Cancelled.'
+            ;;
+    esac
+}
 alias dn='dotnet'
 dnt() {
     dotnet test
@@ -58,4 +70,7 @@ dnr() {
 
 oc() {
     opencode
+}
+ocq() {
+    opencode run "$*"
 }

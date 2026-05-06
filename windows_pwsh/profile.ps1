@@ -51,8 +51,15 @@ function gst {
     git stash --include-untracked
 }
 
-function grh {
+function gtorch {
+    $confirm = Read-Host "Are you sure? [y/N]"
+    if ($confirm -notin @('y', 'Y', 'yes', 'YES', 'Yes')) {
+        Write-Host "Cancelled."
+        return
+    }
+
     git reset --hard
+    git clean -f -d
 }
 
 function glo {
@@ -76,6 +83,10 @@ function dnr {
 
 function oc {
     opencode
+}
+
+function ocq {
+    opencode run "$args"
 }
 
 Remove-PSReadLineKeyHandler -Chord 'Ctrl+v'
