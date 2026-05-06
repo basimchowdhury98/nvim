@@ -3,7 +3,7 @@
   "keybinds": {
     "agent_cycle": "tab",
     "agent_cycle_reverse": "shift+tab",
-    "session_interrupt": "ctrl+esc",
+    "session_interrupt": "ctrl+q",
     "display_thinking": "<leader>t"
   }
 }
