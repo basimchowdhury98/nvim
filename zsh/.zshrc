@@ -46,7 +46,7 @@ glo() {
     git log -n ${1:-5} --oneline
 }
 gtorch() {
-    read "confirm?Are you sure? [y/N] "
+    read -r -p "Are you sure? [y/N] " confirm
     case "$confirm" in
         y|Y|yes|YES|Yes)
             git reset --hard
