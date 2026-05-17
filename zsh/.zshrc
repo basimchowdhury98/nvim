@@ -72,5 +72,5 @@ oc() {
     opencode
 }
 ocq() {
-    opencode run "$*"
+    opencode run "You are being ran from the terminal. Keep your response short and to the point. $*"
 }

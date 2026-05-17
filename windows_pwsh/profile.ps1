@@ -86,7 +86,7 @@ function oc {
 }
 
 function ocq {
-    opencode run "$args"
+    opencode run "You are being ran from the terminal. Keep your response short and to the point. $args"
 }
 
 Remove-PSReadLineKeyHandler -Chord 'Ctrl+v'
