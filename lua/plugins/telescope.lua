@@ -28,7 +28,7 @@ return
                         width = 0.9,  -- 90% of screen width
                         height = 0.8, -- 80% of screen height
                     },
-                    winblend = 10
+                    winblend = 0
                 },
                 extensions = {
                     ['ui-select'] = {
