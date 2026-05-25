@@ -25,13 +25,16 @@ return {
 				end)
 				:totable()
 			require("nvim-treesitter").install(parsersToInstall)
-			vim.api.nvim_create_autocmd("FileType", {
-				callback = function()
-					pcall(vim.treesitter.start)
-					-- Enable treesitter-based indentation
+		vim.api.nvim_create_autocmd("FileType", {
+			callback = function()
+				pcall(vim.treesitter.start)
+				-- Enable treesitter-based indentation only for languages that have indent queries
+				local lang = vim.treesitter.language.get_lang(vim.bo.filetype) or vim.bo.filetype
+				if vim.treesitter.query.get(lang, "indents") then
 					vim.bo.indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
-				end,
-			})
+				end
+			end,
+		})
 		end,
 	},
 	{
