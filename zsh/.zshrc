@@ -25,7 +25,7 @@ gk() {
 gap() {
     git status
     git add -N .
-    git add -p
+    git status
 }
 ga.() {
     git add .
@@ -39,7 +39,7 @@ gcoma() {
 gst() {
     git stash --include-untracked
 }
-grh() {
+grhard() {
     git reset --hard
 }
 glo() {

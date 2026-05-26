@@ -1,6 +1,7 @@
 $env:OPENCODE_CONFIG_DIR = "$env:NVIM\opencode"
 $env:OPENCODE_ENABLE_EXA = 1
 
+# IMPORTANT: going to suspend supporting this because pretty use zshrc in all my machines(wsl at work)
 Set-Alias d docker
 
 function di {
