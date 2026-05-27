@@ -130,7 +130,7 @@ describe("Floating terminal", function()
     end)
 
     it("opens window with setup uses a preloaded term", function()
-        term.setupForProject()
+        term.setup_for_project()
         local preloaded_term_buf = find_term_buffer()
 
         local win_id = term.open()
@@ -321,7 +321,7 @@ describe("Floating terminal", function()
     end)
 
     it("opens new terminal with setup uses a preloaded term", function()
-        term.setupForProject()
+        term.setup_for_project()
         local preloaded_term_buf = find_term_buffer()
 
         local win_id = term.open_new_terminal()

@@ -310,7 +310,7 @@ function M.open_new_terminal()
 	return state.win_id
 end
 
-function M.setupForProject()
+function M.setup_for_project()
 	preload()
 end
 
