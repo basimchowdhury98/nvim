@@ -1,4 +1,11 @@
 return {
-    'MeanderingProgrammer/render-markdown.nvim',
-    opts = {},
+	"MeanderingProgrammer/render-markdown.nvim",
+	opts = {
+		heading = {
+			sign = false,
+			icons = { "󰲡 ", "󰲣 ", "󰲥 ", "󰲧 ", "󰲩 ", "󰲫 " },
+            position = 'eol',
+			backgrounds = {},
+		},
+	},
 }

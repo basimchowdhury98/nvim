@@ -59,8 +59,5 @@ map("n", "<C-Up>", ":resize -2<CR>", { desc = "Increase split height" })
 
 -- Testing
 map("n", "<leader>x", function ()
-    local mut = 'utils.ai'
-    package.loaded[mut] = nil
-    require(mut)
-    vim.notify('Reloaded module: ' .. mut)
+    vim.cmd('so %')
 end)
