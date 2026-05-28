@@ -245,6 +245,7 @@ local function preload()
 	end
 
 	local term = create_terminal_buffer()
+    vim.api.nvim_buf_set_var(term.buf_id, 'preloaded', true)
 	preloaded_terms[curr_proj] = term
 end
 
@@ -292,6 +293,7 @@ function M.open_new_terminal()
 	local term
 	if preloaded_terms[curr_proj] ~= nil then
 		term = preloaded_terms[curr_proj]
+        vim.api.nvim_buf_del_var(term.buf_id, 'preloaded')
 		preloaded_terms[curr_proj] = nil
 	else
 		term = create_terminal_buffer()

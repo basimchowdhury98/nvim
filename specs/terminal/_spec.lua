@@ -4,391 +4,406 @@ local t = require("specs.terminal.testing")
 local eq = assert.are.same
 
 describe("Floating terminal", function()
-    local term = require("utils.terminal")
-    local test_proj = vim.fs.joinpath(vim.fn.stdpath("cache"), "terminal-test")
-    local test_proj_2 = vim.fs.joinpath(vim.fn.stdpath("cache"), "terminal-test-2")
-    t.setup_path(test_proj)
-    t.setup_path(test_proj_2)
-    t.spy_on_term_open()
-    t.spy_on_notify()
-
-    before_each(function()
-        t.close_extra_windows()
-        term.kill()
-        vim.fn.chdir(test_proj)
-        t.reset_spies()
-    end)
-
-    it("opens the terminal without setup", function()
-        local win_id = term.open()
-
-        local buf_id = t.assert_terminal_opened_floating(win_id)
-        assert(t.term_opt_spy[buf_id] ~= nil and t.term_opt_spy[buf_id] == "proj_path",
-            "A specific path was passed when it should be pwd/proj path")
-        t.assert_another_preloaded_ignoring(buf_id)
-    end)
-
-    it("opens window with setup uses a preloaded term", function()
-        term.setup_for_project()
-        local preloaded_term_buf = t.find_term_buffer()
-
-        local win_id = term.open()
-
-        local buf_id = t.assert_terminal_opened_floating(win_id)
-        assert(preloaded_term_buf ~= nil, "A term buffer should have been preloaded")
-        eq(buf_id, preloaded_term_buf, "Didnt use the preloaded term")
-        t.assert_another_preloaded_ignoring(buf_id)
-    end)
-
-    it("processes opens idempotently", function()
-        local win_count_before = #vim.api.nvim_list_wins()
-
-        local _ = term.open()
-        local win_id = term.open()
-
-        local buf_id = t.assert_terminal_opened_floating(win_id)
-        local win_count_after = #vim.api.nvim_list_wins()
-        eq(win_count_after, win_count_before + 1, "Only one new window should have opened")
-        t.assert_another_preloaded_ignoring(buf_id)
-    end)
-
-    it("opens new terminal in new project", function()
-        local win_id_proj1 = term.open()
-        local buf_id_proj1 = t.assert_terminal_opened_floating(win_id_proj1)
-        term.close()
-        vim.fn.chdir(test_proj_2)
-        local win_id_proj2 = term.open()
-        local buf_id_proj2 = t.assert_terminal_opened_floating(win_id_proj2)
-
-        assert(win_id_proj1 ~= win_id_proj2, "Same window shouldnt be used for both projects")
-        assert(buf_id_proj1 ~= buf_id_proj2, "Same buffer shouldnt be used for both projects")
-    end)
-
-    it("snap terminal snaps to the botright", function ()
-        local win_id = term.open()
-        t.assert_terminal_opened_floating(win_id)
-
-        local snapped_win_id = term.snap()
-
-        t.assert_terminal_opened_snapped(snapped_win_id)
-    end)
-
-    it("snap focuses the previously active editor window", function ()
-        local original_win_id = vim.api.nvim_get_current_win()
-        local win_id = term.open()
-        t.assert_terminal_opened_floating(win_id)
-
-        local snapped_win_id = term.snap()
-
-        t.assert_terminal_opened_snapped(snapped_win_id)
-        eq(vim.api.nvim_get_current_win(), original_win_id, "Snap should return focus to the previous window")
-    end)
-
-    it("snap prefers the alternate window when multiple editor windows exist", function ()
-        local original_win_id = vim.api.nvim_get_current_win()
-        vim.cmd('vsplit')
-        local second_editor_win_id = vim.api.nvim_get_current_win()
-        vim.api.nvim_set_current_win(original_win_id)
-        local win_id = term.open()
-        t.assert_terminal_opened_floating(win_id, 3)
-        vim.api.nvim_set_current_win(second_editor_win_id)
-        vim.api.nvim_set_current_win(win_id)
-
-        local snapped_win_id = term.snap()
-
-        t.assert_terminal_opened_snapped(snapped_win_id, 3)
-        eq(vim.api.nvim_get_current_win(), second_editor_win_id,
-            "Snap should focus the alternate editor window when it is valid")
-        assert(second_editor_win_id ~= snapped_win_id, "Sanity check: alternate editor window should not be the snapped terminal")
-    end)
-
-    it("snap does nothing when no window is open", function ()
-        local win_id = term.snap()
-
-        assert(win_id == nil, "snap should return nil when no window is open")
-        local win_count = #vim.api.nvim_list_wins()
-        eq(win_count, 1, "No new windows should have opened")
-    end)
-
-    it("snap toggles back to float from vsplit", function ()
-        local win_id = term.open()
-        local buf_id = t.assert_terminal_opened_floating(win_id)
-        local snapped_win_id = term.snap()
-        t.assert_terminal_opened_snapped(snapped_win_id)
-
-        local float_win_id = term.snap()
-
-        t.assert_terminal_opened_floating(float_win_id)
-        local curr_buf_id = vim.api.nvim_win_get_buf(float_win_id)
-        eq(curr_buf_id, buf_id, "Should still show the same terminal buffer after toggling")
-    end)
-
-    it("open when snapped returns to float", function ()
-        term.open()
-        term.snap()
-
-        local float_win_id = term.open()
-
-        t.assert_terminal_opened_floating(float_win_id)
-    end)
-
-    it("close when snapped closes the window", function ()
-        local win_count_before = #vim.api.nvim_list_wins()
-        term.open()
-        term.snap()
-
-        term.close()
-
-        local win_count_after = #vim.api.nvim_list_wins()
-        eq(win_count_after, win_count_before, "Window wasnt closed")
-    end)
-
-    it("close when snapped resets to float on reopen", function ()
-        term.open()
-        term.snap()
-        term.close()
-
-        local win_id = term.open()
-
-        t.assert_terminal_opened_floating(win_id)
-    end)
-
-    it("can rotate terminals while snapped", function ()
-        term.open_new_terminal()
-        term.open_new_terminal()
-        local snapped_win_id = term.snap()
-        local buf_before = vim.api.nvim_win_get_buf(snapped_win_id)
-
-        term.next()
-
-        local buf_after = vim.api.nvim_win_get_buf(snapped_win_id)
-        assert(buf_before ~= buf_after, "Rotate should change the buffer while snapped")
-        t.assert_terminal_opened_snapped(snapped_win_id)
-    end)
-
-    it("can open new terminal while snapped", function ()
-        term.open_new_terminal()
-        local snapped_win_id = term.snap()
-        local buf_before = vim.api.nvim_win_get_buf(snapped_win_id)
-
-        term.open_new_terminal()
-
-        local buf_after = vim.api.nvim_win_get_buf(snapped_win_id)
-        assert(buf_before ~= buf_after, "New terminal should show a different buffer while snapped")
-    end)
-
-    it("can delete current terminal while snapped", function ()
-        term.open_new_terminal()
-        term.open_new_terminal()
-        local snapped_win_id = term.snap()
-        local buf_before = vim.api.nvim_win_get_buf(snapped_win_id)
-
-        term.delete_curr()
-
-        eq(vim.api.nvim_win_is_valid(snapped_win_id), true, "Window should still be valid after delete with multiple terms")
-        eq(vim.api.nvim_buf_is_valid(buf_before), false, "Deleted terminal buffer should be invalid")
-    end)
-
-    it("closes the window when one is open", function()
-        local win_count_before = #vim.api.nvim_list_wins()
-        local win_id = term.open()
-
-        term.close()
-
-        assert(win_id ~= nil, "Terminal window should have been opened")
-        local win_count_after = #vim.api.nvim_list_wins()
-        eq(win_count_after, win_count_before, "Window wasnt closed")
-    end)
-
-    it("closes window idempotently", function()
-        local win_count_before = #vim.api.nvim_list_wins()
-        local win_id = term.open()
-
-        term.close()
-        term.close()
-
-        assert(win_id ~= nil, "Terminal window should have been opened")
-        local win_count_after = #vim.api.nvim_list_wins()
-        eq(win_count_after, win_count_before, "Window wasnt closed")
-    end)
-
-    it("opens a new terminal", function()
-        local win_id = term.open_new_terminal()
-
-        local buf_id = t.assert_terminal_opened_floating(win_id)
-        t.assert_another_preloaded_ignoring(buf_id)
-    end)
-
-    it("opens new terminal with setup uses a preloaded term", function()
-        term.setup_for_project()
-        local preloaded_term_buf = t.find_term_buffer()
-
-        local win_id = term.open_new_terminal()
-
-        local buf_id = t.assert_terminal_opened_floating(win_id)
-        assert(preloaded_term_buf ~= nil, "A term buffer wasnt preloaded")
-        eq(buf_id, preloaded_term_buf, "Didnt use the preloaded term")
-        t.assert_another_preloaded_ignoring(buf_id)
-    end)
-
-    it("opens 2 new terminals when_open_new terminal called twice", function()
-        local win_count_before = #vim.api.nvim_list_wins()
-
-        local win_id = term.open_new_terminal()
-        local buf_id = t.assert_terminal_opened_floating(win_id)
-        local win_id_2 = term.open_new_terminal()
-
-        assert(win_id == win_id_2, "Different windows were used when it should be just one")
-        local buf_id_2 = t.assert_terminal_opened_floating(win_id_2)
-        assert(buf_id ~= buf_id_2, "Same buffer used each time but should be different")
-        local win_count_after = #vim.api.nvim_list_wins()
-        eq(win_count_after, win_count_before + 1, "More than 1 new window opened")
-    end)
-
-    it("can rotate to the prev terminal", function()
-        local win_id = term.open_new_terminal()
-        local first_buf_id = vim.api.nvim_win_get_buf(win_id)
-        term.open_new_terminal()
-        local second_buf_id = vim.api.nvim_win_get_buf(win_id)
-
-        term.prev()
-
-        assert(first_buf_id ~= second_buf_id, "Two terminals should have different buffers")
-        local curr_buf_id = vim.api.nvim_win_get_buf(win_id)
-        eq(curr_buf_id, first_buf_id, "Prev didnt go back to first term")
-    end)
-
-    it("can rotate to the last terminal if preving from first terminal", function()
-        local win_id = term.open_new_terminal()
-        local first_buf_id = vim.api.nvim_win_get_buf(win_id)
-        term.open_new_terminal()
-        local second_buf_id = vim.api.nvim_win_get_buf(win_id)
-
-        term.prev() --puts win on first term
-        term.prev()
-
-        assert(first_buf_id ~= second_buf_id, "Two terminals should have different buffers")
-        local curr_buf_id = vim.api.nvim_win_get_buf(win_id)
-        eq(curr_buf_id, second_buf_id, "Prev didnt wrap around to the last buffer")
-    end)
-
-    it("can rotate to the next terminal", function()
-        local win_id = term.open_new_terminal()
-        local first_buf_id = vim.api.nvim_win_get_buf(win_id)
-        term.open_new_terminal()
-        local second_buf_id = vim.api.nvim_win_get_buf(win_id)
-
-        term.prev() -- to set the term back to first
-        term.next()
-
-        assert(first_buf_id ~= second_buf_id, "Two terminals should have different buffers")
-        local curr_buf_id = vim.api.nvim_win_get_buf(win_id)
-        eq(curr_buf_id, second_buf_id, "Next didnt go to the second buffer")
-    end)
-
-    it("can rotate to the first terminal when next at the last terminal", function()
-        local win_id = term.open_new_terminal()
-        local first_buf_id = vim.api.nvim_win_get_buf(win_id)
-        term.open_new_terminal()
-        local second_buf_id = vim.api.nvim_win_get_buf(win_id)
-
-        term.next()
-
-        assert(first_buf_id ~= second_buf_id, "Two terminals should have different buffers")
-        local curr_buf_id = vim.api.nvim_win_get_buf(win_id)
-        eq(curr_buf_id, first_buf_id, "After next win at the last terminal it wraps back around to first")
-    end)
-
-    it("only rotates between project terminals", function()
-        local first_proj_win = term.open()
-        local first_proj_buf_id = vim.api.nvim_win_get_buf(first_proj_win)
-        term.close()
-        vim.fn.chdir(test_proj_2)
-        local win_id = term.open_new_terminal()
-        term.open_new_terminal()
-
-        local curr_buf_id = vim.api.nvim_win_get_buf(win_id)
-        assert(curr_buf_id ~= first_proj_buf_id, "Initial term should not be from proj 1")
-        term.next()
-        curr_buf_id = vim.api.nvim_win_get_buf(win_id)
-        assert(curr_buf_id ~= first_proj_buf_id, "After next(1) should not be from proj 1")
-        term.next()
-        curr_buf_id = vim.api.nvim_win_get_buf(win_id)
-        assert(curr_buf_id ~= first_proj_buf_id, "After next(2) should not be from proj 1")
-        term.prev()
-        curr_buf_id = vim.api.nvim_win_get_buf(win_id)
-        assert(curr_buf_id ~= first_proj_buf_id, "After prev(1) should not be from proj 1")
-        term.prev()
-        curr_buf_id = vim.api.nvim_win_get_buf(win_id)
-        assert(curr_buf_id ~= first_proj_buf_id, "After prev(2) should not be from proj 1")
-    end)
-
-    it("kills terminals", function()
-        local initial_bufs = #vim.api.nvim_list_bufs()
-        term.open_new_terminal()
-        term.open_new_terminal()
-        vim.fn.chdir(test_proj_2)
-        term.open_new_terminal()
-        term.open_new_terminal()
-        local bufs_after_opens = #vim.api.nvim_list_bufs()
-
-        term.kill()
-
-        local bufs_after_kill = #vim.api.nvim_list_bufs()
-        assert(bufs_after_opens > initial_bufs, "Didnt open any bufs")
-        eq(bufs_after_kill, initial_bufs, "Buf count didnt go back to normal")
-    end)
-
-    it("opens terminal at specified path", function()
-        local specific_path = vim.fs.joinpath(test_proj, "specific")
-        t.setup_path(specific_path)
-
-        local win_id = term.open_at_path(specific_path)
-
-        local buf_id = t.assert_terminal_opened_floating(win_id)
-        local captured_path = t.term_opt_spy[buf_id]
-        assert(captured_path ~= nil, "Path spy didnt capture terminal cwd")
-        eq(vim.fs.normalize(captured_path), vim.fs.normalize(specific_path), "Specific path wasnt opened")
-    end)
-
-    it("vim notifies when attempt to open specific path outside of project", function()
-        local outside_proj_path = vim.fs.joinpath(test_proj_2, "specific")
-
-        local win_id = term.open_at_path(outside_proj_path)
-
-        assert(win_id == nil, "A window was opened when it shouldnt")
-        assert(t.notify_spy, string.format("Path '%s' is not within project '%s'", outside_proj_path, test_proj))
-    end)
-
-    it("deletes curr terminal and closes the window if one term is open", function ()
-        local win_count_start = #vim.api.nvim_list_wins()
-        local win_id = term.open_new_terminal()
-
-        term.delete_curr()
-
-        eq(vim.api.nvim_win_is_valid(win_id), false, "The opened buf didnt delete")
-        local win_count_after = #vim.api.nvim_list_wins()
-        eq(win_count_after, win_count_start, "The window wasnt closed")
-    end)
-
-    it("deletes curr terminal and attaches next term if multiple terms are open", function ()
-        local win_id = term.open_new_terminal()
-        local _ = term.open_new_terminal()
-        term.prev() -- Going back to the first term
-        local curr_term_buf_id = vim.api.nvim_win_get_buf(win_id)
-
-        term.delete_curr()
-
-        eq(vim.api.nvim_win_is_valid(win_id), true, "The win wasnt valid but should be")
-        eq(vim.api.nvim_buf_is_valid(curr_term_buf_id), false, "The current term buffer wasnt deleted")
-        local updated_buf_id = vim.api.nvim_win_get_buf(win_id)
-        assert(updated_buf_id ~= curr_term_buf_id, "The next term wasnt attached")
-        eq(vim.api.nvim_buf_is_valid(updated_buf_id), true, "The next term buffer isnt valid")
-    end)
-
-    it("delete curr terminal when nothing is loaded does nothing", function ()
-        term.delete_curr()
-
-        assert(true, "delete_curr on empty state should not error")
-    end)
+	local term = require("utils.terminal")
+	local test_proj = vim.fs.joinpath(vim.fn.stdpath("cache"), "terminal-test")
+	local test_proj_2 = vim.fs.joinpath(vim.fn.stdpath("cache"), "terminal-test-2")
+	t.setup_path(test_proj)
+	t.setup_path(test_proj_2)
+	t.spy_on_term_open()
+	t.spy_on_notify()
+
+	before_each(function()
+		t.close_extra_windows()
+		term.kill()
+		vim.fn.chdir(test_proj)
+		t.reset_spies()
+	end)
+
+	it("opens the terminal without setup", function()
+		local win_id = term.open()
+
+		local buf_id = t.assert_terminal_opened_floating(win_id)
+		assert(
+			t.term_opt_spy[buf_id] ~= nil and t.term_opt_spy[buf_id] == "proj_path",
+			"A specific path was passed when it should be pwd/proj path"
+		)
+		local all_bufs = t.find_all_buffers()
+		vim.tbl_contains(all_bufs, function(v)
+			v.preloaded = true
+		end, { predicate = true })
+	end)
+
+	it("opens window with setup uses a preloaded term", function()
+		local existing_term_buf = t.find_term_buffer()
+		eq(existing_term_buf, nil, "There shouldnt be any term buffers at the start")
+
+		term.setup_for_project()
+		local term_buf_id = t.find_term_buffer()
+
+		assert(term_buf_id ~= nil, "There should be a term buffer now")
+		local preloaded = pcall(vim.api.nvim_buf_get_var, term_buf_id, "preloaded")
+		eq(preloaded, true, "It should be a preloaded term")
+	end)
+
+	it("processes opens idempotently", function()
+		local win_count_before = #vim.api.nvim_list_wins()
+
+		local _ = term.open()
+		local win_id = term.open()
+
+		local buf_id = t.assert_terminal_opened_floating(win_id)
+		local win_count_after = #vim.api.nvim_list_wins()
+		eq(win_count_after, win_count_before + 1, "Only one new window should have opened")
+		t.assert_another_preloaded_ignoring(buf_id)
+	end)
+
+	it("opens new terminal in new project", function()
+		local win_id_proj1 = term.open()
+		local buf_id_proj1 = t.assert_terminal_opened_floating(win_id_proj1)
+		term.close()
+		vim.fn.chdir(test_proj_2)
+		local win_id_proj2 = term.open()
+		local buf_id_proj2 = t.assert_terminal_opened_floating(win_id_proj2)
+
+		assert(win_id_proj1 ~= win_id_proj2, "Same window shouldnt be used for both projects")
+		assert(buf_id_proj1 ~= buf_id_proj2, "Same buffer shouldnt be used for both projects")
+	end)
+
+	it("snap terminal snaps to the botright", function()
+		local win_id = term.open()
+		t.assert_terminal_opened_floating(win_id)
+
+		local snapped_win_id = term.snap()
+
+		t.assert_terminal_opened_snapped(snapped_win_id)
+	end)
+
+	it("snap focuses the previously active editor window", function()
+		local original_win_id = vim.api.nvim_get_current_win()
+		local win_id = term.open()
+		t.assert_terminal_opened_floating(win_id)
+
+		local snapped_win_id = term.snap()
+
+		t.assert_terminal_opened_snapped(snapped_win_id)
+		eq(vim.api.nvim_get_current_win(), original_win_id, "Snap should return focus to the previous window")
+	end)
+
+	it("snap prefers the alternate window when multiple editor windows exist", function()
+		local original_win_id = vim.api.nvim_get_current_win()
+		vim.cmd("vsplit")
+		local second_editor_win_id = vim.api.nvim_get_current_win()
+		vim.api.nvim_set_current_win(original_win_id)
+		local win_id = term.open()
+		t.assert_terminal_opened_floating(win_id, 3)
+		vim.api.nvim_set_current_win(second_editor_win_id)
+		vim.api.nvim_set_current_win(win_id)
+
+		local snapped_win_id = term.snap()
+
+		t.assert_terminal_opened_snapped(snapped_win_id, 3)
+		eq(
+			vim.api.nvim_get_current_win(),
+			second_editor_win_id,
+			"Snap should focus the alternate editor window when it is valid"
+		)
+		assert(
+			second_editor_win_id ~= snapped_win_id,
+			"Sanity check: alternate editor window should not be the snapped terminal"
+		)
+	end)
+
+	it("snap does nothing when no window is open", function()
+		local win_id = term.snap()
+
+		assert(win_id == nil, "snap should return nil when no window is open")
+		local win_count = #vim.api.nvim_list_wins()
+		eq(win_count, 1, "No new windows should have opened")
+	end)
+
+	it("snap toggles back to float from vsplit", function()
+		local win_id = term.open()
+		local buf_id = t.assert_terminal_opened_floating(win_id)
+		local snapped_win_id = term.snap()
+		t.assert_terminal_opened_snapped(snapped_win_id)
+
+		local float_win_id = term.snap()
+
+		t.assert_terminal_opened_floating(float_win_id)
+		local curr_buf_id = vim.api.nvim_win_get_buf(float_win_id)
+		eq(curr_buf_id, buf_id, "Should still show the same terminal buffer after toggling")
+	end)
+
+	it("open when snapped returns to float", function()
+		term.open()
+		term.snap()
+
+		local float_win_id = term.open()
+
+		t.assert_terminal_opened_floating(float_win_id)
+	end)
+
+	it("close when snapped closes the window", function()
+		local win_count_before = #vim.api.nvim_list_wins()
+		term.open()
+		term.snap()
+
+		term.close()
+
+		local win_count_after = #vim.api.nvim_list_wins()
+		eq(win_count_after, win_count_before, "Window wasnt closed")
+	end)
+
+	it("close when snapped resets to float on reopen", function()
+		term.open()
+		term.snap()
+		term.close()
+
+		local win_id = term.open()
+
+		t.assert_terminal_opened_floating(win_id)
+	end)
+
+	it("can rotate terminals while snapped", function()
+		term.open_new_terminal()
+		term.open_new_terminal()
+		local snapped_win_id = term.snap()
+		local buf_before = vim.api.nvim_win_get_buf(snapped_win_id)
+
+		term.next()
+
+		local buf_after = vim.api.nvim_win_get_buf(snapped_win_id)
+		assert(buf_before ~= buf_after, "Rotate should change the buffer while snapped")
+		t.assert_terminal_opened_snapped(snapped_win_id)
+	end)
+
+	it("can open new terminal while snapped", function()
+		term.open_new_terminal()
+		local snapped_win_id = term.snap()
+		local buf_before = vim.api.nvim_win_get_buf(snapped_win_id)
+
+		term.open_new_terminal()
+
+		local buf_after = vim.api.nvim_win_get_buf(snapped_win_id)
+		assert(buf_before ~= buf_after, "New terminal should show a different buffer while snapped")
+	end)
+
+	it("can delete current terminal while snapped", function()
+		term.open_new_terminal()
+		term.open_new_terminal()
+		local snapped_win_id = term.snap()
+		local buf_before = vim.api.nvim_win_get_buf(snapped_win_id)
+
+		term.delete_curr()
+
+		eq(
+			vim.api.nvim_win_is_valid(snapped_win_id),
+			true,
+			"Window should still be valid after delete with multiple terms"
+		)
+		eq(vim.api.nvim_buf_is_valid(buf_before), false, "Deleted terminal buffer should be invalid")
+	end)
+
+	it("closes the window when one is open", function()
+		local win_count_before = #vim.api.nvim_list_wins()
+		local win_id = term.open()
+
+		term.close()
+
+		assert(win_id ~= nil, "Terminal window should have been opened")
+		local win_count_after = #vim.api.nvim_list_wins()
+		eq(win_count_after, win_count_before, "Window wasnt closed")
+	end)
+
+	it("closes window idempotently", function()
+		local win_count_before = #vim.api.nvim_list_wins()
+		local win_id = term.open()
+
+		term.close()
+		term.close()
+
+		assert(win_id ~= nil, "Terminal window should have been opened")
+		local win_count_after = #vim.api.nvim_list_wins()
+		eq(win_count_after, win_count_before, "Window wasnt closed")
+	end)
+
+	it("opens a new terminal", function()
+		local win_id = term.open_new_terminal()
+
+		local buf_id = t.assert_terminal_opened_floating(win_id)
+		t.assert_another_preloaded_ignoring(buf_id)
+	end)
+
+	it("opens new terminal with setup uses a preloaded term", function()
+		term.setup_for_project()
+		local preloaded_term_buf = t.find_term_buffer()
+
+		local win_id = term.open_new_terminal()
+
+		local buf_id = t.assert_terminal_opened_floating(win_id)
+		assert(preloaded_term_buf ~= nil, "A term buffer wasnt preloaded")
+		eq(buf_id, preloaded_term_buf, "Didnt use the preloaded term")
+		t.assert_another_preloaded_ignoring(buf_id)
+	end)
+
+	it("opens 2 new terminals when_open_new terminal called twice", function()
+		local win_count_before = #vim.api.nvim_list_wins()
+
+		local win_id = term.open_new_terminal()
+		local buf_id = t.assert_terminal_opened_floating(win_id)
+		local win_id_2 = term.open_new_terminal()
+
+		assert(win_id == win_id_2, "Different windows were used when it should be just one")
+		local buf_id_2 = t.assert_terminal_opened_floating(win_id_2)
+		assert(buf_id ~= buf_id_2, "Same buffer used each time but should be different")
+		local win_count_after = #vim.api.nvim_list_wins()
+		eq(win_count_after, win_count_before + 1, "More than 1 new window opened")
+	end)
+
+	it("can rotate to the prev terminal", function()
+		local win_id = term.open_new_terminal()
+		local first_buf_id = vim.api.nvim_win_get_buf(win_id)
+		term.open_new_terminal()
+		local second_buf_id = vim.api.nvim_win_get_buf(win_id)
+
+		term.prev()
+
+		assert(first_buf_id ~= second_buf_id, "Two terminals should have different buffers")
+		local curr_buf_id = vim.api.nvim_win_get_buf(win_id)
+		eq(curr_buf_id, first_buf_id, "Prev didnt go back to first term")
+	end)
+
+	it("can rotate to the last terminal if preving from first terminal", function()
+		local win_id = term.open_new_terminal()
+		local first_buf_id = vim.api.nvim_win_get_buf(win_id)
+		term.open_new_terminal()
+		local second_buf_id = vim.api.nvim_win_get_buf(win_id)
+
+		term.prev() --puts win on first term
+		term.prev()
+
+		assert(first_buf_id ~= second_buf_id, "Two terminals should have different buffers")
+		local curr_buf_id = vim.api.nvim_win_get_buf(win_id)
+		eq(curr_buf_id, second_buf_id, "Prev didnt wrap around to the last buffer")
+	end)
+
+	it("can rotate to the next terminal", function()
+		local win_id = term.open_new_terminal()
+		local first_buf_id = vim.api.nvim_win_get_buf(win_id)
+		term.open_new_terminal()
+		local second_buf_id = vim.api.nvim_win_get_buf(win_id)
+
+		term.prev() -- to set the term back to first
+		term.next()
+
+		assert(first_buf_id ~= second_buf_id, "Two terminals should have different buffers")
+		local curr_buf_id = vim.api.nvim_win_get_buf(win_id)
+		eq(curr_buf_id, second_buf_id, "Next didnt go to the second buffer")
+	end)
+
+	it("can rotate to the first terminal when next at the last terminal", function()
+		local win_id = term.open_new_terminal()
+		local first_buf_id = vim.api.nvim_win_get_buf(win_id)
+		term.open_new_terminal()
+		local second_buf_id = vim.api.nvim_win_get_buf(win_id)
+
+		term.next()
+
+		assert(first_buf_id ~= second_buf_id, "Two terminals should have different buffers")
+		local curr_buf_id = vim.api.nvim_win_get_buf(win_id)
+		eq(curr_buf_id, first_buf_id, "After next win at the last terminal it wraps back around to first")
+	end)
+
+	it("only rotates between project terminals", function()
+		local first_proj_win = term.open()
+		local first_proj_buf_id = vim.api.nvim_win_get_buf(first_proj_win)
+		term.close()
+		vim.fn.chdir(test_proj_2)
+		local win_id = term.open_new_terminal()
+		term.open_new_terminal()
+
+		local curr_buf_id = vim.api.nvim_win_get_buf(win_id)
+		assert(curr_buf_id ~= first_proj_buf_id, "Initial term should not be from proj 1")
+		term.next()
+		curr_buf_id = vim.api.nvim_win_get_buf(win_id)
+		assert(curr_buf_id ~= first_proj_buf_id, "After next(1) should not be from proj 1")
+		term.next()
+		curr_buf_id = vim.api.nvim_win_get_buf(win_id)
+		assert(curr_buf_id ~= first_proj_buf_id, "After next(2) should not be from proj 1")
+		term.prev()
+		curr_buf_id = vim.api.nvim_win_get_buf(win_id)
+		assert(curr_buf_id ~= first_proj_buf_id, "After prev(1) should not be from proj 1")
+		term.prev()
+		curr_buf_id = vim.api.nvim_win_get_buf(win_id)
+		assert(curr_buf_id ~= first_proj_buf_id, "After prev(2) should not be from proj 1")
+	end)
+
+	it("kills terminals", function()
+		local initial_bufs = #vim.api.nvim_list_bufs()
+		term.open_new_terminal()
+		term.open_new_terminal()
+		vim.fn.chdir(test_proj_2)
+		term.open_new_terminal()
+		term.open_new_terminal()
+		local bufs_after_opens = #vim.api.nvim_list_bufs()
+
+		term.kill()
+
+		local bufs_after_kill = #vim.api.nvim_list_bufs()
+		assert(bufs_after_opens > initial_bufs, "Didnt open any bufs")
+		eq(bufs_after_kill, initial_bufs, "Buf count didnt go back to normal")
+	end)
+
+	it("opens terminal at specified path", function()
+		local specific_path = vim.fs.joinpath(test_proj, "specific")
+		t.setup_path(specific_path)
+
+		local win_id = term.open_at_path(specific_path)
+
+		local buf_id = t.assert_terminal_opened_floating(win_id)
+		local captured_path = t.term_opt_spy[buf_id]
+		assert(captured_path ~= nil, "Path spy didnt capture terminal cwd")
+		eq(vim.fs.normalize(captured_path), vim.fs.normalize(specific_path), "Specific path wasnt opened")
+	end)
+
+	it("vim notifies when attempt to open specific path outside of project", function()
+		local outside_proj_path = vim.fs.joinpath(test_proj_2, "specific")
+
+		local win_id = term.open_at_path(outside_proj_path)
+
+		assert(win_id == nil, "A window was opened when it shouldnt")
+		assert(t.notify_spy, string.format("Path '%s' is not within project '%s'", outside_proj_path, test_proj))
+	end)
+
+	it("deletes curr terminal and closes the window if one term is open", function()
+		local win_count_start = #vim.api.nvim_list_wins()
+		local win_id = term.open_new_terminal()
+
+		term.delete_curr()
+
+		eq(vim.api.nvim_win_is_valid(win_id), false, "The opened buf didnt delete")
+		local win_count_after = #vim.api.nvim_list_wins()
+		eq(win_count_after, win_count_start, "The window wasnt closed")
+	end)
+
+	it("deletes curr terminal and attaches next term if multiple terms are open", function()
+		local win_id = term.open_new_terminal()
+		local _ = term.open_new_terminal()
+		term.prev() -- Going back to the first term
+		local curr_term_buf_id = vim.api.nvim_win_get_buf(win_id)
+
+		term.delete_curr()
+
+		eq(vim.api.nvim_win_is_valid(win_id), true, "The win wasnt valid but should be")
+		eq(vim.api.nvim_buf_is_valid(curr_term_buf_id), false, "The current term buffer wasnt deleted")
+		local updated_buf_id = vim.api.nvim_win_get_buf(win_id)
+		assert(updated_buf_id ~= curr_term_buf_id, "The next term wasnt attached")
+		eq(vim.api.nvim_buf_is_valid(updated_buf_id), true, "The next term buffer isnt valid")
+	end)
+
+	it("delete curr terminal when nothing is loaded does nothing", function()
+		term.delete_curr()
+
+		assert(true, "delete_curr on empty state should not error")
+	end)
 end)

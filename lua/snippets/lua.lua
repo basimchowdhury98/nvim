@@ -4,5 +4,6 @@ local i = ls.insert_node
 local fmt = require('luasnip.extras.fmt').fmt
 
 return {
-    s("vk", fmt("vim.keymap.set(\"{}\", \"<leader>{}\", {}, {{ desc = \"{}\" }})", { i(1, "n"), i(2), i(3), i(0) }))
+    s("vk", fmt("vim.keymap.set(\"{}\", \"<leader>{}\", {}, {{ desc = \"{}\" }})", { i(1, "n"), i(2), i(3), i(0) })),
+    s("debug", fmt('print("LOCAL_DEBUG: {}" .. {});', { i(1), i(0)}))
 }
