@@ -22,9 +22,10 @@ return {
 						nerd_font_variant = "mono",
 					},
 					sources = {
-						default = { "lsp", "path", "snippets", "lazydev", "buffer" },
+						default = { "lsp", "lazydev", "path", "snippets", "buffer" },
 						providers = {
 							lazydev = { module = "lazydev.integrations.blink", score_offset = 100 },
+                            lsp = { async = true, fallbacks = {} }
 						},
 					},
 					snippets = { preset = "luasnip" },

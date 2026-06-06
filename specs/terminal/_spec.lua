@@ -25,21 +25,19 @@ describe("Floating terminal", function()
 		local buf_id = t.assert_terminal_opened_floating(win_id)
 		assert(
 			t.term_opt_spy[buf_id] ~= nil and t.term_opt_spy[buf_id] == "proj_path",
-			"A specific path was passed when it should be pwd/proj path"
+			"Should pass the pwd and not a speifix path"
 		)
-		local all_bufs = t.find_all_buffers()
-		vim.tbl_contains(all_bufs, function(v)
-			v.preloaded = true
-		end, { predicate = true })
+        t.should_find_terminal({ not_including = buf_id, preloaded = true })
 	end)
 
 	it("opens window with setup uses a preloaded term", function()
-		local existing_term_buf = t.find_term_buffer()
-		eq(existing_term_buf, nil, "There shouldnt be any term buffers at the start")
+		local all_bufs_pre = t.find_all_buffers()
 
 		term.setup_for_project()
-		local term_buf_id = t.find_term_buffer()
 
+        local all_bufs_post = t.find_all_buffers()
+        eq(#all_bufs_post, #all_bufs_pre + 1, 'Should be one more buf after setup')
+		local term_buf_id = t.find_term_buffer()
 		assert(term_buf_id ~= nil, "There should be a term buffer now")
 		local preloaded = pcall(vim.api.nvim_buf_get_var, term_buf_id, "preloaded")
 		eq(preloaded, true, "It should be a preloaded term")

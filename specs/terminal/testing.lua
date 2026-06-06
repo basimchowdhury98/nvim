@@ -22,6 +22,34 @@ function M.find_all_buffers()
 	return buf_map
 end
 
+function M.should_find_terminal(asserts)
+	local bufs = vim.api.nvim_list_bufs()
+
+    local found = false
+	for _, buf_id in ipairs(bufs) do
+		if not vim.api.nvim_buf_is_valid(buf_id) then
+			goto continue
+		end
+		if buf_id == asserts.not_including then
+			goto continue
+		end
+		if vim.api.nvim_get_option_value("buftype", { buf = buf_id }) ~= "terminal" then
+			goto continue
+		end
+		if asserts.preloaded and not pcall(vim.api.nvim_buf_get_var, buf_id, "preloaded") then
+            goto continue
+		end
+
+        found = true
+		::continue::
+	end
+
+    if found then
+        return
+    end
+	assert(false, "Should have found a buffer that matches asserts but didnt: " .. vim.inspect(asserts))
+end
+
 function M.find_term_buffer(term_buf_to_ignore)
 	local bufs = vim.api.nvim_list_bufs()
 	for _, buf in ipairs(bufs) do
