@@ -5,21 +5,8 @@ local eq = assert.are.same
 M.term_opt_spy = {}
 M.notify_spy = nil
 
-function M.find_all_buffers()
-	local bufs = vim.api.nvim_list_bufs()
-	local buf_map = {}
-	for _, buf in ipairs(bufs) do
-		if vim.api.nvim_buf_is_valid(buf) then
-			local buf_info = { id = buf }
-			local buftype = vim.api.nvim_get_option_value("buftype", { buf = buf })
-			buf_info.is_term = buftype == "terminal"
-			local preloaded = pcall(vim.api.nvim_buf_get_var, buf, "preloaded")
-			buf_info.preloaded = preloaded
-
-			table.insert(buf_map, buf_info)
-		end
-	end
-	return buf_map
+function M.should_open_term_at(buf_id, path, message)
+    assert(M.term_opt_spy[buf_id] ~= nil and M.term_opt_spy[buf_id] == path,message)
 end
 
 function M.should_find_terminal(asserts)

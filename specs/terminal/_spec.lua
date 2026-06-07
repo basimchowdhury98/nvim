@@ -23,24 +23,14 @@ describe("Floating terminal", function()
 		local win_id = term.open()
 
 		local buf_id = t.assert_terminal_opened_floating(win_id)
-		assert(
-			t.term_opt_spy[buf_id] ~= nil and t.term_opt_spy[buf_id] == "proj_path",
-			"Should pass the pwd and not a speifix path"
-		)
+        t.should_open_term_at(buf_id, 'proj_path', 'Should pass the pwd and not a speifix path')
         t.should_find_terminal({ not_including = buf_id, preloaded = true })
 	end)
 
-	it("opens window with setup uses a preloaded term", function()
-		local all_bufs_pre = t.find_all_buffers()
-
+	it("setup preloads a terminal", function()
 		term.setup_for_project()
 
-        local all_bufs_post = t.find_all_buffers()
-        eq(#all_bufs_post, #all_bufs_pre + 1, 'Should be one more buf after setup')
-		local term_buf_id = t.find_term_buffer()
-		assert(term_buf_id ~= nil, "There should be a term buffer now")
-		local preloaded = pcall(vim.api.nvim_buf_get_var, term_buf_id, "preloaded")
-		eq(preloaded, true, "It should be a preloaded term")
+        t.should_find_terminal({ preloaded = true })
 	end)
 
 	it("processes opens idempotently", function()
@@ -52,7 +42,7 @@ describe("Floating terminal", function()
 		local buf_id = t.assert_terminal_opened_floating(win_id)
 		local win_count_after = #vim.api.nvim_list_wins()
 		eq(win_count_after, win_count_before + 1, "Only one new window should have opened")
-		t.assert_another_preloaded_ignoring(buf_id)
+        t.should_find_terminal({ not_including = buf_id, preloaded = true })
 	end)
 
 	it("opens new terminal in new project", function()
