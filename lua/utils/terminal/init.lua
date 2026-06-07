@@ -464,6 +464,10 @@ function M.snap()
 	return state.win_id
 end
 
+function M.__test_attach_term__(term)
+    attach_term(term)
+end
+
 vim.api.nvim_create_autocmd('VimResized', {
 	callback = function()
 		if not window_is_open() then
