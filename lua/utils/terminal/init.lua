@@ -464,8 +464,9 @@ function M.snap()
 	return state.win_id
 end
 
-function M.__test_attach_term__(term)
-    attach_term(term)
+function M.__test_set_state(pstate, pproj_terms)
+    state = pstate
+    proj_terms = pproj_terms
 end
 
 vim.api.nvim_create_autocmd('VimResized', {

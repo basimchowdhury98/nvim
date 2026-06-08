@@ -49,8 +49,32 @@ function M.arrange_terminals(arrange, sut)
         term.term_job_id = vim.fn.termopen(vim.o.shell, { cwd = arrange.proj })
     end)
 
-    sut.__test_attach_term__(term)
-    return buf_id
+    local proj_terms = { [arrange.proj] = { term } }
+    local state = {
+        win_id = nil,
+        proj_current_term = {},
+    }
+
+    if arrange.open_win then
+        local win_opts = {
+            relative = 'editor',
+            width = 1,
+            height = 1,
+            row = 1,
+            col = 1,
+            style = 'minimal',
+            title_pos = 'center',
+            title = "test"
+        }
+        local win_id = vim.api.nvim_open_win(buf_id, true, win_opts)
+        state = {
+            win_id = win_id,
+            proj_current_term = { [arrange.proj] = term }
+        }
+    end
+
+    sut.__test_set_state(state, proj_terms)
+    return { buf_id, state.win_id }
 end
 
 function M.find_term_buffer(term_buf_to_ignore)

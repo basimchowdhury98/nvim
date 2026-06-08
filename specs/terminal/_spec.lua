@@ -46,19 +46,18 @@ describe("Floating terminal", function()
 	end)
 
 	it("opens new terminal in new project", function()
-        local buf_id_proj1 = t.arrange_terminals({ proj = test_proj }, term)
+        local arranged = t.arrange_terminals({ proj = test_proj }, term)
 
 		vim.fn.chdir(test_proj_2)
 		local win_id = term.open()
-		local buf_id_proj2 = t.assert_terminal_opened_floating(win_id)
 
+		local buf_id_proj2 = t.assert_terminal_opened_floating(win_id)
         assert(win_id ~= nil, "Window should open")
-		assert(buf_id_proj1 ~= buf_id_proj2, "Same buffer shouldnt be used for both projects")
+		assert(arranged.buf_id ~= buf_id_proj2, "Same buffer shouldnt be used for both projects")
 	end)
 
 	it("snap terminal snaps to the botright", function()
-		local win_id = term.open()
-		t.assert_terminal_opened_floating(win_id)
+        t.arrange_terminals({ open_win = true, proj = test_proj }, term)
 
 		local snapped_win_id = term.snap()
 
