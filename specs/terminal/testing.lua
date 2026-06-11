@@ -37,7 +37,7 @@ function M.should_find_terminal(asserts)
     assert(false, "Should have found a buffer that matches asserts but didnt: " .. vim.inspect(asserts))
 end
 
-function M.arrange_terminals(arrange, sut)
+function M.arrange_terminals(sut, arrange)
     local buf_id = vim.api.nvim_create_buf(false, true)
     vim.bo[buf_id].bufhidden = 'hide'
     vim.bo[buf_id].swapfile = false
@@ -55,7 +55,7 @@ function M.arrange_terminals(arrange, sut)
         proj_current_term = {},
     }
 
-    if arrange.open_win then
+    if arrange.open_win == 'floating' then
         local win_opts = {
             relative = 'editor',
             width = 1,
@@ -69,12 +69,23 @@ function M.arrange_terminals(arrange, sut)
         local win_id = vim.api.nvim_open_win(buf_id, true, win_opts)
         state = {
             win_id = win_id,
-            proj_current_term = { [arrange.proj] = term }
         }
     end
+    if arrange.open_win == 'snapped' then
+        local orig_win = vim.api.nvim_get_current_win()
+        vim.cmd('botright vsplit')
+        local split_win_id = vim.api.nvim_get_current_win()
+        vim.api.nvim_win_set_buf(split_win_id, buf_id)
+        vim.api.nvim_set_current_win(orig_win)
+
+        state = {
+            win_id = split_win_id,
+        }
+    end
+    state.proj_current_term = { [arrange.proj] = term }
 
     sut.__test_set_state(state, proj_terms)
-    return { buf_id, state.win_id }
+    return { buf_id = buf_id, win_id = state.win_id }
 end
 
 function M.find_term_buffer(term_buf_to_ignore)
