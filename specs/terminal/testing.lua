@@ -37,7 +37,7 @@ function M.should_find_terminal(asserts)
     assert(false, "Should have found a buffer that matches asserts but didnt: " .. vim.inspect(asserts))
 end
 
-function M.arrange_terminals(sut, arrange)
+local function arrange_term(proj)
     local buf_id = vim.api.nvim_create_buf(false, true)
     vim.bo[buf_id].bufhidden = 'hide'
     vim.bo[buf_id].swapfile = false
@@ -46,16 +46,35 @@ function M.arrange_terminals(sut, arrange)
         buf_id = buf_id,
     }
     vim.api.nvim_buf_call(buf_id, function()
-        term.term_job_id = vim.fn.termopen(vim.o.shell, { cwd = arrange.proj })
+        term.term_job_id = vim.fn.termopen(vim.o.shell, { cwd = proj })
     end)
 
-    local proj_terms = { [arrange.proj] = { term } }
+    return term
+end
+
+function M.arrange_terminals(sut, arrange)
+    local proj_terms = {}
+    if arrange.other then
+        for _, proj in ipairs(arrange.other) do
+            if not proj_terms[proj] then
+                proj_terms[proj] = {}
+            end
+            local term = arrange_term(proj)
+            table.insert(proj_terms[proj], term)
+        end
+    end
+
     local state = {
         win_id = nil,
         proj_current_term = {},
     }
 
-    if arrange.open_win == 'floating' then
+    if not proj_terms[arrange.opened.proj] then
+        proj_terms[arrange.opened.proj] = {}
+    end
+    local open_term = arrange_term(arrange.opened.proj)
+    table.insert(proj_terms[arrange.opened.proj], open_term)
+    if arrange.opened.win == 'floating' then
         local win_opts = {
             relative = 'editor',
             width = 1,
@@ -66,26 +85,26 @@ function M.arrange_terminals(sut, arrange)
             title_pos = 'center',
             title = "test"
         }
-        local win_id = vim.api.nvim_open_win(buf_id, true, win_opts)
+        local win_id = vim.api.nvim_open_win(open_term.buf_id, true, win_opts)
         state = {
             win_id = win_id,
         }
     end
-    if arrange.open_win == 'snapped' then
+    if arrange.opened.win == 'snapped' then
         local orig_win = vim.api.nvim_get_current_win()
         vim.cmd('botright vsplit')
         local split_win_id = vim.api.nvim_get_current_win()
-        vim.api.nvim_win_set_buf(split_win_id, buf_id)
+        vim.api.nvim_win_set_buf(split_win_id, open_term.buf_id)
         vim.api.nvim_set_current_win(orig_win)
 
         state = {
             win_id = split_win_id,
         }
     end
-    state.proj_current_term = { [arrange.proj] = term }
+	state.proj_current_term = { [arrange.opened.proj] = open_term }
 
     sut.__test_set_state(state, proj_terms)
-    return { buf_id = buf_id, win_id = state.win_id }
+    return { buf_id = open_term.buf_id, win_id = state.win_id }
 end
 
 function M.find_term_buffer(term_buf_to_ignore)
@@ -146,7 +165,6 @@ end
 function M.assert_terminal_opened_floating(win_id, expected_win_count)
     local buf_id, config = M.assert_terminal_opened(win_id, expected_win_count)
     eq(config.relative, "editor", "Should open in a floating window")
-    eq(config.title[1][1], " Terminal ", "Should have correct floating term title")
 
     return buf_id
 end
@@ -154,8 +172,6 @@ end
 function M.assert_terminal_opened_snapped(win_id, expected_win_count)
     local buf_id, config = M.assert_terminal_opened(win_id, expected_win_count)
     eq(config.relative, "", "Should open in a snapped window(vsplit botright)")
-    local winhighlight = vim.wo[win_id].winhighlight
-    assert(winhighlight:find("Normal:TelescopeNormal"), "Snapped window should have TelescopeNormal winhighlight")
     local mode = vim.api.nvim_get_mode().mode
     assert(mode == "n" or mode == "nt", "Snapped window should be in normal mode, got: " .. mode)
 

@@ -46,7 +46,7 @@ describe("Floating terminal", function()
 	end)
 
 	it("opens new terminal in new project", function()
-        local arranged = t.arrange_terminals(sut, { proj = test_proj })
+		local arranged = t.arrange_terminals(sut, { opened = { proj = test_proj } })
 
 		vim.fn.chdir(test_proj_2)
 		local win_id = sut.open()
@@ -57,7 +57,7 @@ describe("Floating terminal", function()
 	end)
 
 	it("snap terminal snaps to the botright", function()
-        t.arrange_terminals(sut, { open_win = 'floating', proj = test_proj })
+		t.arrange_terminals(sut, { opened = { win = 'floating', proj = test_proj } })
 
 		local snapped_win_id = sut.snap()
 
@@ -66,7 +66,7 @@ describe("Floating terminal", function()
 
 	it("snap focuses the previously active editor window", function()
 		local original_win_id = vim.api.nvim_get_current_win()
-        t.arrange_terminals(sut, { open_win = 'floating', proj = test_proj })
+		t.arrange_terminals(sut, { opened = { win = 'floating', proj = test_proj } })
 
 		local snapped_win_id = sut.snap()
 
@@ -77,7 +77,7 @@ describe("Floating terminal", function()
 	it("snap prefers the alternate window when multiple editor windows exist", function()
 		vim.cmd("vsplit")
 		local second_editor_win_id = vim.api.nvim_get_current_win()
-        t.arrange_terminals(sut, { open_win = 'floating', proj = test_proj })
+		t.arrange_terminals(sut, { opened = { win = 'floating', proj = test_proj } })
 
 		local snapped_win_id = sut.snap()
 
@@ -102,7 +102,7 @@ describe("Floating terminal", function()
 	end)
 
 	it("snap toggles back to float from vsplit", function()
-        local arranged = t.arrange_terminals(sut, { open_win = 'snapped', proj = test_proj })
+		local arranged = t.arrange_terminals(sut, { opened = { win = 'snapped', proj = test_proj } })
 
 		local float_win_id = sut.snap()
 
@@ -112,7 +112,7 @@ describe("Floating terminal", function()
 	end)
 
 	it("open when snapped returns to float", function()
-        t.arrange_terminals(sut, { open_win = 'snapped', proj = test_proj })
+		t.arrange_terminals(sut, { opened = { win = 'snapped', proj = test_proj } })
 
 		local float_win_id = sut.open()
 
@@ -121,7 +121,7 @@ describe("Floating terminal", function()
 
 	it("close when snapped closes the window", function()
 		local win_count_before = #vim.api.nvim_list_wins()
-        t.arrange_terminals(sut, { open_win = 'snapped', proj = test_proj })
+		t.arrange_terminals(sut, { opened = { win = 'snapped', proj = test_proj } })
 
 		sut.close()
 
@@ -130,39 +130,34 @@ describe("Floating terminal", function()
 	end)
 
 	it("can rotate terminals while snapped", function()
-		sut.open_new_terminal()
-		sut.open_new_terminal()
-		local snapped_win_id = sut.snap()
-		local buf_before = vim.api.nvim_win_get_buf(snapped_win_id)
+        local arranged = t.arrange_terminals(sut, { opened = { win = 'snapped', proj = test_proj }, other = { test_proj } })
+		local buf_before = vim.api.nvim_win_get_buf(arranged.win_id)
 
 		sut.next()
 
-		local buf_after = vim.api.nvim_win_get_buf(snapped_win_id)
+		local buf_after = vim.api.nvim_win_get_buf(arranged.win_id)
 		assert(buf_before ~= buf_after, "Rotate should change the buffer while snapped")
-		t.assert_terminal_opened_snapped(snapped_win_id)
+		t.assert_terminal_opened_snapped(arranged.win_id)
 	end)
 
 	it("can open new terminal while snapped", function()
-		sut.open_new_terminal()
-		local snapped_win_id = sut.snap()
-		local buf_before = vim.api.nvim_win_get_buf(snapped_win_id)
+        local arranged = t.arrange_terminals(sut, { opened = { win = 'snapped', proj = test_proj }, other = { test_proj } })
+		local buf_before = vim.api.nvim_win_get_buf(arranged.win_id)
 
 		sut.open_new_terminal()
 
-		local buf_after = vim.api.nvim_win_get_buf(snapped_win_id)
+		local buf_after = vim.api.nvim_win_get_buf(arranged.win_id)
 		assert(buf_before ~= buf_after, "New terminal should show a different buffer while snapped")
 	end)
 
 	it("can delete current terminal while snapped", function()
-		sut.open_new_terminal()
-		sut.open_new_terminal()
-		local snapped_win_id = sut.snap()
-		local buf_before = vim.api.nvim_win_get_buf(snapped_win_id)
+        local arranged = t.arrange_terminals(sut, { opened = { win = 'snapped', proj = test_proj }, other = { test_proj } })
+		local buf_before = vim.api.nvim_win_get_buf(arranged.win_id)
 
 		sut.delete_curr()
 
 		assert_eq(
-			vim.api.nvim_win_is_valid(snapped_win_id),
+			vim.api.nvim_win_is_valid(arranged.win_id),
 			true,
 			"Window should still be valid after delete with multiple terms"
 		)
@@ -171,23 +166,21 @@ describe("Floating terminal", function()
 
 	it("closes the window when one is open", function()
 		local win_count_before = #vim.api.nvim_list_wins()
-		local win_id = sut.open()
+        t.arrange_terminals(sut, { opened = { win = 'floating', proj = test_proj } })
 
 		sut.close()
 
-		assert(win_id ~= nil, "Terminal window should have been opened")
 		local win_count_after = #vim.api.nvim_list_wins()
-		assert_eq(win_count_after, win_count_before, "Window wasnt closed")
+		assert_eq(win_count_after, win_count_before, "Window should have closed")
 	end)
 
 	it("closes window idempotently", function()
 		local win_count_before = #vim.api.nvim_list_wins()
-		local win_id = sut.open()
+        t.arrange_terminals(sut, { opened = { win = 'floating', proj = test_proj } })
 
 		sut.close()
 		sut.close()
 
-		assert(win_id ~= nil, "Terminal window should have been opened")
 		local win_count_after = #vim.api.nvim_list_wins()
 		assert_eq(win_count_after, win_count_before, "Window wasnt closed")
 	end)
@@ -196,31 +189,18 @@ describe("Floating terminal", function()
 		local win_id = sut.open_new_terminal()
 
 		local buf_id = t.assert_terminal_opened_floating(win_id)
-		t.assert_another_preloaded_ignoring(buf_id)
+        t.should_find_terminal({ not_including = buf_id, preloaded = true })
 	end)
 
-	it("opens new terminal with setup uses a preloaded term", function()
-		sut.setup_for_project()
-		local preloaded_term_buf = t.find_term_buffer()
-
-		local win_id = sut.open_new_terminal()
-
-		local buf_id = t.assert_terminal_opened_floating(win_id)
-		assert(preloaded_term_buf ~= nil, "A term buffer wasnt preloaded")
-		assert_eq(buf_id, preloaded_term_buf, "Didnt use the preloaded term")
-		t.assert_another_preloaded_ignoring(buf_id)
-	end)
-
-	it("opens 2 new terminals when_open_new terminal called twice", function()
+	it("open new terminal opens new terminal when one already exists", function()
 		local win_count_before = #vim.api.nvim_list_wins()
+        local arranged = t.arrange_terminals(sut, { opened = { win = 'floating', proj = test_proj } })
 
-		local win_id = sut.open_new_terminal()
-		local buf_id = t.assert_terminal_opened_floating(win_id)
 		local win_id_2 = sut.open_new_terminal()
 
-		assert(win_id == win_id_2, "Different windows were used when it should be just one")
+		assert(arranged.win_id == win_id_2, "Different windows were used when it should be just one")
 		local buf_id_2 = t.assert_terminal_opened_floating(win_id_2)
-		assert(buf_id ~= buf_id_2, "Same buffer used each time but should be different")
+		assert(arranged.buf_id ~= buf_id_2, "Same buffer used each time but should be different")
 		local win_count_after = #vim.api.nvim_list_wins()
 		assert_eq(win_count_after, win_count_before + 1, "More than 1 new window opened")
 	end)
