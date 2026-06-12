@@ -13,10 +13,9 @@ describe("Floating terminal", function()
 	t.spy_on_notify()
 
 	before_each(function()
-		t.close_extra_windows()
+		t.reset()
 		sut.kill()
 		vim.fn.chdir(test_proj)
-		t.reset_spies()
 	end)
 
 	it("opens the terminal without setup", function()
@@ -206,90 +205,81 @@ describe("Floating terminal", function()
 	end)
 
 	it("can rotate to the prev terminal", function()
-		local win_id = sut.open_new_terminal()
-		local first_buf_id = vim.api.nvim_win_get_buf(win_id)
-		sut.open_new_terminal()
-		local second_buf_id = vim.api.nvim_win_get_buf(win_id)
+		local arranged = t.arrange_terminals(sut, { opened = { win = 'floating', proj = test_proj }, other = { test_proj } })
+		local first_buf_id = arranged.buf_id
+		local win_id = arranged.win_id
 
 		sut.prev()
 
-		assert(first_buf_id ~= second_buf_id, "Two terminals should have different buffers")
 		local curr_buf_id = vim.api.nvim_win_get_buf(win_id)
-		assert_eq(curr_buf_id, first_buf_id, "Prev didnt go back to first term")
+		assert(curr_buf_id ~= first_buf_id, "Prev didnt go back to the previous term")
 	end)
 
 	it("can rotate to the last terminal if preving from first terminal", function()
-		local win_id = sut.open_new_terminal()
-		local first_buf_id = vim.api.nvim_win_get_buf(win_id)
-		sut.open_new_terminal()
-		local second_buf_id = vim.api.nvim_win_get_buf(win_id)
+		local arranged = t.arrange_terminals(sut, { opened = { win = 'floating', proj = test_proj }, other = { test_proj } })
+		local first_buf_id = arranged.buf_id
+		local win_id = arranged.win_id
 
-		sut.prev() --puts win on first term
+		sut.prev()
 		sut.prev()
 
-		assert(first_buf_id ~= second_buf_id, "Two terminals should have different buffers")
 		local curr_buf_id = vim.api.nvim_win_get_buf(win_id)
-		assert_eq(curr_buf_id, second_buf_id, "Prev didnt wrap around to the last buffer")
+		assert_eq(curr_buf_id, first_buf_id, "Prev didnt wrap around to the last buffer")
 	end)
 
 	it("can rotate to the next terminal", function()
-		local win_id = sut.open_new_terminal()
-		local first_buf_id = vim.api.nvim_win_get_buf(win_id)
-		sut.open_new_terminal()
-		local second_buf_id = vim.api.nvim_win_get_buf(win_id)
+		local arranged = t.arrange_terminals(sut, { opened = { win = 'floating', proj = test_proj }, other = { test_proj } })
+		local first_buf_id = arranged.buf_id
+		local win_id = arranged.win_id
 
-		sut.prev() -- to set the term back to first
 		sut.next()
 
-		assert(first_buf_id ~= second_buf_id, "Two terminals should have different buffers")
 		local curr_buf_id = vim.api.nvim_win_get_buf(win_id)
-		assert_eq(curr_buf_id, second_buf_id, "Next didnt go to the second buffer")
+		assert(curr_buf_id ~= first_buf_id, "Next didnt go to the next buffer")
 	end)
 
 	it("can rotate to the first terminal when next at the last terminal", function()
-		local win_id = sut.open_new_terminal()
-		local first_buf_id = vim.api.nvim_win_get_buf(win_id)
-		sut.open_new_terminal()
-		local second_buf_id = vim.api.nvim_win_get_buf(win_id)
+		local arranged = t.arrange_terminals(sut, { opened = { win = 'floating', proj = test_proj }, other = { test_proj } })
+		local first_buf_id = arranged.buf_id
+		local win_id = arranged.win_id
 
 		sut.next()
+		sut.next()
 
-		assert(first_buf_id ~= second_buf_id, "Two terminals should have different buffers")
 		local curr_buf_id = vim.api.nvim_win_get_buf(win_id)
 		assert_eq(curr_buf_id, first_buf_id, "After next win at the last terminal it wraps back around to first")
 	end)
 
 	it("only rotates between project terminals", function()
-		local first_proj_win = sut.open()
-		local first_proj_buf_id = vim.api.nvim_win_get_buf(first_proj_win)
-		sut.close()
 		vim.fn.chdir(test_proj_2)
-		local win_id = sut.open_new_terminal()
-		sut.open_new_terminal()
+		local second_proj = t.arrange_terminals(sut, {
+			opened = { win = 'floating', proj = test_proj_2 },
+			other = { test_proj, test_proj_2 },
+		})
+		local win_id = second_proj.win_id
 
 		local curr_buf_id = vim.api.nvim_win_get_buf(win_id)
-		assert(curr_buf_id ~= first_proj_buf_id, "Initial term should not be from proj 1")
+		t.should_open_term_at(curr_buf_id, test_proj_2, "Initial term should not be from proj 1")
 		sut.next()
 		curr_buf_id = vim.api.nvim_win_get_buf(win_id)
-		assert(curr_buf_id ~= first_proj_buf_id, "After next(1) should not be from proj 1")
+		t.should_open_term_at(curr_buf_id, test_proj_2, "After next(1) should not be from proj 1")
 		sut.next()
 		curr_buf_id = vim.api.nvim_win_get_buf(win_id)
-		assert(curr_buf_id ~= first_proj_buf_id, "After next(2) should not be from proj 1")
+		t.should_open_term_at(curr_buf_id, test_proj_2, "After next(2) should not be from proj 1")
 		sut.prev()
 		curr_buf_id = vim.api.nvim_win_get_buf(win_id)
-		assert(curr_buf_id ~= first_proj_buf_id, "After prev(1) should not be from proj 1")
+		t.should_open_term_at(curr_buf_id, test_proj_2, "After prev(1) should not be from proj 1")
 		sut.prev()
 		curr_buf_id = vim.api.nvim_win_get_buf(win_id)
-		assert(curr_buf_id ~= first_proj_buf_id, "After prev(2) should not be from proj 1")
+		t.should_open_term_at(curr_buf_id, test_proj_2, "After prev(2) should not be from proj 1")
 	end)
 
 	it("kills terminals", function()
 		local initial_bufs = #vim.api.nvim_list_bufs()
-		sut.open_new_terminal()
-		sut.open_new_terminal()
-		vim.fn.chdir(test_proj_2)
-		sut.open_new_terminal()
-		sut.open_new_terminal()
+		t.arrange_terminals(sut, {
+			opened = { win = 'floating', proj = test_proj },
+			other = { test_proj, test_proj_2, test_proj_2 },
+		})
 		local bufs_after_opens = #vim.api.nvim_list_bufs()
 
 		sut.kill()
@@ -317,24 +307,32 @@ describe("Floating terminal", function()
 		local win_id = sut.open_at_path(outside_proj_path)
 
 		assert(win_id == nil, "A window was opened when it shouldnt")
-		assert(t.notify_spy, string.format("Path '%s' is not within project '%s'", outside_proj_path, test_proj))
+		local normalized_path = vim.fs.normalize(vim.fn.fnamemodify(outside_proj_path, ':p'))
+		local normalized_proj = vim.fs.normalize(vim.fn.fnamemodify(test_proj, ':p'))
+		if not vim.endswith(normalized_proj, '/') then
+			normalized_proj = normalized_proj .. '/'
+		end
+		assert_eq(
+			t.notify_spy,
+			string.format('Path "%s" is not within project "%s"', normalized_path, normalized_proj),
+			"Incorrect notification was sent"
+		)
 	end)
 
 	it("deletes curr terminal and closes the window if one term is open", function()
 		local win_count_start = #vim.api.nvim_list_wins()
-		local win_id = sut.open_new_terminal()
+		local arranged = t.arrange_terminals(sut, { opened = { win = 'floating', proj = test_proj } })
 
 		sut.delete_curr()
 
-		assert_eq(vim.api.nvim_win_is_valid(win_id), false, "The opened buf didnt delete")
+		assert_eq(vim.api.nvim_win_is_valid(arranged.win_id), false, "The opened win didnt close")
 		local win_count_after = #vim.api.nvim_list_wins()
 		assert_eq(win_count_after, win_count_start, "The window wasnt closed")
 	end)
 
 	it("deletes curr terminal and attaches next term if multiple terms are open", function()
-		local win_id = sut.open_new_terminal()
-		local _ = sut.open_new_terminal()
-		sut.prev() -- Going back to the first term
+		local arranged = t.arrange_terminals(sut, { opened = { win = 'floating', proj = test_proj }, other = { test_proj } })
+		local win_id = arranged.win_id
 		local curr_term_buf_id = vim.api.nvim_win_get_buf(win_id)
 
 		sut.delete_curr()

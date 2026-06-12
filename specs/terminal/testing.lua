@@ -1,3 +1,4 @@
+---@diagnostic disable: duplicate-set-field
 local M = {}
 
 local eq = assert.are.same
@@ -133,7 +134,7 @@ function M.setup_path(path)
     end
 end
 
-function M.close_extra_windows()
+function M.reset()
     local wins = vim.api.nvim_list_wins()
     local current_win = vim.api.nvim_get_current_win()
     if not vim.api.nvim_win_is_valid(current_win) then
@@ -144,6 +145,11 @@ function M.close_extra_windows()
             pcall(vim.api.nvim_win_close, win, true)
         end
     end
+
+    for buf in pairs(M.term_opt_spy) do
+        M.term_opt_spy[buf] = nil
+    end
+    M.notify_spy = nil
 end
 
 function M.assert_terminal_opened(win_id, expected_win_count)
@@ -204,13 +210,6 @@ function M.spy_on_notify()
     vim.notify = function(msg, _)
         M.notify_spy = msg
     end
-end
-
-function M.reset_spies()
-    for buf in pairs(M.term_opt_spy) do
-        M.term_opt_spy[buf] = nil
-    end
-    M.notify_spy = nil
 end
 
 return M
