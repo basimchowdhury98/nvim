@@ -4,6 +4,7 @@ return {
 		branch = "main",
 		init = function()
 			local ensureInstalled = {
+				"bash",
 				"c",
 				"lua",
 				"vim",
@@ -16,7 +17,7 @@ return {
 				"c_sharp",
 				"angular",
 				"go",
-                "python"
+				"python",
 			}
 			local alreadyInstalled = require("nvim-treesitter.config").get_installed()
 			local parsersToInstall = vim.iter(ensureInstalled)

@@ -91,6 +91,7 @@ return {
 					"lua_ls",
 					"ts_ls",
 					"basedpyright",
+                    "bashls"
 				},
 			})
 
