@@ -1,11 +1,61 @@
+local tools = {
+	luacheck = {},
+	shellcheck = {},
+}
+local servers = {
+	lua_ls = {
+		on_init = function(client)
+			client.server_capabilities.documentFormattingProvider = false
+		end,
+		settings = {
+			Lua = {
+				format = { enable = false },
+			},
+		},
+	},
+	bashls = {
+		settings = {
+			bashIde = {
+				shellcheckPath = vim.fn.stdpath("data") .. "/mason/bin/shellcheck",
+			},
+		},
+	},
+	basedpyright = {
+		settings = {
+			basedpyright = {
+				analysis = {
+					diagnosticMode = "workspace",
+				},
+			},
+		},
+	},
+	angularls = {},
+	ts_ls = {},
+	roslyn = {
+		cmd = {
+			vim.fs.joinpath(vim.fn.stdpath("data"), "mason", "bin", "roslyn"),
+			"--stdio",
+		},
+	},
+}
+local manual_servers = {
+	clangd = {
+		cmd = {
+			"clangd",
+			"--fallback-style=webkit",
+		},
+		filetypes = { "c", "cpp" },
+	},
+}
 return {
 	{
 		"neovim/nvim-lspconfig",
-		event = "VeryLazy",
+		event = "VimEnter",
 		dependencies = {
 			"mason-org/mason-lspconfig.nvim",
 			"L3MON4D3/LuaSnip",
 			"mason-org/mason.nvim",
+            "WhoIsSethDaniel/mason-tool-installer.nvim",
 			"rafamadriz/friendly-snippets", --premade snippets
 			{
 				"saghen/blink.cmp",
@@ -25,7 +75,7 @@ return {
 						default = { "lsp", "lazydev", "path", "snippets", "buffer" },
 						providers = {
 							lazydev = { module = "lazydev.integrations.blink", score_offset = 100 },
-                            lsp = { async = true, fallbacks = {} }
+							lsp = { async = true, fallbacks = {} },
 						},
 					},
 					snippets = { preset = "luasnip" },
@@ -85,34 +135,22 @@ return {
 					"github:Crashdummyy/mason-registry",
 				},
 			})
-			require("mason-lspconfig").setup({
-				ensure_installed = {
-					"angularls",
-					"lua_ls",
-					"ts_ls",
-					"basedpyright",
-                    "bashls"
-				},
-			})
+            local ensure_installed = vim.tbl_keys(servers or {})
+            vim.list_extend(ensure_installed, vim.tbl_keys(tools or {}))
 
-			-- Enable servers not managed by mason
-			vim.lsp.config.clangd = {
-				cmd = {
-					"clangd",
-					"--fallback-style=webkit",
-				},
-				filetypes = { "c", "cpp" },
-			}
-			vim.lsp.enable("clangd")
-			vim.lsp.config.basedpyright = {
-				settings = {
-					basedpyright = {
-						analysis = {
-							diagnosticMode = "workspace",
-						},
-					},
-				},
-			}
+            require('mason-tool-installer').setup { ensure_installed = ensure_installed }
+
+            for name, config in pairs(servers) do
+                if name == 'roslyn' then goto continue end
+                vim.lsp.config(name, config)
+                vim.lsp.enable(name)
+                ::continue::
+            end
+            for name, config in pairs(manual_servers) do
+                vim.lsp.config(name, config)
+                vim.lsp.enable(name)
+            end
+
 			local telescope = require("telescope.builtin")
 			vim.api.nvim_create_autocmd("LspAttach", {
 				group = vim.api.nvim_create_augroup("lsp-keymaps", { clear = true }),
@@ -163,7 +201,7 @@ return {
 					-- Starting semantics token so treesitter can color better
 					local client = vim.lsp.get_client_by_id(event.data.client_id)
 					if client and client.server_capabilities.semanticTokensProvider then
-                        vim.lsp.semantic_tokens.enable(true, { bufnr = event.buf })
+						vim.lsp.semantic_tokens.enable(true, { bufnr = event.buf })
 					end
 
 					if
@@ -202,6 +240,7 @@ return {
 		"seblyng/roslyn.nvim",
 		config = function()
 			require("plugins.lsp_custom.fidget_spinner"):init()
+			vim.lsp.config("roslyn", servers.roslyn)
 			require("roslyn").setup({
 				filewatching = "off",
 			})
