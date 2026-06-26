@@ -28,8 +28,8 @@ local servers = {
             "--stdio",
         },
         cmd_env = {
-            DOTNET_ROOT = vim.env.DOTNET_ROOT or vim.fn.fnamemodify(vim.fn.exepath("dotnet"), ":h"),
-            DOTNET_ROOT_ARM64 = vim.env.DOTNET_ROOT_ARM64 or vim.fn.fnamemodify(vim.fn.exepath("dotnet"), ":h"),
+            DOTNET_ROOT = vim.env.DOTNET_ROOT or vim.fn.fnamemodify(vim.fn.resolve(vim.fn.exepath("dotnet")), ":h"),
+            DOTNET_ROOT_ARM64 = vim.env.DOTNET_ROOT_ARM64 or vim.fn.fnamemodify(vim.fn.resolve(vim.fn.exepath("dotnet")), ":h"),
         },
     },
 }
