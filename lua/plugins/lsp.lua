@@ -1,261 +1,244 @@
 local tools = {
-	luacheck = {},
-	shellcheck = {},
+    luacheck = {},
+    shellcheck = {},
 }
 local servers = {
-	lua_ls = {
-		on_init = function(client)
-			client.server_capabilities.documentFormattingProvider = false
-		end,
-		settings = {
-			Lua = {
-				format = { enable = false },
-			},
-		},
-	},
-	bashls = {
-		settings = {
-			bashIde = {
-				shellcheckPath = vim.fn.stdpath("data") .. "/mason/bin/shellcheck",
-			},
-		},
-	},
-	basedpyright = {
-		settings = {
-			basedpyright = {
-				analysis = {
-					diagnosticMode = "workspace",
-				},
-			},
-		},
-	},
-	angularls = {},
-	ts_ls = {},
-	roslyn = {
-		cmd = {
-			vim.fs.joinpath(vim.fn.stdpath("data"), "mason", "bin", "roslyn"),
-			"--stdio",
-		},
-	},
+    lua_ls = {},
+    bashls = {
+        settings = {
+            bashIde = {
+                shellcheckPath = vim.fn.stdpath("data") .. "/mason/bin/shellcheck",
+            },
+        },
+    },
+    basedpyright = {
+        settings = {
+            basedpyright = {
+                analysis = {
+                    diagnosticMode = "workspace",
+                },
+            },
+        },
+    },
+    angularls = {},
+    ts_ls = {},
+    roslyn_ls = {
+        cmd = {
+            vim.fs.joinpath(vim.fn.stdpath("data"), "mason", "bin", "roslyn-language-server"),
+            "--stdio",
+        },
+        cmd_env = {
+            DOTNET_ROOT = vim.env.DOTNET_ROOT or vim.fn.fnamemodify(vim.fn.exepath("dotnet"), ":h"),
+            DOTNET_ROOT_ARM64 = vim.env.DOTNET_ROOT_ARM64 or vim.fn.fnamemodify(vim.fn.exepath("dotnet"), ":h"),
+        },
+    },
 }
 local manual_servers = {
-	clangd = {
-		cmd = {
-			"clangd",
-			"--fallback-style=webkit",
-		},
-		filetypes = { "c", "cpp" },
-	},
+    clangd = {
+        cmd = {
+            "clangd",
+            "--fallback-style=webkit",
+        },
+        filetypes = { "c", "cpp" },
+    },
 }
 return {
-	{
-		"neovim/nvim-lspconfig",
-		event = "VimEnter",
-		dependencies = {
-			"mason-org/mason-lspconfig.nvim",
-			"L3MON4D3/LuaSnip",
-			"mason-org/mason.nvim",
+    {
+        "neovim/nvim-lspconfig",
+        event = "VimEnter",
+        dependencies = {
+            "mason-org/mason-lspconfig.nvim",
+            "L3MON4D3/LuaSnip",
+            "mason-org/mason.nvim",
             "WhoIsSethDaniel/mason-tool-installer.nvim",
-			"rafamadriz/friendly-snippets", --premade snippets
-			{
-				"saghen/blink.cmp",
-				dependencies = {
-					"saghen/blink.lib",
-				},
-				opts = {
-					keymap = {
-						preset = "default",
-						["<C-k>"] = false,
-						["<C-s>"] = { "show_signature", "hide_signature" },
-					},
-					appearance = {
-						nerd_font_variant = "mono",
-					},
-					sources = {
-						default = { "lsp", "lazydev", "path", "snippets", "buffer" },
-						providers = {
-							lazydev = { module = "lazydev.integrations.blink", score_offset = 100 },
-							lsp = { async = true, fallbacks = {} },
-						},
-					},
-					snippets = { preset = "luasnip" },
-					signature = {
-						enabled = true,
-						trigger = {
-							enabled = true,
-							show_on_trigger_character = true,
-							show_on_insert_on_trigger_character = true,
-							show_on_accept = true,
-						},
-						window = {
-							border = "rounded",
-							max_width = 100,
-							max_height = 10,
-						},
-					},
-					fuzzy = { implementation = "lua" },
-				},
-			},
-		},
-		config = function()
-			local map = vim.keymap.set
+            "rafamadriz/friendly-snippets", --premade snippets
+            {
+                "saghen/blink.cmp",
+                dependencies = {
+                    "saghen/blink.lib",
+                },
+                opts = {
+                    keymap = {
+                        preset = "default",
+                        ["<C-k>"] = false,
+                        ["<C-s>"] = { "show_signature", "hide_signature" },
+                    },
+                    appearance = {
+                        nerd_font_variant = "mono",
+                    },
+                    sources = {
+                        default = { "lsp", "lazydev", "path", "snippets", "buffer" },
+                        providers = {
+                            lazydev = { module = "lazydev.integrations.blink", score_offset = 100 },
+                            lsp = { async = true, fallbacks = {} },
+                        },
+                    },
+                    snippets = { preset = "luasnip" },
+                    signature = {
+                        enabled = true,
+                        trigger = {
+                            enabled = true,
+                            show_on_trigger_character = true,
+                            show_on_insert_on_trigger_character = true,
+                            show_on_accept = true,
+                        },
+                        window = {
+                            border = "rounded",
+                            max_width = 100,
+                            max_height = 10,
+                        },
+                    },
+                    fuzzy = { implementation = "lua" },
+                },
+            },
+        },
+        config = function()
+            local map = vim.keymap.set
 
-			local ls = require("luasnip")
-			ls.config.set_config({
-				history = true,
-				updateevents = "InsertLeave",
-			})
+            local ls = require("luasnip")
+            ls.config.set_config({
+                history = true,
+                updateevents = "InsertLeave",
+            })
 
-			map({ "i", "s" }, "<C-k>", function()
-				if ls.expand_or_jumpable() then
-					ls.expand_or_jump()
-				end
-			end, { silent = true, desc = "Snips - [] Jump to next node" })
-			map({ "i", "s" }, "<C-j>", function()
-				if ls.jumpable(-1) then
-					ls.jump(-1)
-				end
-			end, { silent = true, desc = "Snips - [] Jump back to previous node" })
-			map({ "i", "s" }, "<C-l>", function()
-				if ls.choice_active() then
-					ls.change_choice(1)
-				end
-			end, { silent = true, desc = "[L]ist next choice" })
+            map({ "i", "s" }, "<C-k>", function()
+                if ls.expand_or_jumpable() then
+                    ls.expand_or_jump()
+                end
+            end, { silent = true, desc = "Snips - [] Jump to next node" })
+            map({ "i", "s" }, "<C-j>", function()
+                if ls.jumpable(-1) then
+                    ls.jump(-1)
+                end
+            end, { silent = true, desc = "Snips - [] Jump back to previous node" })
+            map({ "i", "s" }, "<C-l>", function()
+                if ls.choice_active() then
+                    ls.change_choice(1)
+                end
+            end, { silent = true, desc = "[L]ist next choice" })
 
-			require("luasnip.loaders.from_vscode").lazy_load()
-			require("luasnip.loaders.from_lua").lazy_load({ paths = { "./lua/snippets" } })
+            require("luasnip.loaders.from_vscode").lazy_load()
+            require("luasnip.loaders.from_lua").lazy_load({ paths = { "./lua/snippets" } })
 
-			vim.lsp.config("*", {
-				capabilities = require("blink.cmp").get_lsp_capabilities(),
-			})
+            vim.lsp.config("*", {
+                capabilities = require("blink.cmp").get_lsp_capabilities(),
+            })
 
-			require("mason").setup({
-				registries = {
-					"github:mason-org/mason-registry",
-					"github:Crashdummyy/mason-registry",
-				},
-			})
+            require("mason").setup({
+                registries = {
+                    "github:mason-org/mason-registry",
+                    "github:Crashdummyy/mason-registry",
+                },
+            })
             local ensure_installed = vim.tbl_keys(servers or {})
             vim.list_extend(ensure_installed, vim.tbl_keys(tools or {}))
 
             require('mason-tool-installer').setup { ensure_installed = ensure_installed }
 
             for name, config in pairs(servers) do
-                if name == 'roslyn' then goto continue end
                 vim.lsp.config(name, config)
                 vim.lsp.enable(name)
-                ::continue::
             end
             for name, config in pairs(manual_servers) do
                 vim.lsp.config(name, config)
                 vim.lsp.enable(name)
             end
 
-			local telescope = require("telescope.builtin")
-			vim.api.nvim_create_autocmd("LspAttach", {
-				group = vim.api.nvim_create_augroup("lsp-keymaps", { clear = true }),
-				callback = function(event)
-					map("n", "H", vim.lsp.buf.hover, { desc = "Lsp - show hover info", buffer = event.buf })
-					map(
-						"n",
-						"<leader>gd",
-						vim.lsp.buf.definition,
-						{ desc = "Lsp - go to definition", buffer = event.buf }
-					)
-					map(
-						"n",
-						"<leader>gi",
-						telescope.lsp_implementations,
-						{ desc = "Lsp - go to implementation", buffer = event.buf }
-					)
-					map(
-						"n",
-						"<leader>gr",
-						telescope.lsp_references,
-						{ desc = "Lsp - list all references", buffer = event.buf }
-					)
-					map(
-						{ "n", "v" },
-						"<leader>ca",
-						vim.lsp.buf.code_action,
-						{ desc = "Lsp - code actions", buffer = event.buf }
-					)
-					map(
-						{ "n", "v" },
-						"<leader>cf",
-						vim.lsp.buf.format,
-						{ desc = "Lsp - format code in file", buffer = event.buf }
-					)
-					map(
-						{ "n", "v" },
-						"<leader>cr",
-						vim.lsp.buf.rename,
-						{ desc = "Lsp - rename symbol under cursor", buffer = event.buf }
-					)
-				end,
-			})
+            local telescope = require("telescope.builtin")
+            vim.api.nvim_create_autocmd("LspAttach", {
+                group = vim.api.nvim_create_augroup("lsp-keymaps", { clear = true }),
+                callback = function(event)
+                    map("n", "H", vim.lsp.buf.hover, { desc = "Lsp - show hover info", buffer = event.buf })
+                    map(
+                        "n",
+                        "<leader>gd",
+                        vim.lsp.buf.definition,
+                        { desc = "Lsp - go to definition", buffer = event.buf }
+                    )
+                    map(
+                        "n",
+                        "<leader>gi",
+                        telescope.lsp_implementations,
+                        { desc = "Lsp - go to implementation", buffer = event.buf }
+                    )
+                    map(
+                        "n",
+                        "<leader>gr",
+                        telescope.lsp_references,
+                        { desc = "Lsp - list all references", buffer = event.buf }
+                    )
+                    map(
+                        { "n", "v" },
+                        "<leader>ca",
+                        vim.lsp.buf.code_action,
+                        { desc = "Lsp - code actions", buffer = event.buf }
+                    )
+                    map(
+                        { "n", "v" },
+                        "<leader>cf",
+                        vim.lsp.buf.format,
+                        { desc = "Lsp - format code in file", buffer = event.buf }
+                    )
+                    map(
+                        { "n", "v" },
+                        "<leader>cr",
+                        vim.lsp.buf.rename,
+                        { desc = "Lsp - rename symbol under cursor", buffer = event.buf }
+                    )
+                end,
+            })
 
-			vim.api.nvim_create_autocmd("LspAttach", {
-				group = vim.api.nvim_create_augroup("lsp-presentation", { clear = true }),
-				callback = function(event)
-					-- Starting semantics token so treesitter can color better
-					local client = vim.lsp.get_client_by_id(event.data.client_id)
-					if client and client.server_capabilities.semanticTokensProvider then
-						vim.lsp.semantic_tokens.enable(true, { bufnr = event.buf })
-					end
+            vim.api.nvim_create_autocmd("LspAttach", {
+                group = vim.api.nvim_create_augroup("lsp-presentation", { clear = true }),
+                callback = function(event)
+                    -- Starting semantics token so treesitter can color better
+                    local client = vim.lsp.get_client_by_id(event.data.client_id)
+                    if client and client.server_capabilities.semanticTokensProvider then
+                        vim.lsp.semantic_tokens.enable(true, { bufnr = event.buf })
+                    end
 
-					if
-						client
-						and client:supports_method(vim.lsp.protocol.Methods.textDocument_documentHighlight, event.buf)
-					then
-						local highlight_augroup = vim.api.nvim_create_augroup("lsp-highlight", { clear = false })
+                    if
+                        client
+                        and client:supports_method(vim.lsp.protocol.Methods.textDocument_documentHighlight, event.buf)
+                    then
+                        local highlight_augroup = vim.api.nvim_create_augroup("lsp-highlight", { clear = false })
 
-						-- When cursor stops moving: Highlights all instances of the symbol under the cursor
-						-- When cursor moves: Clears the highlighting
-						vim.api.nvim_create_autocmd({ "CursorHold", "CursorHoldI" }, {
-							buffer = event.buf,
-							group = highlight_augroup,
-							callback = vim.lsp.buf.document_highlight,
-						})
-						vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
-							buffer = event.buf,
-							group = highlight_augroup,
-							callback = vim.lsp.buf.clear_references,
-						})
+                        -- When cursor stops moving: Highlights all instances of the symbol under the cursor
+                        -- When cursor moves: Clears the highlighting
+                        vim.api.nvim_create_autocmd({ "CursorHold", "CursorHoldI" }, {
+                            buffer = event.buf,
+                            group = highlight_augroup,
+                            callback = vim.lsp.buf.document_highlight,
+                        })
+                        vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
+                            buffer = event.buf,
+                            group = highlight_augroup,
+                            callback = vim.lsp.buf.clear_references,
+                        })
 
-						-- When LSP detaches: Clears the highlighting
-						vim.api.nvim_create_autocmd("LspDetach", {
-							group = vim.api.nvim_create_augroup("lsp-detach", { clear = true }),
-							callback = function(event2)
-								vim.lsp.buf.clear_references()
-								vim.api.nvim_clear_autocmds({ group = "lsp-highlight", buffer = event2.buf })
-							end,
-						})
-					end
-				end,
-			})
-		end,
-	},
-	{
-		"seblyng/roslyn.nvim",
-		config = function()
-			require("plugins.lsp_custom.fidget_spinner"):init()
-			vim.lsp.config("roslyn", servers.roslyn)
-			require("roslyn").setup({
-				filewatching = "off",
-			})
-		end,
-	},
-	{
-		"folke/lazydev.nvim",
-		ft = "lua",
-		opts = {
-			library = {
-				-- Load luvit types when the `vim.uv` word is found
-				{ path = "${3rd}/luv/library", words = { "vim%.uv" } },
-				{ path = "${3rd}/busted/library", words = { "describe" } },
-				{ path = "${3rd}/luassert/library", words = { "describe" } },
-			},
-		},
-	},
+                        -- When LSP detaches: Clears the highlighting
+                        vim.api.nvim_create_autocmd("LspDetach", {
+                            group = vim.api.nvim_create_augroup("lsp-detach", { clear = true }),
+                            callback = function(event2)
+                                vim.lsp.buf.clear_references()
+                                vim.api.nvim_clear_autocmds({ group = "lsp-highlight", buffer = event2.buf })
+                            end,
+                        })
+                    end
+                end,
+            })
+        end,
+    },
+    {
+        "folke/lazydev.nvim",
+        ft = "lua",
+        opts = {
+            library = {
+                -- Load luvit types when the `vim.uv` word is found
+                { path = "${3rd}/luv/library",      words = { "vim%.uv" } },
+                { path = "${3rd}/busted/library",   words = { "describe" } },
+                { path = "${3rd}/luassert/library", words = { "describe" } },
+            },
+        },
+    },
 }
