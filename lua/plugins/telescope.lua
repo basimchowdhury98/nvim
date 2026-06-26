@@ -75,7 +75,7 @@ return
             local themes = require('telescope.themes')
 
             local map = vim.keymap.set
-            map('n', '<leader>fa', function() builtin.find_files({ hidden = true }) end, { desc = "[F]ind [A]ll files" })
+            map('n', '<leader>fa', builtin.find_files, { desc = "[F]ind [A]ll files" })
             map('n', '<leader>fs', builtin.live_grep, { desc = "[F]ind by [S]earching using using grep" })
             map('n', '<leader>fr', builtin.resume, { desc = "[F]ind [R]esume" })
             map('n', '<leader>fk', builtin.keymaps, { desc = "[F]ind [K]eymaps" })
