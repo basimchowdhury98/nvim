@@ -20,22 +20,14 @@ else
 	vim.opt.shellxquote = ''
 end
 
-local config = {
-	width_ratio = 0.8,
-	height_ratio = 0.8,
-	border = 'rounded',
-	title = ' Terminal ',
-	prompt_title = ' Command ',
-}
-
 local state = {
 	win_id = nil,
 	proj_current_term = {},
 }
 
 local proj_terms = {}
-
 local preloaded_terms = {}
+local view = require('utils.terminal.view')
 
 local map = vim.keymap.set
 local lto = 'FTerm - Open'
@@ -70,7 +62,7 @@ local function get_curr_proj()
 end
 
 local function window_is_open()
-	return state.win_id and vim.api.nvim_win_is_valid(state.win_id)
+	return state.win_id and view.window_is_open(state.win_id)
 end
 
 local function window_is_snapped()
@@ -78,20 +70,7 @@ local function window_is_snapped()
         return false
     end
 
-    local win_conf = vim.api.nvim_win_get_config(state.win_id)
-    if win_conf.relative == 'editor' then
-        return false
-    end
-
-    return true
-end
-
-local function calc_window_dims()
-	local width = math.floor(vim.o.columns * config.width_ratio)
-	local height = math.floor(vim.o.lines * config.height_ratio)
-	local row = math.floor((vim.o.lines - height) / 2)
-	local col = math.floor((vim.o.columns - width) / 2)
-	return { width = width, height = height, row = row, col = col }
+    return view.window_is_snapped(state.win_id)
 end
 
 local function create_terminal_buffer(path)
@@ -133,7 +112,7 @@ local function refresh_window()
 	end
 
 	local curr_proj = get_curr_proj()
-	vim.api.nvim_win_set_buf(state.win_id, state.proj_current_term[curr_proj].buf_id)
+	view.set_win_term(state.win_id, state.proj_current_term[curr_proj].buf_id)
 end
 
 local function open_window()
@@ -142,25 +121,7 @@ local function open_window()
 	end
 
 	local curr_proj = get_curr_proj()
-	local dims = calc_window_dims()
-
-	-- Window options that match Telescope's style
-	local win_opts = {
-		relative = 'editor',
-		width = dims.width,
-		height = dims.height,
-		row = dims.row,
-		col = dims.col,
-		style = 'minimal',
-		border = config.border,
-		title = config.title,
-		title_pos = 'center',
-	}
-	state.win_id = vim.api.nvim_open_win(state.proj_current_term[curr_proj].buf_id, true, win_opts)
-
-	-- Set window options to match Telescope using modern API
-	vim.wo[state.win_id].winhighlight = 'Normal:TelescopeNormal,FloatBorder:TelescopeBorder,Title:TelescopeTitle'
-	vim.cmd('startinsert')
+    state.win_id = view.open_float(state.proj_current_term[curr_proj].buf_id)
 end
 
 local function close_window()
@@ -168,7 +129,7 @@ local function close_window()
 		return
 	end
 
-	vim.api.nvim_win_close(state.win_id, false)
+	view.close_win(state.win_id)
 	state.win_id = nil
 end
 
@@ -249,44 +210,6 @@ local function preload()
 	preloaded_terms[curr_proj] = term
 end
 
-local function get_alternate_window()
-	local alt_winnr = vim.fn.winnr('#')
-	if alt_winnr == 0 then
-		return nil
-	end
-
-	local alt_win_id = vim.fn.win_getid(alt_winnr)
-	if alt_win_id == 0 or not vim.api.nvim_win_is_valid(alt_win_id) then
-		return nil
-	end
-
-	return alt_win_id
-end
-
-local function focus_snap_target(alternate_win_id, prior_wins)
-	local seen = {}
-	local candidates = {}
-
-	if alternate_win_id ~= nil then
-		table.insert(candidates, alternate_win_id)
-	end
-
-	for i = #prior_wins, 1, -1 do
-		table.insert(candidates, prior_wins[i])
-	end
-
-	for _, win_id in ipairs(candidates) do
-		if not seen[win_id]
-			and win_id ~= state.win_id
-			and vim.api.nvim_win_is_valid(win_id)
-		then
-			vim.api.nvim_set_current_win(win_id)
-			return
-		end
-		seen[win_id] = true
-	end
-end
-
 function M.open_new_terminal()
 	local curr_proj = get_curr_proj()
 
@@ -314,22 +237,6 @@ end
 
 function M.setup_for_project()
 	preload()
-end
-
-local function snap_to_vsplit()
-	local prior_wins = vim.api.nvim_list_wins()
-	local alternate_win_id = get_alternate_window()
-    close_window()
-	local curr_proj = get_curr_proj()
-	local buf_id = state.proj_current_term[curr_proj].buf_id
-
-	vim.cmd('botright vsplit')
-	state.win_id = vim.api.nvim_get_current_win()
-	vim.wo[state.win_id].winhighlight = 'Normal:TelescopeNormal'
-	vim.api.nvim_win_set_buf(state.win_id, buf_id)
-
-    vim.cmd('stopinsert')
-	focus_snap_target(alternate_win_id, prior_wins)
 end
 
 function M.open()
@@ -459,7 +366,7 @@ function M.snap()
         open_window()
         return state.win_id
     end
-	snap_to_vsplit()
+    state.win_id = view.snap_to_vsplit(state.win_id)
 
 	return state.win_id
 end
@@ -478,14 +385,7 @@ vim.api.nvim_create_autocmd('VimResized', {
 			return
 		end
 
-		local dims = calc_window_dims()
-		vim.api.nvim_win_set_config(state.win_id, {
-			relative = 'editor',
-			width = dims.width,
-			height = dims.height,
-			row = dims.row,
-			col = dims.col,
-		})
+        view.vim_resized(state.win_id)
 	end,
 })
 
