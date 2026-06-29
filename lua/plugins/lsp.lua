@@ -1,5 +1,4 @@
 local tools = {
-    luacheck = {},
     shellcheck = {},
 }
 local servers = {

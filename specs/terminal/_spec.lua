@@ -191,7 +191,7 @@ describe("Floating terminal", function()
         t.should_find_terminal({ not_including = buf_id, preloaded = true })
 	end)
 
-	it("open new terminal opens new terminal when one already exists", function()
+	it("open_new_terminal opens new terminal when one already exists", function()
 		local win_count_before = #vim.api.nvim_list_wins()
         local arranged = t.arrange_terminals(sut, { opened = { win = 'floating', proj = test_proj } })
 
