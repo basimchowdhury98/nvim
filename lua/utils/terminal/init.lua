@@ -103,6 +103,7 @@ local function attach_term(term)
 	end
 
 	table.insert(terms, term)
+    term.index = #terms
 	state.proj_current_term[curr_proj] = term
 end
 
@@ -112,7 +113,12 @@ local function refresh_window()
 	end
 
 	local curr_proj = get_curr_proj()
-	view.set_win_term(state.win_id, state.proj_current_term[curr_proj].buf_id)
+    local curr_term = state.proj_current_term[curr_proj]
+    local term_pos = {
+        index = curr_term.index,
+        terms_count = #proj_terms[curr_proj]
+    }
+	view.set_win_term(state.win_id, curr_term.buf_id, term_pos)
 end
 
 local function open_window()
@@ -121,7 +127,12 @@ local function open_window()
 	end
 
 	local curr_proj = get_curr_proj()
-    state.win_id = view.open_float(state.proj_current_term[curr_proj].buf_id)
+    local curr_term = state.proj_current_term[curr_proj]
+    local term_pos = {
+        index = curr_term.index,
+        terms_count = #proj_terms[curr_proj]
+    }
+    state.win_id = view.open_float(curr_term.buf_id, term_pos)
 end
 
 local function close_window()
@@ -162,6 +173,7 @@ local function rotate_next()
 		end
 	end
 	state.proj_current_term[proj] = terms[nextTerm]
+	state.proj_current_term[proj].index = nextTerm
 	refresh_window()
 end
 
@@ -195,6 +207,7 @@ local function rotate_prev()
 		end
 	end
 	state.proj_current_term[proj] = terms[nextTerm]
+    state.proj_current_term[proj].index = nextTerm
 	refresh_window()
 end
 
@@ -288,6 +301,8 @@ function M.delete_curr()
 	if curr_term.buf_id and vim.api.nvim_buf_is_valid(curr_term.buf_id) then
 		vim.api.nvim_buf_delete(curr_term.buf_id, { force = true })
 	end
+
+    refresh_window()
 end
 
 function M.kill()

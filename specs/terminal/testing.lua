@@ -75,6 +75,7 @@ function M.arrange_terminals(sut, arrange)
     end
     local open_term = arrange_term(arrange.opened.proj)
     table.insert(proj_terms[arrange.opened.proj], open_term)
+    open_term.index = #proj_terms[arrange.opened.proj]
     if arrange.opened.win == 'floating' then
         local win_opts = {
             relative = 'editor',
@@ -84,8 +85,6 @@ function M.arrange_terminals(sut, arrange)
             col = 1,
             border = 'rounded',
             style = 'minimal',
-            title_pos = 'center',
-            title = " Terminal "
         }
         local win_id = vim.api.nvim_open_win(open_term.buf_id, true, win_opts)
         state = {
@@ -172,10 +171,15 @@ end
 function M.assert_terminal_opened_floating(win_id, expected_win_count)
     local buf_id, config = M.assert_terminal_opened(win_id, expected_win_count)
     eq(config.relative, "editor", "Should open in a floating window")
-    eq(config.title[1][1], ' Terminal ', "Should show terminal title")
 
     return buf_id
 end
+
+function M.assert_terminal_tab_indicator(win_id, expected_tab_indicator)
+    local config = vim.api.nvim_win_get_config(win_id)
+    eq(expected_tab_indicator, config.title[1][1], "Tab indicator should be '" .. expected_tab_indicator .. "'")
+end
+
 
 function M.assert_terminal_opened_snapped(win_id, expected_win_count)
     local buf_id, config = M.assert_terminal_opened(win_id, expected_win_count)
