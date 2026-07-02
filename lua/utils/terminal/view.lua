@@ -106,7 +106,7 @@ function M.window_is_snapped(win_id)
     return true
 end
 
-function M.set_win_term(win_id, buf_id, term_pos)
+function M.refresh(win_id, buf_id, term_pos)
     vim.api.nvim_win_set_buf(win_id, buf_id)
     set_term_tabs_indicator(win_id, term_pos)
 end

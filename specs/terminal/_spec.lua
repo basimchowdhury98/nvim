@@ -357,6 +357,45 @@ describe("Floating terminal", function()
         t.assert_terminal_tab_indicator(win_id, ' ◆ ')
 	end)
 
+	it("deletes curr terminal when more than 2 terms", function()
+		local arranged = t.arrange_terminals(sut,
+            {
+                opened = { win = 'floating', proj = test_proj },
+                other = { test_proj, test_proj }
+            })
+		local win_id = arranged.win_id
+		local curr_term_buf_id = vim.api.nvim_win_get_buf(win_id)
+
+		sut.delete_curr()
+
+		assert_eq(vim.api.nvim_win_is_valid(win_id), true, "The win wasnt valid but should be")
+		assert_eq(vim.api.nvim_buf_is_valid(curr_term_buf_id), false, "The current term buffer wasnt deleted")
+		local updated_buf_id = vim.api.nvim_win_get_buf(win_id)
+		assert(updated_buf_id ~= curr_term_buf_id, "The next term wasnt attached")
+		assert_eq(vim.api.nvim_buf_is_valid(updated_buf_id), true, "The next term buffer isnt valid")
+        t.assert_terminal_tab_indicator(win_id, ' ◇◆ ')
+	end)
+
+	it("deletes 2 terminals with more than 2 terms and shows correct indicator", function()
+		local arranged = t.arrange_terminals(sut,
+            {
+                opened = { win = 'floating', proj = test_proj },
+                other = { test_proj, test_proj }
+            })
+		local win_id = arranged.win_id
+		local curr_term_buf_id = vim.api.nvim_win_get_buf(win_id)
+
+		sut.delete_curr()
+		sut.delete_curr()
+
+		assert_eq(vim.api.nvim_win_is_valid(win_id), true, "The win wasnt valid but should be")
+		assert_eq(vim.api.nvim_buf_is_valid(curr_term_buf_id), false, "The current term buffer wasnt deleted")
+		local updated_buf_id = vim.api.nvim_win_get_buf(win_id)
+		assert(updated_buf_id ~= curr_term_buf_id, "The next term wasnt attached")
+		assert_eq(vim.api.nvim_buf_is_valid(updated_buf_id), true, "The next term buffer isnt valid")
+        t.assert_terminal_tab_indicator(win_id, ' ◆ ')
+	end)
+
 	it("delete curr terminal when nothing is loaded does nothing", function()
 		sut.delete_curr()
 

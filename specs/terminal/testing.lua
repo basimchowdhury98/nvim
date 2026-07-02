@@ -67,7 +67,7 @@ function M.arrange_terminals(sut, arrange)
 
     local state = {
         win_id = nil,
-        proj_current_term = {},
+        term_index = {},
     }
 
     if not proj_terms[arrange.opened.proj] then
@@ -102,7 +102,7 @@ function M.arrange_terminals(sut, arrange)
             win_id = split_win_id,
         }
     end
-	state.proj_current_term = { [arrange.opened.proj] = open_term }
+	state.term_index = { [arrange.opened.proj] = #proj_terms[arrange.opened.proj] }
 
     sut.__test_set_state(state, proj_terms)
     return { buf_id = open_term.buf_id, win_id = state.win_id }
