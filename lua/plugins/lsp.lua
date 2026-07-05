@@ -1,45 +1,17 @@
+local configs = require('plugins.lsp_configs.other')
 local tools = {
-    shellcheck = {},
+    shellcheck = configs.shellcheck
 }
 local servers = {
-    lua_ls = {},
-    bashls = {
-        settings = {
-            bashIde = {
-                shellcheckPath = vim.fn.stdpath("data") .. "/mason/bin/shellcheck",
-            },
-        },
-    },
-    basedpyright = {
-        settings = {
-            basedpyright = {
-                analysis = {
-                    diagnosticMode = "workspace",
-                },
-            },
-        },
-    },
-    angularls = {},
-    ts_ls = {},
-    roslyn_ls = {
-        cmd = {
-            vim.fs.joinpath(vim.fn.stdpath("data"), "mason", "bin", "roslyn-language-server"),
-            "--stdio",
-        },
-        cmd_env = {
-            DOTNET_ROOT = vim.env.DOTNET_ROOT or vim.fn.fnamemodify(vim.fn.resolve(vim.fn.exepath("dotnet")), ":h"),
-            DOTNET_ROOT_ARM64 = vim.env.DOTNET_ROOT_ARM64 or vim.fn.fnamemodify(vim.fn.resolve(vim.fn.exepath("dotnet")), ":h"),
-        },
-    },
+    lua_ls = configs.lua_ls,
+    bashls = configs.bashls,
+    basedpyright = configs.basedpyright,
+    angularls = configs.angularls,
+    ts_ls = configs.ts_ls,
+    roslyn_ls = require('plugins.lsp_configs.roslyn_ls'),
 }
 local manual_servers = {
-    clangd = {
-        cmd = {
-            "clangd",
-            "--fallback-style=webkit",
-        },
-        filetypes = { "c", "cpp" },
-    },
+    clangd = configs.clangd,
 }
 return {
     {
