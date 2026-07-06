@@ -8,7 +8,6 @@ vim.opt.wrap = false
 vim.opt.hlsearch = true
 vim.opt.incsearch = true
 vim.opt.scrolloff = 8
-vim.opt.updatetime = 50
 vim.opt.colorcolumn = "120"
 vim.opt.ignorecase = true
 vim.opt.smartcase = true
