@@ -14,8 +14,8 @@ map("n", "<C-d>", "<C-d>zz", { desc = "Scroll down" })
 map("n", "<C-u>", "<C-u>zz", { desc = "Scroll up" })
 map("n", "n", "nzzzv", { desc = "" })
 map("n", "N", "Nzzzv", { desc = "" })
-map("n", "]d", function() vim.diagnostic.jump({count=1, float=true}) end, { desc = "Next diagnostic" })
-map("n", "[d", function() vim.diagnostic.jump({count=-1, float=true}) end, { desc = "Previous diagnostic" })
+map("n", "]d", function() vim.diagnostic.jump({ count = 1, float = true }) end, { desc = "Next diagnostic" })
+map("n", "[d", function() vim.diagnostic.jump({ count = -1, float = true }) end, { desc = "Previous diagnostic" })
 map("n", "<leader>dd", vim.diagnostic.open_float, { desc = "Opens float with all diags in buffer" })
 map('n', '<leader>cc', 'gcc', { remap = true, desc = 'Comment line' })
 map('v', '<leader>cc', 'gc', { remap = true, desc = 'Comment selection' })
@@ -58,6 +58,50 @@ map("n", "<C-Down>", ":resize +2<CR>", { desc = "Decrease split height" })
 map("n", "<C-Up>", ":resize -2<CR>", { desc = "Increase split height" })
 
 -- Testing
-map("n", "<leader>x", function ()
+map("n", "<leader>x", function()
     vim.cmd('so %')
 end)
+
+local telescope = require("telescope.builtin")
+vim.api.nvim_create_autocmd("LspAttach", {
+    group = vim.api.nvim_create_augroup("lsp-keymaps", { clear = true }),
+    callback = function(event)
+        map("n", "H", vim.lsp.buf.hover, { desc = "Lsp - show hover info", buffer = event.buf })
+        map(
+            "n",
+            "<leader>gd",
+            vim.lsp.buf.definition,
+            { desc = "Lsp - go to definition", buffer = event.buf }
+        )
+        map(
+            "n",
+            "<leader>gi",
+            telescope.lsp_implementations,
+            { desc = "Lsp - go to implementation", buffer = event.buf }
+        )
+        map(
+            "n",
+            "<leader>gr",
+            telescope.lsp_references,
+            { desc = "Lsp - list all references", buffer = event.buf }
+        )
+        map(
+            { "n", "v" },
+            "<leader>ca",
+            vim.lsp.buf.code_action,
+            { desc = "Lsp - code actions", buffer = event.buf }
+        )
+        map(
+            { "n", "v" },
+            "<leader>cf",
+            vim.lsp.buf.format,
+            { desc = "Lsp - format code in file", buffer = event.buf }
+        )
+        map(
+            { "n", "v" },
+            "<leader>cr",
+            vim.lsp.buf.rename,
+            { desc = "Lsp - rename symbol under cursor", buffer = event.buf }
+        )
+    end,
+})

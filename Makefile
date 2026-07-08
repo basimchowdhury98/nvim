@@ -3,7 +3,7 @@
 FAILED_TEST_OUTPUT = awk '/^(\033\[[0-9;]*m)?(Fail|Error)(\033\[[0-9;]*m)?[[:space:]]*\|\|/ { printing = 1; print; next } /^(\033\[[0-9;]*m)?(Success|Fail|Error)(\033\[[0-9;]*m)?[[:space:]]*\|\|/ { printing = 0; next } printing { print }'
 
 lint:
-	@luacheck init.lua lua/ specs/; luacheck_exit=$$?; \
+	@luacheck .; luacheck_exit=$$?; \
 	nvim --headless -l scripts/lint_tests.lua; nvim_exit=$$?; \
 	exit $$(( luacheck_exit || nvim_exit ))
 

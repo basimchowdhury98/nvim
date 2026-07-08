@@ -1,14 +1,5 @@
 # LSP configs — notes
 
-Per-server config tables live here, wired up in `../lsp.lua`:
-
-- `other.lua` — the "boring" servers (`lua_ls`, `bashls`, `basedpyright`,
-  `angularls`, `ts_ls`, `clangd`, `shellcheck`).
-- `roslyn_ls.lua` — the C# server, which needed real tuning. **This file
-  documents why it looks the way it does.**
-
----
-
 ## TL;DR — what `roslyn_ls.lua` does
 
 | Setting | Purpose |
