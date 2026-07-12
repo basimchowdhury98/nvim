@@ -23,6 +23,9 @@ vim.opt.rtp:prepend(lazypath)
 -- Setup lazy.nvim
 require("lazy").setup({
   spec = {
+    { import = "plugins.look-and-feel" },
+    { import = "plugins.language" },
+    { import = "plugins.navigation" },
     { import = "plugins" },
   },
   -- Configure any other settings here. See the documentation for more details.
