@@ -1,13 +1,4 @@
-* Lsp always needs restarts for new files
-* AngularLS needed
 * Telescope picker of copied/yanked texts
-* Show ! in c# as not - look into treesitter to help
-* c+n + p in term while in normal mode acts weird
-* Terminal: snap from floating to split and back
-* AI driven log, test, lint -> qf list
-* AI - passive twitch like chat
 * AI - agent that doesnt violate the "llms ouput should not be system output" rule
-* AI - create a doc on the left side of the screen that acts as a running instruction for current task
-* debug lines to qf list
-
-Plugin ideas:
+* Term - act more like a buffer than a term (more neovim native)
+    - Jump between my commands

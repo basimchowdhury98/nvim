@@ -24,14 +24,14 @@ vim.diagnostic.config({
         border = "rounded",
         source = true,
         scope = "buffer"
-    }
+    },
 })
 
 -- Visual
 vim.opt.cursorline = true
 vim.opt.list = false
-vim.opt.listchars = {  trail = "-" }
-vim.api.nvim_set_hl(0, 'Visual', { bg = '#5a3500' })  -- Bright orange visaul selection
+vim.opt.listchars = { trail = "-" }
+vim.api.nvim_set_hl(0, 'Visual', { bg = '#5a3500' }) -- Bright orange visaul selection
 vim.opt.guicursor = "n-c-sm:block,i-ci-ve:ver25,r-cr-o-v:hor20"
 
 -- File handling
