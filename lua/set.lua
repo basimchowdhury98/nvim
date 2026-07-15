@@ -1,19 +1,3 @@
-vim.cmd.colorscheme("gruvbox-material")
-vim.opt.relativenumber = true
-vim.opt.tabstop = 4
-vim.opt.softtabstop = 4
-vim.opt.shiftwidth = 4
-vim.opt.expandtab = true
-vim.opt.wrap = false
-vim.opt.hlsearch = true
-vim.opt.incsearch = true
-vim.opt.scrolloff = 8
-vim.opt.colorcolumn = "120"
-vim.opt.ignorecase = true
-vim.opt.smartcase = true
-vim.opt.nu = true
-vim.opt.confirm = true
-vim.opt.termguicolors = true
 vim.diagnostic.config({
     virtual_lines = {
         current_line = true
@@ -28,22 +12,38 @@ vim.diagnostic.config({
 })
 
 -- Visual
-vim.opt.cursorline = true
-vim.opt.list = false
-vim.opt.listchars = { trail = "-" }
-vim.api.nvim_set_hl(0, 'Visual', { bg = '#5a3500' }) -- Bright orange visaul selection
-vim.opt.guicursor = "n-c-sm:block,i-ci-ve:ver25,r-cr-o-v:hor20"
+vim.cmd.colorscheme "gruvbox-material"
+vim.o.relativenumber = true
+vim.o.tabstop = 4
+vim.o.softtabstop = 4
+vim.o.shiftwidth = 4
+vim.o.wrap = false
+vim.o.expandtab = true
+vim.o.scrolloff = 8
+vim.o.colorcolumn = "120"
+vim.o.nu = true
+vim.o.termguicolors = true
+vim.o.cursorline = true
+vim.o.list = true
+vim.opt.listchars = {  eol = "↲", trail = "·", tab = "» " }
+vim.api.nvim_set_hl(0, 'Visual', { bg = '#5a3500' }) -- Bright orange visual selection
+vim.o.guicursor = "n-c-sm:block,i-ci-ve:ver25,r-cr-o-v:hor20"
 
 -- File handling
-vim.opt.backup = false
-vim.opt.writebackup = false
-vim.opt.swapfile = false
-vim.opt.updatetime = 250
-vim.opt.timeoutlen = 500
-vim.opt.ttimeoutlen = 0
-vim.opt.autoread = true
-vim.opt.autowrite = false
+vim.o.backup = false
+vim.o.writebackup = false
+vim.o.swapfile = false
+vim.o.updatetime = 250
+vim.o.timeoutlen = 500
+vim.o.ttimeoutlen = 0
+vim.o.autoread = true
+vim.o.autowrite = false
 
 -- Behavior
+vim.o.hlsearch = true
+vim.o.incsearch = true
+vim.o.ignorecase = true
+vim.o.smartcase = true
+vim.o.confirm = true
 vim.opt.clipboard:append("unnamedplus")
-vim.opt.splitright = true
+vim.o.splitright = true

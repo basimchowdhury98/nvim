@@ -15,10 +15,7 @@ return {
         Lua = {
             runtime = {
                 version = 'LuaJIT'
-            },
-            diagnostics = {
-                globals = { 'vim', 'describe', 'before_each', 'it' },
-            },
+            }
         },
     },
 }
