@@ -105,3 +105,13 @@ vim.api.nvim_create_autocmd("LspAttach", {
         )
     end,
 })
+
+map("i", "<C-c>", function()
+    local choice = vim.fn.confirm('<C-c> doesnt fire InsertLeave(so doesnt reload diags). Esc does. Continue?',
+        "&Yes\n&No")
+
+    if choice == 1 then
+        local key = vim.api.nvim_replace_termcodes("<C-c>", true, false, true)
+        vim.api.nvim_feedkeys(key, 'n', false)
+    end
+end, { desc = "Warn against using this bc it wont show diag so i can retrain muscle memory" })
