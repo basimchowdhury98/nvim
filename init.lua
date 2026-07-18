@@ -9,6 +9,7 @@ require("set")
 require("commands")
 require("autocommands")
 require("utils.terminal")
+require("status-line")
 
 local function enable_all_configured_lsps()
     local lsp_config_path = vim.fn.stdpath("config") .. '/lsp'

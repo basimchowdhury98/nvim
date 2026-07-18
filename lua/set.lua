@@ -28,6 +28,7 @@ vim.o.list = true
 vim.opt.listchars = {  eol = "↲", trail = "·", tab = "» " }
 vim.api.nvim_set_hl(0, 'Visual', { bg = '#5a3500' }) -- Bright orange visual selection
 vim.o.guicursor = "n-c-sm:block,i-ci-ve:ver25,r-cr-o-v:hor20"
+vim.o.showmode = false
 
 -- File handling
 vim.o.backup = false
