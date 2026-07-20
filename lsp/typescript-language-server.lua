@@ -1,5 +1,6 @@
 ---@type vim.lsp.Config
 return {
+    icon = '\u{e628}',
     cmd = function (dispatchers, config)
         local cmd = 'typescript-language-server'
         if (config or {}).root_dir then

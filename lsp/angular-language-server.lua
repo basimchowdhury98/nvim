@@ -60,6 +60,7 @@ end
 
 ---@type vim.lsp.Config
 return {
+    icon = '\u{e753}',
     cmd = function(dispatchers, config)
         if not config or not config.root_dir then
             error('No root path found')

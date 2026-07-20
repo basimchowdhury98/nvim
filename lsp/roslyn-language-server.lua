@@ -29,6 +29,7 @@ end
 
 ---@type vim.lsp.Config
 return {
+    icon = '\u{e648}',
     name = 'roslyn',
     cmd = { 'roslyn-language-server', '--stdio' },
     cmd_env = {

@@ -1,5 +1,6 @@
 ---@type vim.lsp.Config
 return {
+    icon = '\u{f1183}',
     cmd = { 'bash-language-server', 'start' },
     settings = {
         bashIde = {

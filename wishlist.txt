@@ -2,3 +2,5 @@
 * AI - agent that doesnt violate the "llms ouput should not be system output" rule
 * Term - act more like a buffer than a term (more neovim native)
     - Jump between my commands
+* Try using arrow to show tabs (even as 4 spaces) instead of using indent line plugin
+* Term - snapped ui doenst look like term but a normal buffer + often does not scroll all the way down

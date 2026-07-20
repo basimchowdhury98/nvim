@@ -8,6 +8,7 @@ local root_markers = {
 -- using lazyvim to add to this lsp(see in plugins)
 ---@type vim.lsp.Config
 return {
+    icon = '\u{e620}',
     cmd = { 'lua-language-server' },
     filetypes = { 'lua' },
     root_markers = root_markers,
