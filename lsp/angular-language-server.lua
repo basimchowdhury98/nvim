@@ -91,4 +91,23 @@ return {
     end,
     filetypes = { 'typescript', 'html', 'htmlangular' },
     root_markers = { 'angular.json' },
+    workspace_required = true,
+    ---@param config vim.lsp.Config
+    should_not_include_buf = function (config, bufnr)
+        if not bufnr or bufnr == 0 then
+            return true
+        end
+
+        local filetype = vim.bo[bufnr].filetype
+        if not vim.list_contains(config.filetypes, filetype) then
+            return true
+        end
+
+        local root_dir = fs.root(bufnr, config.root_markers)
+        if root_dir == nil then
+            return true
+        end
+
+        return false
+    end
 }

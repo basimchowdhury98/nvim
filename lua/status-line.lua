@@ -1,3 +1,4 @@
+---@diagnostic disable: undefined-field
 local divider = "\u{e0b9}"
 
 local cached_git_status = {}
@@ -70,8 +71,8 @@ vim.api.nvim_create_autocmd({ 'FileType', 'LspAttach', 'LspDetach' }, {
         local unknown_lsp_icon = '\u{ebc3}'
 
         local client_attached = {}
-        local clients = vim.lsp.get_clients({ bufnr = event.buf })
-        for _, client in ipairs(clients) do
+        local attached_clients = vim.lsp.get_clients({ bufnr = event.buf })
+        for _, client in ipairs(attached_clients) do
             if event.event == 'LspDetach' and event.data.client_id == client.id then
                 -- lsp detach runs before lsp actually detaches so it will pick up the client as active
                 goto continue
@@ -85,14 +86,19 @@ vim.api.nvim_create_autocmd({ 'FileType', 'LspAttach', 'LspDetach' }, {
             filetype = vim.bo[event.buf].filetype
         })
         local status = ""
-        for _, config in ipairs(buf_lsp_configs) do
-            ---@diagnostic disable-next-line: undefined-field because: icon defined in /lsp
-            local icon = config.icon or unknown_lsp_icon
-            if not client_attached[config.name] then
+        for _, configured_lsp in ipairs(buf_lsp_configs) do
+            -- monkey patches/custom method defined in the lsp configs for special configs - eg angular
+            if configured_lsp.should_not_include_buf and configured_lsp:should_not_include_buf(event.buf) then
+                goto continue
+            end
+
+            local icon = configured_lsp.icon or unknown_lsp_icon
+            if not client_attached[configured_lsp.name] then
                 icon = "%#StatusLineDisabledLsp#" .. icon .. "%*"
             end
 
             status = status .. " " .. icon .. " " .. divider
+            ::continue::
         end
 
         cached_lsp_status[event.buf] = status
