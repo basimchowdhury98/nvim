@@ -85,7 +85,13 @@ function M.snap_to_vsplit(win_id)
     vim.cmd('botright vsplit')
     local snapped_win_id = vim.api.nvim_get_current_win()
     vim.wo[snapped_win_id].winhighlight = 'Normal:TelescopeNormal'
+    vim.api.nvim_win_set_config(snapped_win_id, {
+        style = 'minimal'
+    })
     vim.api.nvim_win_set_buf(snapped_win_id, buf_id)
+
+    local last_line = vim.api.nvim_buf_line_count(buf_id)
+    vim.api.nvim_win_set_cursor(snapped_win_id, { last_line, 0 })
 
     vim.cmd('stopinsert')
     focus_snap_target(snapped_win_id, alternate_win_id, prior_wins)

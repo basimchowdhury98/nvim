@@ -97,6 +97,10 @@ function M.arrange_terminals(sut, arrange)
         local split_win_id = vim.api.nvim_get_current_win()
         vim.api.nvim_win_set_buf(split_win_id, open_term.buf_id)
         vim.api.nvim_set_current_win(orig_win)
+        local win_opts = {
+            style = 'minimal',
+        }
+        vim.api.nvim_win_set_config(split_win_id, win_opts)
 
         state = {
             win_id = split_win_id,
@@ -165,6 +169,7 @@ function M.assert_terminal_opened(win_id, expected_win_count)
     assert(term_job_id ~= nil and term_job_id > 0, "Term job should have started")
 
     local config = vim.api.nvim_win_get_config(win_id)
+    eq(config.style, 'minimal', "Terminal should have minimal style")
     return buf_id, config
 end
 
