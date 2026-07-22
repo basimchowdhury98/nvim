@@ -5,7 +5,7 @@ globals = {
     "vim",
 }
 
-files["specs/**/*.lua"] = {
+files["lua/specs/**/*.lua"] = {
     globals = {
         "vim",
     },

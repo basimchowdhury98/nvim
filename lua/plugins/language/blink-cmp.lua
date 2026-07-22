@@ -19,10 +19,12 @@ return {
                 nerd_font_variant = "mono",
             },
             sources = {
-                default = { "lsp", "lazydev", "path", "snippets", "buffer" },
+                default = { "snippets", "lazydev", "lsp", "path", "buffer" },
                 providers = {
-                    lazydev = { module = "lazydev.integrations.blink", score_offset = 100 },
-                    lsp = { async = true, fallbacks = {} },
+                    lazydev = { module = "lazydev.integrations.blink" },
+                    lsp = { async = false, timeout_ms = 2000, fallbacks = {} },
+                    path = { fallbacks = {} },
+                    buffer = { score_offset = -100 },
                 },
             },
             snippets = { preset = "luasnip" },

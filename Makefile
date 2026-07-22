@@ -9,7 +9,7 @@ lint:
 
 test:
 	@tmp=$$(mktemp); \
-	nvim --headless -u ./specs/init.lua -c "PlenaryBustedDirectory specs/ { minimal_init = 'specs/init.lua' }" > "$$tmp" 2>&1; \
+	nvim --headless -u ./lua/specs/init.lua -c "PlenaryBustedDirectory lua/specs/ { minimal_init = 'lua/specs/init.lua' }" > "$$tmp" 2>&1; \
 	status=$$?; \
 	cat "$$tmp"; \
 	if [ "$$status" != "0" ]; then \
@@ -25,13 +25,13 @@ val:
 	test_ok=0; luacheck_ok=0; nvimlint_ok=0; \
 	test_output=$$(mktemp); \
 	echo "========== Running Tests =========="; \
-	nvim --headless -u ./specs/init.lua -c "PlenaryBustedDirectory specs/ { minimal_init = 'specs/init.lua' }" > "$$test_output" 2>&1; \
+	nvim --headless -u ./lua/specs/init.lua -c "PlenaryBustedDirectory lua/specs/ { minimal_init = 'lua/specs/init.lua' }" > "$$test_output" 2>&1; \
 	test_status=$$?; \
 	cat "$$test_output"; \
 	if [ "$$test_status" = "0" ]; then test_ok=1; fi; \
 	echo ""; \
 	echo "========== Running Luacheck =========="; \
-	luacheck init.lua lua/ specs/ && luacheck_ok=1; \
+	luacheck . && luacheck_ok=1; \
 	echo ""; \
 	echo "========== Running Lint Tests =========="; \
 	nvim --headless -l scripts/lint_tests.lua && nvimlint_ok=1; \

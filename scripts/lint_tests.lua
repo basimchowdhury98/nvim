@@ -224,8 +224,8 @@ end
 
 local function main()
     local root = vim.fn.getcwd()
-    local all_dirs = { root .. "/lua", root .. "/specs" }
-    local spec_dirs = { root .. "/specs" }
+    local all_dirs = { root .. "/lua", root .. "/lua/specs" }
+    local spec_dirs = { root .. "/lua/specs" }
     local single_files = { root .. "/init.lua" }
 
     local lua_files = {}

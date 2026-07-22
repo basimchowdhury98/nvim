@@ -23,7 +23,7 @@ vim.api.nvim_create_user_command('SNIP', function()
     end
 
     local ft = vim.bo.filetype
-    local snippet_file = vim.fs.joinpath(nvim_path, 'lua', 'snippets', ft .. '.lua')
+    local snippet_file = vim.fs.joinpath(nvim_path, 'snippets', ft .. '.lua')
     if vim.fn.filereadable(snippet_file) == 0 then
         print('Error: NVIM snippets file does not exist: ' .. snippet_file)
         return
