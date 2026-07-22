@@ -1,13 +1,13 @@
 return {
     'nvim-mini/mini.ai',
-    event = "VeryLazy",
+    event = "BufEnter",
     version = false,
-    config = function()
-        require('mini.ai').setup({
-            mappings = {
-                around_last = 'ap',
-                inside_last = 'ip',
-            }
-        })
-    end
+    opts = {
+        mappings = {
+            around_next = 'na',
+            inside_next = 'ni',
+            around_last = 'pa',
+            inside_last = 'pi',
+        }
+    }
 }

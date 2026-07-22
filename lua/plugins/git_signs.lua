@@ -2,8 +2,7 @@ return {
     "lewis6991/gitsigns.nvim",
     config = function ()
         local gitsigns = require("gitsigns")
-        gitsigns.setup({
-        })
+        gitsigns.setup({})
 
         vim.keymap.set("n", "]v", function ()
             gitsigns.nav_hunk('next')

@@ -1,5 +1,6 @@
 return {
 	"MeanderingProgrammer/render-markdown.nvim",
+    ft = "markdown",
 	opts = {
 		heading = {
 			sign = false,
@@ -7,5 +8,8 @@ return {
             position = 'eol',
 			backgrounds = {},
 		},
+        pipe_table = {
+            enabled = false
+        }
 	},
 }

@@ -3,7 +3,7 @@ return {
     dependencies = {
         "rafamadriz/friendly-snippets",     --premade snippets
     },
-    event = "VimEnter",
+    lazy = false,
     config = function()
         local map = vim.keymap.set
 

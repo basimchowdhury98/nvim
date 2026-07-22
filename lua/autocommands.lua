@@ -34,8 +34,8 @@ vim.api.nvim_create_autocmd("FileType", {
             local root = tree:root()
 
             local query = vim.treesitter.query.parse('c_sharp', [[
-        (prefix_unary_expression) @negation
-      ]])
+                (prefix_unary_expression) @negation
+            ]])
 
             for _, node in query:iter_captures(root, 0) do
                 local row, col, _, _ = node:range()

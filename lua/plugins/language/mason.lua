@@ -1,8 +1,13 @@
 return {
     "mason-org/mason.nvim",
-    event = "VimEnter",
-    dependencies = {
-        "WhoIsSethDaniel/mason-tool-installer.nvim",
+    cmd = {
+        "Mason"
     },
-    opts = {}
+    init = function()
+        local mason_bin = vim.fs.joinpath(vim.fn.stdpath("data"), "mason", "bin")
+        vim.env.PATH = mason_bin .. ":" .. vim.env.PATH
+    end,
+    opts = {
+        PATH = "skip",
+    },
 }
