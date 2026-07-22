@@ -29,6 +29,7 @@ vim.opt.listchars = {  eol = "↲", trail = "·", tab = "» ", leadmultispace = 
 vim.api.nvim_set_hl(0, 'Visual', { bg = '#5a3500' }) -- Bright orange visual selection
 vim.o.guicursor = "n-c-sm:block,i-ci-ve:ver25,r-cr-o-v:hor20"
 vim.o.showmode = false
+vim.o.cmdheight = 0
 
 -- File handling
 vim.o.backup = false
@@ -45,6 +46,8 @@ vim.o.hlsearch = true
 vim.o.incsearch = true
 vim.o.ignorecase = true
 vim.o.smartcase = true
+vim.o.smartindent = true
+vim.o.inccommand = 'split'
 vim.o.confirm = true
 vim.opt.clipboard:append("unnamedplus")
 vim.o.splitright = true
