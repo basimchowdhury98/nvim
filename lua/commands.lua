@@ -50,7 +50,3 @@ vim.api.nvim_create_user_command('FLASH', function()
     vim.g.gruvbox_material_transparent_background = transparent and 1 or 0
     vim.cmd('colorscheme gruvbox-material')
 end, { desc = 'Toggle transparency' })
-
-vim.api.nvim_create_user_command('LspConfigRef', function()
-    vim.ui.open('https://github.com/neovim/nvim-lspconfig/tree/master/lsp')
-end, { desc = 'Open the github nvim_lspconfig repo' })

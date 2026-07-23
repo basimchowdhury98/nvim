@@ -100,16 +100,3 @@ vim.api.nvim_create_autocmd("LspAttach", {
         end
     end,
 })
-
-vim.api.nvim_create_autocmd('CmdlineEnter', {
-    group = vim.api.nvim_create_augroup("cmd-height-1", { clear = true }),
-    callback = function()
-        vim.o.cmdheight = 1
-    end
-})
-vim.api.nvim_create_autocmd('CmdlineLeave', {
-    group = vim.api.nvim_create_augroup("cmd-height-0", { clear = true }),
-    callback = function()
-        vim.o.cmdheight = 0
-    end
-})
