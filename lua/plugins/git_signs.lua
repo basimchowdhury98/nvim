@@ -4,13 +4,13 @@ return {
         local gitsigns = require("gitsigns")
         gitsigns.setup({})
 
-        vim.keymap.set("n", "]v", function ()
+        vim.keymap.set("n", "]g", function ()
             gitsigns.nav_hunk('next')
-        end, { desc = 'Next [v]ersion control(git) hunk' })
-        vim.keymap.set("n", "[v", function ()
+        end, { desc = 'Next [g]it hunk' })
+        vim.keymap.set("n", "[g", function ()
             gitsigns.nav_hunk('prev')
-        end, { desc = 'Prev [v]ersion control(git) hunk' })
-        vim.keymap.set("n", "<leader>vd", gitsigns.preview_hunk_inline, { desc = "[V]ersion Control(gitsigns) - [D]iff inline" })
-        vim.keymap.set("n", "<leader>vr", gitsigns.reset_hunk, { desc = "[V]ersion Control(gitsigns) - [R]eset hunk" })
+        end, { desc = 'Prev [g]it hunk' })
+        vim.keymap.set("n", "<leader>gd", gitsigns.preview_hunk_inline, { desc = "[G]it - [D]iff inline" })
+        vim.keymap.set("n", "<leader>gr", gitsigns.reset_hunk, { desc = "[G]it - [R]eset hunk" })
     end
 }
