@@ -2,3 +2,5 @@
 * AI - agent that doesnt violate the "llms ouput should not be system output" rule
 * Term - act more like a buffer than a term (more neovim native)
     - Jump between my commands
+* Better project switching
+* telescope search across git changes
