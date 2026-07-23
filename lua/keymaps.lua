@@ -6,6 +6,8 @@ local function close_any_floats()
         end
     end
 end
+
+local show_keymap_migration
 local map = vim.keymap.set
 
 map("v", "D", ":m '>+1<CR>gv=gv", { desc = "Move selected line down" })
@@ -17,8 +19,6 @@ map("n", "N", "Nzzzv", { desc = "" })
 map("n", "]d", function() vim.diagnostic.jump({ count = 1, float = true }) end, { desc = "Next diagnostic" })
 map("n", "[d", function() vim.diagnostic.jump({ count = -1, float = true }) end, { desc = "Previous diagnostic" })
 map("n", "<leader>dd", vim.diagnostic.open_float, { desc = "Opens float with all diags in buffer" })
-map('n', '<leader>cc', 'gcc', { remap = true, desc = 'Comment line' })
-map('v', '<leader>cc', 'gc', { remap = true, desc = 'Comment selection' })
 map('v', 'J', 'j', { remap = true, desc = 'Remapped J to j to stop merging line under on accident' })
 map('x', "p", "\"_dP", { desc = "Paste without copying whats pasted over" })
 
@@ -63,47 +63,34 @@ map("n", "<leader>x", function()
 end)
 
 local telescope = require("telescope.builtin")
+map("n", "grd", "<C-]>", { desc = "Go to definition", remap = true })
+map("n", "gri", telescope.lsp_implementations, { desc = "Open implementations in telescope" })
+map("n", "grr", telescope.lsp_references, { desc = "Open references in telescope" })
+
+-- Temporary reminders while transitioning to Neovim's default LSP keymaps.
 vim.api.nvim_create_autocmd("LspAttach", {
-    group = vim.api.nvim_create_augroup("lsp-keymaps", { clear = true }),
+    group = vim.api.nvim_create_augroup("lsp-keymap-migration", { clear = true }),
     callback = function(event)
-        map("n", "H", vim.lsp.buf.hover, { desc = "Lsp - show hover info", buffer = event.buf })
-        map(
-            "n",
-            "<leader>gd",
-            vim.lsp.buf.definition,
-            { desc = "Lsp - go to definition", buffer = event.buf }
-        )
-        map(
-            "n",
-            "<leader>gi",
-            telescope.lsp_implementations,
-            { desc = "Lsp - go to implementation", buffer = event.buf }
-        )
-        map(
-            "n",
-            "<leader>gr",
-            telescope.lsp_references,
-            { desc = "Lsp - list all references", buffer = event.buf }
-        )
-        map(
-            { "n", "v" },
-            "<leader>ca",
-            vim.lsp.buf.code_action,
-            { desc = "Lsp - code actions", buffer = event.buf }
-        )
-        map(
-            { "n", "v" },
-            "<leader>cf",
-            vim.lsp.buf.format,
-            { desc = "Lsp - format code in file", buffer = event.buf }
-        )
-        map(
-            { "n", "v" },
-            "<leader>cr",
-            vim.lsp.buf.rename,
-            { desc = "Lsp - rename symbol under cursor", buffer = event.buf }
-        )
+        for _, old_key in ipairs({ "H", "<leader>gd", "<leader>gi", "<leader>gr" }) do
+            local key = old_key
+            map("n", key, function() show_keymap_migration(key) end, {
+                buffer = event.buf,
+                desc = "Show replacement for " .. key,
+            })
+        end
+
+        for _, old_key in ipairs({ "<leader>ca", "<leader>cf", "<leader>cr" }) do
+            local key = old_key
+            map({ "n", "x" }, key, function() show_keymap_migration(key) end, {
+                buffer = event.buf,
+                desc = "Show replacement for " .. key,
+            })
+        end
     end,
+})
+
+map({ "n", "x" }, "<leader>cc", function() show_keymap_migration("<leader>cc") end, {
+    desc = "Show replacement for <leader>cc",
 })
 
 map("i", "<C-c>", function()
@@ -115,3 +102,64 @@ map("i", "<C-c>", function()
         vim.api.nvim_feedkeys(key, 'n', false)
     end
 end, { desc = "Warn against using this bc it wont show diag so i can retrain muscle memory" })
+
+local migration_win
+local migration_namespace = vim.api.nvim_create_namespace("keymap-migration")
+local migration_lines = {
+    { "H",           "H           -> K           LSP hover" },
+    { "<leader>gd", "<leader>gd -> grd         Go to definition" },
+    { "<leader>gi", "<leader>gi -> gri         Implementations (Telescope)" },
+    { "<leader>gr", "<leader>gr -> grr         References (Telescope)" },
+    { "<leader>ca", "<leader>ca -> gra         Code actions" },
+    { "<leader>cf", "<leader>cf -> gq{motion}  Format (whole file: gggqG)" },
+    { "<leader>cr", "<leader>cr -> grn         Rename symbol" },
+    { "<leader>cc", "<leader>cc -> gcc / gc    Comment line / selection" },
+}
+
+show_keymap_migration = function(selected)
+    if migration_win and vim.api.nvim_win_is_valid(migration_win) then
+        vim.api.nvim_win_close(migration_win, true)
+    end
+
+    local lines = {}
+    local selected_line
+    local width = 0
+
+    for _, migration in ipairs(migration_lines) do
+        table.insert(lines, migration[2])
+        width = math.max(width, vim.fn.strdisplaywidth(migration[2]))
+        if migration[1] == selected then
+            selected_line = #lines
+        end
+    end
+
+    local buf = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+    vim.bo[buf].modifiable = false
+
+    migration_win = vim.api.nvim_open_win(buf, true, {
+        relative = "editor",
+        row = math.floor((vim.o.lines - #lines) / 2),
+        col = math.floor((vim.o.columns - width) / 2),
+        width = width,
+        height = #lines,
+        style = "minimal",
+        border = "rounded",
+        title = " Keymap migration ",
+        title_pos = "center",
+        focusable = true,
+        zindex = 60,
+    })
+
+    if selected_line then
+        vim.api.nvim_buf_add_highlight(buf, migration_namespace, "Visual", selected_line - 1, 0, -1)
+        vim.api.nvim_win_set_cursor(migration_win, { selected_line, 0 })
+    end
+
+    map("n", "q", function()
+        if migration_win and vim.api.nvim_win_is_valid(migration_win) then
+            vim.api.nvim_win_close(migration_win, true)
+        end
+        migration_win = nil
+    end, { buffer = buf, desc = "Close keymap migration" })
+end
