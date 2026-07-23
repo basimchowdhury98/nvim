@@ -62,16 +62,18 @@ map("n", "<leader>x", function()
     vim.cmd('so %')
 end)
 
+-- LSP
 local telescope = require("telescope.builtin")
 map("n", "grd", "<C-]>", { desc = "Go to definition", remap = true })
 map("n", "gri", telescope.lsp_implementations, { desc = "Open implementations in telescope" })
 map("n", "grr", telescope.lsp_references, { desc = "Open references in telescope" })
+map("n", "grq", vim.lsp.buf.format, { desc = "Format the buffer" })
 
 -- Temporary reminders while transitioning to Neovim's default LSP keymaps.
 vim.api.nvim_create_autocmd("LspAttach", {
     group = vim.api.nvim_create_augroup("lsp-keymap-migration", { clear = true }),
     callback = function(event)
-        for _, old_key in ipairs({ "H", "<leader>gd", "<leader>gi", "<leader>gr" }) do
+        for _, old_key in ipairs({ "H", "<leader>gi" }) do
             local key = old_key
             map("n", key, function() show_keymap_migration(key) end, {
                 buffer = event.buf,
@@ -106,7 +108,7 @@ end, { desc = "Warn against using this bc it wont show diag so i can retrain mus
 local migration_win
 local migration_namespace = vim.api.nvim_create_namespace("keymap-migration")
 local migration_lines = {
-    { "H",           "H           -> K           LSP hover" },
+    { "H",          "H           -> K           LSP hover" },
     { "<leader>gd", "<leader>gd -> grd         Go to definition" },
     { "<leader>gi", "<leader>gi -> gri         Implementations (Telescope)" },
     { "<leader>gr", "<leader>gr -> grr         References (Telescope)" },
