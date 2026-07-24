@@ -65,8 +65,9 @@ end)
 -- LSP
 local telescope = require("telescope.builtin")
 map("n", "grd", "<C-]>", { desc = "Go to definition", remap = true })
-map("n", "gri", telescope.lsp_implementations, { desc = "Open implementations in telescope" })
+map("n", "grg", "grr", { desc = "Open references in telescope", remap = true })
 map("n", "grr", telescope.lsp_references, { desc = "Open references in telescope" })
+map("n", "gri", telescope.lsp_implementations, { desc = "Open implementations in telescope" })
 map("n", "grq", vim.lsp.buf.format, { desc = "Format the buffer" })
 
 -- Temporary reminders while transitioning to Neovim's default LSP keymaps.
@@ -113,7 +114,7 @@ local migration_lines = {
     { "<leader>gi", "<leader>gi -> gri         Implementations (Telescope)" },
     { "<leader>gr", "<leader>gr -> grr         References (Telescope)" },
     { "<leader>ca", "<leader>ca -> gra         Code actions" },
-    { "<leader>cf", "<leader>cf -> gq{motion}  Format (whole file: gggqG)" },
+    { "<leader>cf", "<leader>cf -> grq         Format ()" },
     { "<leader>cr", "<leader>cr -> grn         Rename symbol" },
     { "<leader>cc", "<leader>cc -> gcc / gc    Comment line / selection" },
 }
