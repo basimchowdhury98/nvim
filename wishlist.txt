@@ -4,3 +4,4 @@
     - Jump between my commands
 * Better project switching
 * telescope search across git changes
+* status line - marks + macros(?)

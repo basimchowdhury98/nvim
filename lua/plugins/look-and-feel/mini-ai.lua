@@ -4,10 +4,10 @@ return {
     version = false,
     opts = {
         mappings = {
-            around_next = 'na',
-            inside_next = 'ni',
-            around_last = 'pa',
-            inside_last = 'pi',
+            around_next = 'an',
+            inside_next = 'in',
+            around_last = 'ap',
+            inside_last = 'ip',
         }
     }
 }
