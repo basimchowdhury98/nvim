@@ -135,7 +135,6 @@ return {
             local handle = function(action)
                 if action.edit then
                     vim.lsp.util.apply_workspace_edit(action.edit, client.offset_encoding)
-                    return
                 end
                 if action.command then
                     client:exec_cmd(action.command)
@@ -162,10 +161,10 @@ return {
                 end,
             }, function(chosen_action)
                 if not chosen_action then
-                    vim.notify('Chosen action is nil', vim.log.levels.ERROR)
                     return
                 end
-                if not chosen_action.edit and not chosen_action.command then
+                ---@diagnostic disable-next-line: undefined-field
+                if chosen_action.data and not chosen_action.edit and not chosen_action.command then
                     client:request('codeAction/resolve', chosen_action, function(err, resolved)
                         if err then
                             vim.notify(err.message or tostring(err), vim.log.levels.ERROR)

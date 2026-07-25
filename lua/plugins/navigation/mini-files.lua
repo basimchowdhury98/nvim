@@ -6,12 +6,14 @@ return {
         local minifiles = require('mini.files')
         minifiles.setup({
             mappings = {
-                go_in = "",
+                go_in = "l",
                 go_in_plus = "<CR>",
-                go_out_plus = '<ESC>',
-                go_out = '',
+                go_out_plus = '',
+                go_out = 'h',
                 reset = ",",
                 reveal_cwd = ".",
+                close = '<ESC>',
+                synchronize = "=",
             },
             windows = {
                 preview = true,
