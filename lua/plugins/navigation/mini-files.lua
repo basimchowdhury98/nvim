@@ -6,10 +6,12 @@ return {
         local minifiles = require('mini.files')
         minifiles.setup({
             mappings = {
-                close = "<Esc>",
+                go_in = "",
+                go_in_plus = "<CR>",
+                go_out_plus = '<ESC>',
+                go_out = '',
                 reset = ",",
                 reveal_cwd = ".",
-                go_in_plus = "<CR>"
             },
             windows = {
                 preview = true,

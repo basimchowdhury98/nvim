@@ -122,6 +122,66 @@ return {
             return vim.NIL
         end,
     },
+    commands = {
+        ['roslyn.client.nestedCodeAction'] = function(command, ctx)
+            local client = assert(vim.lsp.get_client_by_id(ctx.client_id))
+
+            local nested_actions = command.arguments and command.arguments[1] and command.arguments[1].NestedCodeActions
+            if type(nested_actions) ~= 'table' then
+                vim.notify('roslyn_ls: invalid nestedCodeAction arguments', vim.log.levels.ERROR)
+                return
+            end
+
+            local handle = function(action)
+                if action.edit then
+                    vim.lsp.util.apply_workspace_edit(action.edit, client.offset_encoding)
+                    return
+                end
+                if action.command then
+                    client:exec_cmd(action.command)
+                end
+            end
+
+            vim.ui.select(nested_actions, {
+                prompt = command.title or 'Select code action(no title)',
+                format_item = function(action)
+                    local label = ''
+                    if action.command and action.command.command == 'roslyn.client.fixAllCodeAction' then
+                        label = label .. 'Fix all: '
+                    end
+
+                    local fallback = action.title or (action.command and action.command.title) or 'Unnamed action'
+                    if not action.data or not action.data.CodeActionPath then
+                        return label .. fallback .. ' (no path)'
+                    end
+                    if #action.data.CodeActionPath < 3 then
+                        return label .. fallback .. ' (< 3 path)'
+                    end
+
+                    return label .. action.data.CodeActionPath[2] .. " -> " .. action.data.CodeActionPath[3]
+                end,
+            }, function(chosen_action)
+                if not chosen_action then
+                    vim.notify('Chosen action is nil', vim.log.levels.ERROR)
+                    return
+                end
+                if not chosen_action.edit and not chosen_action.command then
+                    client:request('codeAction/resolve', chosen_action, function(err, resolved)
+                        if err then
+                            vim.notify(err.message or tostring(err), vim.log.levels.ERROR)
+                            return
+                        end
+                        if resolved then
+                            handle(resolved)
+                        end
+                    end, ctx.bufnr)
+                    return
+                end
+
+                handle(chosen_action)
+            end)
+        end,
+    },
     capabilities = {
         workspace = {
             didChangeWatchedFiles = { dynamicRegistration = false },

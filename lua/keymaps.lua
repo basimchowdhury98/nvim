@@ -10,8 +10,8 @@ end
 local show_keymap_migration
 local map = vim.keymap.set
 
-map("v", "D", ":m '>+1<CR>gv=gv", { desc = "Move selected line down" })
-map("v", "U", ":m '<-2<CR>gv=gv", { desc = "Move slected line up" })
+map("x", "D", ":m '>+1<CR>gv=gv", { desc = "Move selected line down" })
+map("x", "U", ":m '<-2<CR>gv=gv", { desc = "Move slected line up" })
 map("n", "<C-d>", "<C-d>zz", { desc = "Scroll down" })
 map("n", "<C-u>", "<C-u>zz", { desc = "Scroll up" })
 map("n", "n", "nzzzv", { desc = "" })
