@@ -3,7 +3,6 @@ return {
     version = "1.*",
     lazy = false,
     dependencies = {
-        "saghen/blink.lib",
         "L3MON4D3/LuaSnip",
     },
     config = function()

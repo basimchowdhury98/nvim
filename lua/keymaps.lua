@@ -65,7 +65,6 @@ end)
 -- LSP
 local telescope = require("telescope.builtin")
 map("n", "grd", "<C-]>", { desc = "Go to definition", remap = true })
-map("n", "grg", "grr", { desc = "Open references in telescope", remap = true })
 map("n", "grr", telescope.lsp_references, { desc = "Open references in telescope" })
 map("n", "gri", telescope.lsp_implementations, { desc = "Open implementations in telescope" })
 map("n", "grq", vim.lsp.buf.format, { desc = "Format the buffer" })

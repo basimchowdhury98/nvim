@@ -5,3 +5,5 @@
 * Better project switching
 * telescope search across git changes
 * status line - marks + macros(?)
+* vim.pack migration?
+* formatters (conform)
