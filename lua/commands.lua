@@ -50,3 +50,19 @@ vim.api.nvim_create_user_command('FLASH', function()
     vim.g.gruvbox_material_transparent_background = transparent and 1 or 0
     vim.cmd('colorscheme gruvbox-material')
 end, { desc = 'Toggle transparency' })
+
+vim.api.nvim_create_user_command('LspLogs', function()
+    local start_win = vim.api.nvim_get_current_win()
+    local lsp_log_path = vim.lsp.log.get_filename()
+
+    vim.cmd.vnew()
+    vim.fn.jobstart({
+        vim.o.shell,
+        vim.o.shellcmdflag,
+        "tail -f " .. lsp_log_path,
+    }, {
+        term = true,
+    })
+
+    vim.api.nvim_set_current_win(start_win)
+end, { desc = "Attach lsp logs to a terminal buffer" })
