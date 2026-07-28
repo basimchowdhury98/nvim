@@ -1,0 +1,19 @@
+return {
+    enable_all_configured_lsps = function()
+        local lsp_config_path = vim.fn.stdpath("config") .. '/lsp'
+        local configured_lsps = {}
+        for name, _ in vim.fs.dir(lsp_config_path) do
+            local lsp = name:match("^(.+)%.lua$")
+            if lsp then
+                table.insert(configured_lsps, lsp)
+            end
+        end
+        vim.lsp.enable(configured_lsps)
+    end,
+    local_config_hook = function()
+        local local_config = vim.fn.stdpath("config"):gsub("nvim$", "nvim-local") .. "/init.lua"
+        if vim.uv.fs_stat(local_config) then
+            dofile(local_config)
+        end
+    end
+}

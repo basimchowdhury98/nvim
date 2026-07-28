@@ -1,10 +1,10 @@
 ---@diagnostic disable: duplicate-set-field, param-type-mismatch
 
-local t = require("specs.terminal.testing")
+local t = require("terminal._testing")
 local assert_eq = assert.are.same
 
 describe("Floating terminal", function()
-	local sut = require("utils.terminal")
+	local sut = require("terminal")
 	local test_proj = vim.fs.joinpath(vim.fn.stdpath("cache"), "terminal-test")
 	local test_proj_2 = vim.fs.joinpath(vim.fn.stdpath("cache"), "terminal-test-2")
 	t.setup_path(test_proj)

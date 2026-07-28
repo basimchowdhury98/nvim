@@ -9,7 +9,7 @@ lint:
 
 test:
 	@tmp=$$(mktemp); \
-	nvim --headless -u ./lua/specs/init.lua -c "PlenaryBustedDirectory lua/specs/ { minimal_init = 'lua/specs/init.lua' }" > "$$tmp" 2>&1; \
+	nvim --headless -u ./lua/_spec-init.lua -c "PlenaryBustedDirectory lua/ { minimal_init = 'lua/_spec-init.lua' }" > "$$tmp" 2>&1; \
 	status=$$?; \
 	cat "$$tmp"; \
 	if [ "$$status" != "0" ]; then \
@@ -25,7 +25,7 @@ val:
 	test_ok=0; luacheck_ok=0; nvimlint_ok=0; \
 	test_output=$$(mktemp); \
 	echo "========== Running Tests =========="; \
-	nvim --headless -u ./lua/specs/init.lua -c "PlenaryBustedDirectory lua/specs/ { minimal_init = 'lua/specs/init.lua' }" > "$$test_output" 2>&1; \
+	nvim --headless -u ./lua/_spec-init.lua -c "PlenaryBustedDirectory lua/ { minimal_init = 'lua/_specs-init.lua' }" > "$$test_output" 2>&1; \
 	test_status=$$?; \
 	cat "$$test_output"; \
 	if [ "$$test_status" = "0" ]; then test_ok=1; fi; \

@@ -27,7 +27,7 @@ local state = {
 local proj_terms = {}
 local preloaded_terms = {}
 
-local view = require('utils.terminal.view')
+local view = require('terminal.view')
 
 local map = vim.keymap.set
 local lto = 'FTerm - Open'
@@ -39,7 +39,7 @@ map('n', '<leader>td', function() M.debug() end, { desc = ltd })
 local ltj = 'FTerm - Open at file directory'
 map('n', '<leader>tj', function()
     local file_dir = vim.fn.expand('%:p:h')
-    require('utils.terminal').open_at_path(file_dir)
+    require('terminal').open_at_path(file_dir)
 end, { desc = ltj })
 
 local function set_term_keymaps(buf_id)
