@@ -24,7 +24,13 @@ local function local_config_hook()
 end
 
 local_config_hook()
+
+-- init -> /plugins/* -> this command
 vim.api.nvim_create_autocmd("VimEnter", {
     once = true,
-    callback = enable_all_configured_lsps,
+    nested = true,
+    callback = function()
+        vim.cmd.colorscheme("gruvbox-material")
+        enable_all_configured_lsps()
+    end,
 })

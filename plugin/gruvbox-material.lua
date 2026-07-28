@@ -11,7 +11,6 @@ vim.g.gruvbox_material_float_style = 'bright'
 vim.g.gruvbox_material_statusline_style = 'material'
 vim.g.gruvbox_material_cursor = 'auto'
 
-vim.cmd.colorscheme('gruvbox-material')
 
 local transparent = true
 vim.api.nvim_create_user_command('FLASH', function()
