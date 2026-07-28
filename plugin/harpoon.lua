@@ -1,0 +1,33 @@
+vim.pack.add {
+    "https://github.com/nvim-lua/plenary.nvim",
+    "https://github.com/ThePrimeagen/harpoon",
+}
+
+require('harpoon').setup {
+    menu = {
+        width = 120
+    },
+    tabline = true
+}
+
+-- Monkey patching/wrapping original add file method to flash the text i harpooned
+local mark = require('harpoon.mark')
+local original_add_file = mark.add_file
+---@diagnostic disable-next-line: duplicate-set-field
+mark.add_file = function(...)
+    local ns_id = vim.api.nvim_create_namespace("flash_file")
+    local ret = original_add_file(...)
+    vim.hl.range(0, ns_id, 'Visual', 'w0', 'w$', { inclusive = true, timeout = 100 })
+    return ret
+end
+
+local map = vim.keymap.set
+local ui = require("harpoon.ui")
+map("n", "<leader>ha", mark.add_file, { desc = "Add file to harpoon" })
+map("n", "<leader>ht", ui.toggle_quick_menu, { desc = "Toggle harpoon menu" })
+map("n", "<C-N>", ui.nav_next, { desc = "Navigate to next harpoon" })
+map("n", "<C-P>", ui.nav_prev, { desc = "Navigate to prev harpoon" })
+map("n", "<leader>h1", function() ui.nav_file(1) end, { desc = "Navigate to file 1" })
+map("n", "<leader>h2", function() ui.nav_file(2) end, { desc = "Navigate to file 2" })
+map("n", "<leader>h3", function() ui.nav_file(3) end, { desc = "Navigate to file 3" })
+map("n", "<leader>h4", function() ui.nav_file(4) end, { desc = "Navigate to file 4" })

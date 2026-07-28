@@ -1,24 +1,20 @@
 vim.loader.enable()
 
-vim.g.mapleader = " "
-vim.g.maplocalleader = "\\"
-
-require("initlazy")
-require("keymaps")
 require("set")
+require("keymaps")
 require("commands")
 require("autocommands")
-require("utils.terminal")
-require("status-line")
 
 local function enable_all_configured_lsps()
     local lsp_config_path = vim.fn.stdpath("config") .. '/lsp'
+    local configured_lsps = {}
     for name, _ in vim.fs.dir(lsp_config_path) do
         local lsp = name:match("^(.+)%.lua$")
         if lsp then
-            vim.lsp.enable(lsp)
+            table.insert(configured_lsps, lsp)
         end
     end
+    vim.lsp.enable(configured_lsps)
 end
 local function local_config_hook()
     local local_config = vim.fn.stdpath("config"):gsub("nvim$", "nvim-local") .. "/init.lua"
@@ -27,5 +23,8 @@ local function local_config_hook()
     end
 end
 
-enable_all_configured_lsps()
 local_config_hook()
+vim.api.nvim_create_autocmd("VimEnter", {
+    once = true,
+    callback = enable_all_configured_lsps,
+})

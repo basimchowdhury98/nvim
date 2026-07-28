@@ -1,3 +1,6 @@
+vim.g.mapleader = " "
+vim.g.maplocalleader = "\\"
+
 vim.diagnostic.config({
     virtual_lines = {
         current_line = true
@@ -12,7 +15,6 @@ vim.diagnostic.config({
 })
 
 -- Visual
-vim.cmd.colorscheme "gruvbox-material"
 vim.o.relativenumber = true
 vim.o.tabstop = 4
 vim.o.softtabstop = 4

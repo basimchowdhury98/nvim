@@ -33,11 +33,9 @@ map({ 'n', 't' }, '<Esc><Esc>', close_any_floats, { desc = 'Close floating windo
 
 map("i", "<C-l>", "<Esc>la", { desc = "Move one char left in insert mode" })
 map("i", "<S-CR>", "<Esc>$o", { desc = "From anywhere in line enter into a new line in insert mode" })
-map("t", "<C-p>", "<Up>", { desc = "[P]revious terminal command" })
-map("t", "<C-n>", "<Down>", { desc = "[N]ext terminal command" })
 
 
--- Buffer nav
+-- Buffer
 map({ "n" }, "<leader>a", "ggVG", { desc = "[A]ll select" })
 map({ "n" }, "<leader>/", ":noh<CR>", { desc = "Clear hl" })
 
@@ -57,17 +55,14 @@ map("n", "<C-Right>", ":vertical resize -2<CR>", { desc = "Increase split width"
 map("n", "<C-Down>", ":resize +2<CR>", { desc = "Decrease split height" })
 map("n", "<C-Up>", ":resize -2<CR>", { desc = "Increase split height" })
 
+-- Lsp - rest in telescope.lua
+map("n", "grd", "<C-]>", { desc = "Go to definition", remap = true })
+map("n", "grq", vim.lsp.buf.format, { desc = "Format the buffer" })
+
 -- Testing
 map("n", "<leader>x", function()
     vim.cmd('so %')
 end)
-
--- LSP
-local telescope = require("telescope.builtin")
-map("n", "grd", "<C-]>", { desc = "Go to definition", remap = true })
-map("n", "grr", telescope.lsp_references, { desc = "Open references in telescope" })
-map("n", "gri", telescope.lsp_implementations, { desc = "Open implementations in telescope" })
-map("n", "grq", vim.lsp.buf.format, { desc = "Format the buffer" })
 
 -- Temporary reminders while transitioning to Neovim's default LSP keymaps.
 vim.api.nvim_create_autocmd("LspAttach", {
