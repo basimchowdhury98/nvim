@@ -70,12 +70,6 @@ local function set_term_tabs_indicator(win_id, term_pos)
     })
 end
 
-local function set_float_title_highlight()
-    local title_hl = vim.api.nvim_get_hl(0, { name = 'TelescopeTitle', link = false })
-    local terminal_title_hl = vim.tbl_extend('force', {}, title_hl, { bg = nil, base = nil })
-    vim.api.nvim_set_hl(0, 'TerminalFloatTitle', terminal_title_hl)
-end
-
 function M.snap_to_vsplit(win_id)
     local prior_wins = vim.api.nvim_list_wins()
     local alternate_win_id = get_alternate_window()
@@ -84,7 +78,6 @@ function M.snap_to_vsplit(win_id)
 
     vim.cmd('botright vsplit')
     local snapped_win_id = vim.api.nvim_get_current_win()
-    vim.wo[snapped_win_id].winhighlight = 'Normal:TelescopeNormal'
     vim.api.nvim_win_set_config(snapped_win_id, {
         style = 'minimal'
     })
@@ -135,7 +128,6 @@ end
 function M.open_float(term_buf, term_pos)
     local dims = calc_window_dims()
 
-    -- Window options that match Telescope's style
     local win_opts = {
         relative = 'editor',
         width = dims.width,
@@ -147,9 +139,6 @@ function M.open_float(term_buf, term_pos)
     }
     local win_id = vim.api.nvim_open_win(term_buf, true, win_opts)
 
-    -- Set window options to match Telescope using modern API
-    set_float_title_highlight()
-    vim.wo[win_id].winhighlight = 'Normal:TelescopeNormal,FloatBorder:TelescopeBorder,FloatTitle:TerminalFloatTitle'
     vim.cmd('startinsert')
 
     set_term_tabs_indicator(win_id, term_pos)

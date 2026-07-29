@@ -15,5 +15,10 @@ return {
         if vim.uv.fs_stat(local_config) then
             dofile(local_config)
         end
+    end,
+    set_float_highlights = function()
+        vim.api.nvim_set_hl(0, 'NormalFloat', { link = 'TelescopeNormal' })
+        vim.api.nvim_set_hl(0, 'FloatBorder', { link = 'TelescopeBorder' })
+        vim.api.nvim_set_hl(0, 'FloatTitle', { link = 'TelescopeTitle' })
     end
 }

@@ -1,3 +1,7 @@
+vim.api.nvim_create_autocmd('ColorScheme', {
+    callback = require('utils').set_float_highlights
+})
+
 vim.api.nvim_create_autocmd('TextYankPost', {
     callback = function()
         vim.highlight.on_yank()

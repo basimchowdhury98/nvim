@@ -67,27 +67,3 @@ vim.api.nvim_create_autocmd('User', {
         vim.api.nvim_win_set_config(event.data.win_id, config)
     end,
 })
-
--- Set the visuals of the file windows to be like telescope(transparent)
-local function set_minifiles_highlights()
-    vim.api.nvim_set_hl(0, 'MiniFilesNormal', {
-        link = 'TelescopeNormal',
-    })
-
-    vim.api.nvim_set_hl(0, 'MiniFilesBorder', {
-        link = 'TelescopeBorder',
-    })
-
-    vim.api.nvim_set_hl(0, 'MiniFilesTitle', {
-        link = 'TelescopeTitle',
-    })
-
-    vim.api.nvim_set_hl(0, 'MiniFilesTitleFocused', {
-        link = 'TelescopeTitle',
-    })
-end
-set_minifiles_highlights()
-
-vim.api.nvim_create_autocmd('ColorScheme', {
-    callback = set_minifiles_highlights,
-})
