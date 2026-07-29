@@ -7,7 +7,6 @@ require("commands")
 require("autocommands")
 
 utils.local_config_hook()
-
 -- init -> /plugins/* -> this command
 vim.api.nvim_create_autocmd("VimEnter", {
     once = true,
