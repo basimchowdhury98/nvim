@@ -1,5 +1,5 @@
 vim.loader.enable()
-local utils= require('utils')
+local utils = require('utils')
 
 require("set")
 require("keymaps")
@@ -13,6 +13,7 @@ vim.api.nvim_create_autocmd("VimEnter", {
     nested = true,
     callback = function()
         vim.cmd.colorscheme("gruvbox-material")
+
         utils.enable_all_configured_lsps()
     end,
 })

@@ -1,5 +1,9 @@
 vim.api.nvim_create_autocmd('ColorScheme', {
-    callback = require('utils').set_float_highlights
+    callback = function()
+        vim.api.nvim_set_hl(0, 'NormalFloat', { link = 'TelescopeNormal' })
+        vim.api.nvim_set_hl(0, 'FloatBorder', { link = 'TelescopeBorder' })
+        vim.api.nvim_set_hl(0, 'FloatTitle', { link = 'TelescopeTitle' })
+    end
 })
 
 vim.api.nvim_create_autocmd('TextYankPost', {

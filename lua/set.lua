@@ -14,8 +14,6 @@ vim.diagnostic.config({
     },
 })
 
-require('utils').set_float_highlights()
-
 -- Visual
 vim.o.relativenumber = true
 vim.o.tabstop = 4
