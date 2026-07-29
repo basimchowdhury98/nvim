@@ -32,3 +32,7 @@ vim.api.nvim_create_user_command('LspLogs', function()
 
     vim.api.nvim_set_current_win(start_win)
 end, { desc = "Attach lsp logs to a terminal buffer" })
+
+vim.api.nvim_create_user_command('Pack', function ()
+    vim.pack.update(nil, { offline = true })
+end, { desc = 'Show current packs' })
