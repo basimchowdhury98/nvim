@@ -39,7 +39,7 @@ end
 local toggle_dotfiles = function()
     show_hidden = not show_hidden
     local new_filter = show_hidden and filter_show or filter_hide
-    MiniFiles.refresh({ content = { filter = new_filter } })
+    minifiles.refresh({ content = { filter = new_filter } })
 end
 vim.api.nvim_create_autocmd('User', {
     pattern = 'MiniFilesBufferCreate',

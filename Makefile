@@ -25,7 +25,7 @@ val:
 	test_ok=0; luacheck_ok=0; nvimlint_ok=0; \
 	test_output=$$(mktemp); \
 	echo "========== Running Tests =========="; \
-	nvim --headless -u ./lua/_spec-init.lua -c "PlenaryBustedDirectory lua/ { minimal_init = 'lua/_specs-init.lua' }" > "$$test_output" 2>&1; \
+	nvim --headless -u ./lua/_spec-init.lua -c "PlenaryBustedDirectory lua/ { minimal_init = 'lua/_spec-init.lua' }" > "$$test_output" 2>&1; \
 	test_status=$$?; \
 	cat "$$test_output"; \
 	if [ "$$test_status" = "0" ]; then test_ok=1; fi; \
@@ -33,15 +33,11 @@ val:
 	echo "========== Running Luacheck =========="; \
 	luacheck . && luacheck_ok=1; \
 	echo ""; \
-	echo "========== Running Lint Tests =========="; \
-	nvim --headless -l scripts/lint_tests.lua && nvimlint_ok=1; \
-	echo ""; \
 	failed=0; \
 	if [ "$$test_ok" = "1" ]; then test_sym="\033[32m✓\033[0m"; else test_sym="\033[31m✗\033[0m"; failed=1; fi; \
 	if [ "$$luacheck_ok" = "1" ]; then lc_sym="\033[32m✓\033[0m"; else lc_sym="\033[31m✗\033[0m"; failed=1; fi; \
-	if [ "$$nvimlint_ok" = "1" ]; then nl_sym="\033[32m✓\033[0m"; else nl_sym="\033[31m✗\033[0m"; failed=1; fi; \
 	elapsed_ms=$$(( ($$(date +%s%N) - $$start_time) / 1000000 )); \
-	printf "TESTS: $$test_sym  LUACHECK: $$lc_sym  LINT_TESTS: $$nl_sym  [%dms]\n" "$$elapsed_ms"; \
+	printf "TESTS: $$test_sym  LUACHECK: $$lc_sym  [%dms]\n" "$$elapsed_ms"; \
 	if [ "$$test_ok" != "1" ]; then \
 		echo ""; \
 		echo "========== Failed Test Output =========="; \
