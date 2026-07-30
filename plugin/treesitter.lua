@@ -29,6 +29,7 @@ local function enable_treesitter_with_indent(buf, lang)
 end
 
 vim.api.nvim_create_autocmd("FileType", {
+    pattern = '*',
     callback = function(event)
         local ts = require('nvim-treesitter')
         local lang = vim.treesitter.language.get_lang(event.match) or event.match
