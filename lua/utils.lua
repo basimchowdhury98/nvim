@@ -1,6 +1,7 @@
 return {
-    enable_all_configured_lsps = function()
-        local lsp_config_path = vim.fn.stdpath("config") .. '/lsp'
+    enable_all_configured_lsps = function(root)
+        local lsp_root = root or vim.fn.stdpath("config")
+        local lsp_config_path = lsp_root .. '/lsp'
         local configured_lsps = {}
         for name, _ in vim.fs.dir(lsp_config_path) do
             local lsp = name:match("^(.+)%.lua$")
