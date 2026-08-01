@@ -61,8 +61,12 @@ vim.api.nvim_create_autocmd({ "BufEnter", "BufWritePost" }, {
 })
 
 local cached_lsp_status = {}
-vim.api.nvim_set_hl(0, "StatusLineDisabledLsp", {
-    link = "Comment",
+vim.api.nvim_create_autocmd('ColorScheme', {
+    callback = function()
+        vim.api.nvim_set_hl(0, "StatusLineDisabledLsp", {
+            link = "Comment",
+        })
+    end
 })
 
 vim.api.nvim_create_autocmd({ 'FileType', 'LspAttach', 'LspDetach' }, {
