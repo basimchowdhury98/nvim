@@ -1,0 +1,20 @@
+{
+    "runtime": {
+        "version": "LuaJIT",
+        "path": [
+            "lua/?.lua",
+            "lua/?/init.lua"
+        ],
+        "pathStrict": false
+    },
+    "diagnostics": {
+        "ignoredFiles": "Disable",
+        "libraryFiles": "Disable"
+    },
+    "workspace": {
+        "library": [
+            "${env:VIMRUNTIME}",
+            "${env:HOME}/.local/share/nvim/site/pack/core/opt"
+        ]
+    }
+}
