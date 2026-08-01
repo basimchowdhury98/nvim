@@ -28,7 +28,7 @@ map({ "i", "s" }, "<C-l>", function()
 end, { silent = true, desc = "[L]ist next choice" })
 
 require("luasnip.loaders.from_vscode").lazy_load()
-require("luasnip.loaders.from_lua").lazy_load({ paths = { "./snippets" } })
+require("luasnip.loaders.from_lua").lazy_load({ paths = { "./snippet" } })
 
 vim.api.nvim_create_user_command('SNIP', function()
     local nvim_path = vim.fn.stdpath('config')
@@ -38,9 +38,9 @@ vim.api.nvim_create_user_command('SNIP', function()
     end
 
     local ft = vim.bo.filetype
-    local snippet_file = vim.fs.joinpath(nvim_path, 'snippets', ft .. '.lua')
+    local snippet_file = vim.fs.joinpath(nvim_path, 'snippet', ft .. '.lua')
     if vim.fn.filereadable(snippet_file) == 0 then
-        print('Error: NVIM snippets file does not exist: ' .. snippet_file)
+        print('Error: NVIM snippet file does not exist: ' .. snippet_file)
         return
     end
 
