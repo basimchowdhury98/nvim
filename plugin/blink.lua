@@ -16,9 +16,8 @@ blink.setup {
         nerd_font_variant = "mono",
     },
     sources = {
-        default = { "snippets", "lazydev", "lsp", "path", "buffer" },
+        default = {  "lsp", "snippets", "path", "buffer" },
         providers = {
-            lazydev = { module = "lazydev.integrations.blink" },
             lsp = { async = false, timeout_ms = 2000, fallbacks = {} },
             path = { fallbacks = {} },
             buffer = { score_offset = -100 },

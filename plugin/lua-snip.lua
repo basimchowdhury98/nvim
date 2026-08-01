@@ -27,7 +27,9 @@ map({ "i", "s" }, "<C-l>", function()
     end
 end, { silent = true, desc = "[L]ist next choice" })
 
-require("luasnip.loaders.from_vscode").lazy_load()
+require("luasnip.loaders.from_vscode").lazy_load({
+    exclude = { 'lua' }
+})
 require("luasnip.loaders.from_lua").lazy_load({ paths = { "./snippet" } })
 
 vim.api.nvim_create_user_command('SNIP', function()

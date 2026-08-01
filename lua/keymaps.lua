@@ -60,9 +60,8 @@ map("n", "grd", "<C-]>", { desc = "Go to definition", remap = true })
 map("n", "grq", vim.lsp.buf.format, { desc = "Format the buffer" })
 
 -- Testing
-map("n", "<leader>x", function()
-    vim.cmd('so %')
-end)
+map("n", "<leader>x", "<cmd>.lua<CR>", { desc = "Execute the current line" })
+map("n", "<leader><leader>x", "<cmd>source %<CR>", { desc = "Execute the current file" })
 
 -- Temporary reminders while transitioning to Neovim's default LSP keymaps.
 vim.api.nvim_create_autocmd("LspAttach", {

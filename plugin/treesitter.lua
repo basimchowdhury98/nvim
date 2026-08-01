@@ -32,6 +32,7 @@ vim.api.nvim_create_autocmd("FileType", {
     pattern = '*',
     callback = function(event)
         local ts = require('nvim-treesitter')
+        -- TODO i think theres a config option that just does this
         local lang = vim.treesitter.language.get_lang(event.match) or event.match
         local already_installed = ts.get_installed()
         if vim.tbl_contains(already_installed, lang) then
