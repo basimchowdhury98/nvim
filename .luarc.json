@@ -11,7 +11,14 @@
         "ignoredFiles": "Disable",
         "libraryFiles": "Disable"
     },
+    "completion": {
+        "workspaceWord": false,
+    },
     "workspace": {
+        "checkThirdParty": "Disable",
+        "ignoreDir": [
+            ".not-nvim/"
+        ],
         "library": [
             "${env:VIMRUNTIME}",
             "${env:HOME}/.local/share/nvim/site/pack/core/opt"
