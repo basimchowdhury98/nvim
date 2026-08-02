@@ -16,7 +16,7 @@ blink.setup {
         nerd_font_variant = "mono",
     },
     sources = {
-        default = {  "lsp", "snippets", "path", "buffer" },
+        default = { "lsp", "snippets", "path", "buffer" },
         providers = {
             lsp = { async = false, timeout_ms = 2000, fallbacks = {} },
             path = { fallbacks = {} },
@@ -39,6 +39,32 @@ blink.setup {
         },
     },
     fuzzy = { implementation = "lua" },
+    completion = {
+        menu = {
+            draw = {
+                columns = {
+                    { "kind_icon" },
+                    { "label",             "label_description", gap = 1 },
+                    { "source_with_format" },
+                },
+                components = {
+                    source_with_format = {
+                        text = function(ctx)
+                            local is_snippet =
+                                ctx.item.insertTextFormat == vim.lsp.protocol.InsertTextFormat.Snippet
+
+                            if is_snippet then
+                                return ctx.source_name .. " (snippet)"
+                            end
+
+                            return ctx.source_name
+                        end,
+                        highlight = "BlinkCmpSource",
+                    },
+                },
+            },
+        },
+    },
 }
 
 vim.lsp.config("*", {

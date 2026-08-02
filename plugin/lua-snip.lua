@@ -1,6 +1,5 @@
 vim.pack.add {
     "https://github.com/L3MON4D3/LuaSnip",
-    "https://github.com/rafamadriz/friendly-snippets",
 }
 
 local map = vim.keymap.set
@@ -8,7 +7,8 @@ local map = vim.keymap.set
 local ls = require("luasnip")
 ls.config.set_config({
     history = true,
-    updateevents = "InsertLeave",
+    updateevents = "TextChanged,TextChangedI",
+    enable_autosnippets = true
 })
 
 map({ "i", "s" }, "<C-k>", function()
@@ -27,9 +27,6 @@ map({ "i", "s" }, "<C-l>", function()
     end
 end, { silent = true, desc = "[L]ist next choice" })
 
-require("luasnip.loaders.from_vscode").lazy_load({
-    exclude = { 'lua' }
-})
 require("luasnip.loaders.from_lua").lazy_load({ paths = { "./snippet" } })
 
 vim.api.nvim_create_user_command('SNIP', function()
