@@ -21,7 +21,11 @@ local function enable_treesitter_with_indent(buf, lang)
         return
     end
 
-    pcall(vim.treesitter.start, buf, lang)
+    local success = pcall(vim.treesitter.start, buf, lang)
+    if not success then
+        vim.notify('Tressitter could not start', vim.log.levels.ERROR)
+        return
+    end
 
     if vim.treesitter.query.get(lang, "indents") then
         vim.bo[buf].indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
@@ -32,7 +36,6 @@ vim.api.nvim_create_autocmd("FileType", {
     pattern = '*',
     callback = function(event)
         local ts = require('nvim-treesitter')
-        -- TODO i think theres a config option that just does this
         local lang = vim.treesitter.language.get_lang(event.match) or event.match
         local already_installed = ts.get_installed()
         if vim.tbl_contains(already_installed, lang) then
