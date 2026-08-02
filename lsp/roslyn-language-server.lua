@@ -3,6 +3,9 @@ local fs, uv = vim.fs, vim.uv
 local fidget = require('fidget.progress')
 local init_handle = {}
 
+---@class RoslynNestedCodeActionArguments
+---@field NestedCodeActions? lsp.CodeAction[]
+
 local function is_decompiled(bufname)
     local _, endpos = bufname:find('[/\\]MetadataAsSource[/\\]')
     if endpos == nil then
@@ -126,7 +129,14 @@ return {
         ['roslyn.client.nestedCodeAction'] = function(command, ctx)
             local client = assert(vim.lsp.get_client_by_id(ctx.client_id))
 
-            local nested_actions = command.arguments and command.arguments[1] and command.arguments[1].NestedCodeActions
+            local arguments = command.arguments and command.arguments[1]
+            if type(arguments) ~= 'table' then
+                vim.notify('roslyn_ls: invalid nestedCodeAction arguments', vim.log.levels.ERROR)
+                return
+            end
+
+            ---@cast arguments RoslynNestedCodeActionArguments
+            local nested_actions = arguments.NestedCodeActions
             if type(nested_actions) ~= 'table' then
                 vim.notify('roslyn_ls: invalid nestedCodeAction arguments', vim.log.levels.ERROR)
                 return

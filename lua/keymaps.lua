@@ -7,7 +7,6 @@ local function close_any_floats()
     end
 end
 
-local show_keymap_migration
 local map = vim.keymap.set
 
 map("x", "D", ":m '>+1<CR>gv=gv", { desc = "Move selected line down" })
@@ -56,106 +55,9 @@ map("n", "<C-Down>", ":resize +2<CR>", { desc = "Decrease split height" })
 map("n", "<C-Up>", ":resize -2<CR>", { desc = "Increase split height" })
 
 -- Lsp - rest in telescope.lua
-map("n", "grd", "<C-]>", { desc = "Go to definition", remap = true })
-map("n", "grq", vim.lsp.buf.format, { desc = "Format the buffer" })
+map("n", "grd", "<C-]>", { desc = "[G]o [R]ight to [D]efinition", remap = true })
+map("n", "grq", vim.lsp.buf.format, { desc = "Format" })
 
 -- Testing
 map("n", "<leader>x", "<cmd>.lua<CR>", { desc = "Execute the current line" })
 map("n", "<leader><leader>x", "<cmd>source %<CR>", { desc = "Execute the current file" })
-
--- Temporary reminders while transitioning to Neovim's default LSP keymaps.
-vim.api.nvim_create_autocmd("LspAttach", {
-    group = vim.api.nvim_create_augroup("lsp-keymap-migration", { clear = true }),
-    callback = function(event)
-        for _, old_key in ipairs({ "H", "<leader>gi" }) do
-            local key = old_key
-            map("n", key, function() show_keymap_migration(key) end, {
-                buffer = event.buf,
-                desc = "Show replacement for " .. key,
-            })
-        end
-
-        for _, old_key in ipairs({ "<leader>ca", "<leader>cf", "<leader>cr" }) do
-            local key = old_key
-            map({ "n", "x" }, key, function() show_keymap_migration(key) end, {
-                buffer = event.buf,
-                desc = "Show replacement for " .. key,
-            })
-        end
-    end,
-})
-
-map({ "n", "x" }, "<leader>cc", function() show_keymap_migration("<leader>cc") end, {
-    desc = "Show replacement for <leader>cc",
-})
-
-map("i", "<C-c>", function()
-    local choice = vim.fn.confirm('<C-c> doesnt fire InsertLeave(so doesnt reload diags). Esc does. Continue?',
-        "&Yes\n&No")
-
-    if choice == 1 then
-        local key = vim.api.nvim_replace_termcodes("<C-c>", true, false, true)
-        vim.api.nvim_feedkeys(key, 'n', false)
-    end
-end, { desc = "Warn against using this bc it wont show diag so i can retrain muscle memory" })
-
-local migration_win
-local migration_namespace = vim.api.nvim_create_namespace("keymap-migration")
-local migration_lines = {
-    { "H",          "H           -> K           LSP hover" },
-    { "<leader>gd", "<leader>gd -> grd         Go to definition" },
-    { "<leader>gi", "<leader>gi -> gri         Implementations (Telescope)" },
-    { "<leader>gr", "<leader>gr -> grr         References (Telescope)" },
-    { "<leader>ca", "<leader>ca -> gra         Code actions" },
-    { "<leader>cf", "<leader>cf -> grq         Format ()" },
-    { "<leader>cr", "<leader>cr -> grn         Rename symbol" },
-    { "<leader>cc", "<leader>cc -> gcc / gc    Comment line / selection" },
-}
-
-show_keymap_migration = function(selected)
-    if migration_win and vim.api.nvim_win_is_valid(migration_win) then
-        vim.api.nvim_win_close(migration_win, true)
-    end
-
-    local lines = {}
-    local selected_line
-    local width = 0
-
-    for _, migration in ipairs(migration_lines) do
-        table.insert(lines, migration[2])
-        width = math.max(width, vim.fn.strdisplaywidth(migration[2]))
-        if migration[1] == selected then
-            selected_line = #lines
-        end
-    end
-
-    local buf = vim.api.nvim_create_buf(false, true)
-    vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-    vim.bo[buf].modifiable = false
-
-    migration_win = vim.api.nvim_open_win(buf, true, {
-        relative = "editor",
-        row = math.floor((vim.o.lines - #lines) / 2),
-        col = math.floor((vim.o.columns - width) / 2),
-        width = width,
-        height = #lines,
-        style = "minimal",
-        border = "rounded",
-        title = " Keymap migration ",
-        title_pos = "center",
-        focusable = true,
-        zindex = 60,
-    })
-
-    if selected_line then
-        vim.api.nvim_buf_add_highlight(buf, migration_namespace, "Visual", selected_line - 1, 0, -1)
-        vim.api.nvim_win_set_cursor(migration_win, { selected_line, 0 })
-    end
-
-    map("n", "q", function()
-        if migration_win and vim.api.nvim_win_is_valid(migration_win) then
-            vim.api.nvim_win_close(migration_win, true)
-        end
-        migration_win = nil
-    end, { buffer = buf, desc = "Close keymap migration" })
-end
