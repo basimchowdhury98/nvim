@@ -45,6 +45,7 @@ vim.o.autowrite = false
 -- Behavior
 vim.o.hlsearch = true
 vim.o.incsearch = true
+vim.cmd.packadd('nohlsearch') -- opt builtin plugin to clearn hlsearch after <CR>
 vim.o.ignorecase = true
 vim.o.smartcase = true
 vim.o.smartindent = true
