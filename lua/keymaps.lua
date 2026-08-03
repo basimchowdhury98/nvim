@@ -37,7 +37,7 @@ map("i", "<S-CR>", "<Esc>$o", { desc = "From anywhere in line enter into a new l
 -- Buffer
 map({ "n" }, "<leader>a", "ggVG", { desc = "[A]ll select" })
 map({ "n" }, "<leader>/", ":noh<CR>", { desc = "Clear hl" })
-map('i', '<C-BS>', '<C-w>', { desc = 'Delete by word (remapped because other apps will close with c-w)' })
+map({ 'i', 't' }, '<C-BS>', '<C-w>', { desc = 'Delete by word (remapped because other apps will close with c-w)' })
 
 -- Quick fix
 map("n", "<leader>qc", ":cclose<CR>", { desc = "Close quickfix" })
