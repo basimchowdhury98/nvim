@@ -15,6 +15,7 @@ vim.diagnostic.config({
 })
 
 -- Visual
+vim.o.winborder = "rounded"
 vim.o.relativenumber = true
 vim.o.tabstop = 4
 vim.o.softtabstop = 4

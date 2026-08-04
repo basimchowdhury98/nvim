@@ -43,10 +43,6 @@ map({ 'i', 't' }, '<C-BS>', '<C-w>', { desc = 'Delete by word (remapped because 
 map("n", "<leader>qc", ":cclose<CR>", { desc = "Close quickfix" })
 
 -- Splits
-map("n", "<C-h>", "<C-w>h", { desc = "Nav to left split" })
-map("n", "<C-j>", "<C-w>j", { desc = "Nav to down split" })
-map("n", "<C-k>", "<C-w>k", { desc = "Nav to up split" })
-map("n", "<C-l>", "<C-w>l", { desc = "Nav to right split" })
 map("n", "<leader>\\", ":vsplit<CR>", { desc = "Open vertical split" })
 map("n", "<leader>-", ":split<CR>", { desc = "Open horizontal split" })
 map("n", "<C-Left>", ":vertical resize +2<CR>", { desc = "Decrease split width" })
