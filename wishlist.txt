@@ -6,3 +6,4 @@
 * telescope search across git changes
 * status line - marks + macros(?)
 * formatters (conform)
+* SNIP - c# ctor snip
