@@ -20,8 +20,8 @@ require('telescope').setup {
             }
         },
         layout_config = {
-            width = 0.9,          -- 90% of screen width
-            height = 0.8,         -- 80% of screen height
+            width = 0.9,  -- 90% of screen width
+            height = 0.8, -- 80% of screen height
         },
         winblend = 0
     },
@@ -35,13 +35,21 @@ require('telescope').setup {
             on_project_selected = function(prompt_bufnr)
                 local harpoon = require('harpoon.ui')
                 local mark = require('harpoon.mark')
+
                 project_actions.change_working_directory(prompt_bufnr, false)
                 require("terminal").setup_for_project()
+                local proj_title = project_actions.get_selected_title(prompt_bufnr)
+
+                if proj_title == 'nvim' then
+                    vim.cmd('edit ./init.lua')
+                    return
+                end
                 if mark.valid_index(1) then
                     harpoon.nav_file(1)
                     return
                 end
-                vim.cmd('edit . ')
+
+                vim.cmd('edit .')
             end,
             mappings = {
                 i = {
@@ -80,8 +88,8 @@ map('n', '<leader>fj', function()
     builtin.current_buffer_fuzzy_find(themes.get_dropdown {
         previewer = false,
         layout_config = {
-            width = 0.9,          -- 90% of screen width
-            height = 0.8,         -- 80% of screen height
+            width = 0.9,  -- 90% of screen width
+            height = 0.8, -- 80% of screen height
         },
 
     })
@@ -111,4 +119,3 @@ end)
 -- LSP
 map("n", "grr", builtin.lsp_references, { desc = "Open references in telescope" })
 map("n", "gri", builtin.lsp_implementations, { desc = "Open implementations in telescope" })
-
