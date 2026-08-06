@@ -7,4 +7,4 @@
 * status line - marks + macros(?)
 * formatters (conform)
 * SNIP - c# ctor snip
-* SNIP - c# record - creates props and each c-k creates a new one (or some button creates a new prop)
+* SNIP - c# new file (handle namespace + class, interface, enum, record

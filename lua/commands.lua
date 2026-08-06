@@ -36,3 +36,24 @@ end, { desc = "Attach lsp logs to a terminal buffer" })
 vim.api.nvim_create_user_command('Pack', function ()
     vim.pack.update(nil, { offline = true })
 end, { desc = 'Show current packs' })
+
+vim.api.nvim_create_user_command('SNIP', function()
+    local nvim_path = vim.fn.stdpath('config')
+    if nvim_path == vim.NIL or nvim_path == '' then
+        print('Error: couldnt get config path')
+        return
+    end
+
+    local ft = vim.bo.filetype
+    local snippet_file = vim.fs.joinpath(nvim_path, 'snippet', ft .. '.lua')
+    if vim.fn.filereadable(snippet_file) == 0 then
+        print('Error: NVIM snippet file does not exist: ' .. snippet_file)
+        return
+    end
+
+
+    vim.cmd.vsplit()
+    vim.cmd.lcd(nvim_path)
+    vim.cmd.edit(snippet_file)
+    vim.api.nvim_win_set_cursor(0, { vim.api.nvim_buf_line_count(0), 0 })
+end, {})

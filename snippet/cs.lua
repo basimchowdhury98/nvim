@@ -2,9 +2,13 @@ local ls = require('luasnip')
 local s = ls.snippet
 local i = ls.insert_node
 local f = ls.function_node
+local c = ls.choice_node
+local t = ls.text_node
+local d = ls.dynamic_node
+local sn = ls.sn
 local fmt = require('luasnip.extras.fmt').fmt
 
-local fieldName = function(index)
+local field_name = function(index)
     return f(function(arg)
         local input = arg[1][1]
         if input == nil then
@@ -33,12 +37,32 @@ local fieldName = function(index)
     end, { index })
 end
 
+local propi = function()
+    return fmt("public {} {} {{ get; init; }}{}", { i(1, "string"), i(2, "PropertyName"), i(0) })
+end
+local propir = function()
+    return fmt("public required {} {} {{ get; init; }}{}", { i(1, "string"), i(2, "PropertyName"), i(0) })
+end
+
+local generate_props
+generate_props = function(_, _, _, more)
+    local nodes = {}
+    if more then
+        table.insert(nodes, t { "", "\t" })
+    end
+    table.insert(nodes, c(1, { propi(), propir() }))
+    table.insert(nodes, t({ "", "" }))
+    table.insert(nodes, c(2, { t(""), d(nil, generate_props, {}, { user_args = { "more" } }) }))
+
+    return sn(nil, nodes)
+end
+
 return {
-    s("propi", fmt("public {} {} {{ get; init; }}{}", { i(1, "string"), i(2, "PropertyName"), i(0) })),
-    s("propir", fmt("public required {} {} {{ get; init; }}{}", { i(1, "string"), i(2, "PropertyName"), i(0) })),
+    s("propi", propi()),
+    s("propir", propir()),
     s("funfact", fmt("[Fact]\npublic async Task Given{}_When{}_Then{}()\n{{\n\t{}\n}}", { i(1), i(2), i(3), i(0) })),
-    s("field", fmt("private readonly {} _{};", { i(1, "type"), fieldName(1) })),
-    s("debug", fmt('Console.WriteLine($"LOCAL_DEBUG: {}");', { i(1, 'string')})),
-    s("record", fmt("public record {}\n{{\n\t{}\n}}", { i(1, "RecordName"), i(0) })),
+    s("field", fmt("private readonly {} _{};", { i(1, "type"), field_name(1) })),
+    s("debug", fmt('Console.WriteLine($"LOCAL_DEBUG: {}");', { i(1, 'string') })),
+    s("record", fmt("public record {}\n{{\n\t{}}}", { i(1, "RecordName"), d(2, generate_props) })),
     s("class", fmt("public class {}\n{{\n\t{}\n}}", { i(1, "ClassName"), i(0) }))
 }
