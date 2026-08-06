@@ -8,3 +8,4 @@
 * formatters (conform)
 * SNIP - c# ctor snip
 * SNIP - c# new file (handle namespace + class, interface, enum, record
+* blink - use custom icons for lsp(snip) vs snip

@@ -41,6 +41,7 @@ blink.setup {
     fuzzy = { implementation = "lua" },
     completion = {
         menu = {
+            border = "rounded",
             draw = {
                 columns = {
                     { "kind_icon" },
@@ -59,13 +60,30 @@ blink.setup {
 
                             return ctx.source_name
                         end,
-                        highlight = "BlinkCmpSource",
                     },
                 },
             },
         },
+        documentation = {
+            window = {
+                border = "rounded",
+            },
+        },
     },
 }
+
+vim.api.nvim_create_autocmd("ColorScheme", {
+    group = vim.api.nvim_create_augroup("blink-float-highlights", { clear = true }),
+    callback = function()
+        vim.api.nvim_set_hl(0, "BlinkCmpMenu", { link = "NormalFloat" })
+        vim.api.nvim_set_hl(0, "BlinkCmpMenuBorder", { link = "FloatBorder" })
+        vim.api.nvim_set_hl(0, "BlinkCmpDoc", { link = "NormalFloat" })
+        vim.api.nvim_set_hl(0, "BlinkCmpDocBorder", { link = "FloatBorder" })
+        vim.api.nvim_set_hl(0, "BlinkCmpDocSeparator", { link = "NormalFloat" })
+        vim.api.nvim_set_hl(0, "BlinkCmpSignatureHelp", { link = "NormalFloat" })
+        vim.api.nvim_set_hl(0, "BlinkCmpSignatureHelpBorder", { link = "FloatBorder" })
+    end,
+})
 
 vim.lsp.config("*", {
     capabilities = blink.get_lsp_capabilities(),
