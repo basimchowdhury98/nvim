@@ -11,10 +11,7 @@ local fmt = require('luasnip.extras.fmt').fmt
 local field_name = function(index)
     return f(function(arg)
         local input = arg[1][1]
-        if input == nil then
-            return ""
-        end
-        if input == "" then
+        if input == nil or input == "" then
             return ""
         end
 
@@ -25,6 +22,8 @@ local field_name = function(index)
         end
 
         -- Handle case where string was just "I"
+        -- A bit imprecise because it treats any leading 'I' as an interface
+        -- Could be bettwe with treesitter
         if start_idx > #input then
             return ""
         end
@@ -37,29 +36,30 @@ local field_name = function(index)
     end, { index })
 end
 
-local propi = function()
-    return fmt("public {} {} {{ get; init; }}{}", { i(1, "string"), i(2, "PropertyName"), i(0) })
-end
-local propir = function()
-    return fmt("public required {} {} {{ get; init; }}{}", { i(1, "string"), i(2, "PropertyName"), i(0) })
+local function prop(pos)
+    return c(pos, {
+        fmt("public {} {} {{ get; init; }} = {}{};", { i(1, "string?"), i(2, "PropertyName"), i(3, "default"), i(0) }),
+        fmt("public required {} {} {{ get; init; }}{}", { i(1, "string"), i(2, "PropertyName"), i(0) })
+    })
 end
 
-local generate_props
-generate_props = function(_, _, _, more)
+local function generate_props(_, _, _, more)
     local nodes = {}
     if more then
         table.insert(nodes, t { "", "\t" })
     end
-    table.insert(nodes, c(1, { propi(), propir() }))
+    table.insert(nodes, prop(1))
     table.insert(nodes, t({ "", "" }))
-    table.insert(nodes, c(2, { t(""), d(nil, generate_props, {}, { user_args = { "more" } }) }))
+    table.insert(nodes, c(2, {
+        t("", { node_ext_opts = { active = { virt_text = { { '<- More?' } } } } }),
+        d(nil, generate_props, {}, { user_args = { "more" } })
+    } ))
 
     return sn(nil, nodes)
 end
 
 return {
-    s("propi", propi()),
-    s("propir", propir()),
+    s("prop", prop(1)),
     s("funfact", fmt("[Fact]\npublic async Task Given{}_When{}_Then{}()\n{{\n\t{}\n}}", { i(1), i(2), i(3), i(0) })),
     s("field", fmt("private readonly {} _{};", { i(1, "type"), field_name(1) })),
     s("debug", fmt('Console.WriteLine($"LOCAL_DEBUG: {}");', { i(1, 'string') })),
