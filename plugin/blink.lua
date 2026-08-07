@@ -21,6 +21,7 @@ blink.setup {
             lsp = { async = false, timeout_ms = 2000, fallbacks = {} },
             path = { fallbacks = {} },
             buffer = { score_offset = -100 },
+            snippets = { name = "Luasnip" }
         },
     },
     snippets = { preset = "luasnip" },
@@ -46,21 +47,7 @@ blink.setup {
                 columns = {
                     { "kind_icon" },
                     { "label", "label_description", gap = 1 },
-                    { "source_with_format" },
-                },
-                components = {
-                    source_with_format = {
-                        text = function(ctx)
-                            local is_snippet =
-                                ctx.item.insertTextFormat == vim.lsp.protocol.InsertTextFormat.Snippet
-
-                            if is_snippet then
-                                return ctx.source_name .. " (snippet)"
-                            end
-
-                            return ctx.source_name
-                        end,
-                    },
+                    { "source_name" },
                 },
             },
         },
@@ -76,6 +63,7 @@ vim.api.nvim_create_autocmd("ColorScheme", {
     group = vim.api.nvim_create_augroup("blink-float-highlights", { clear = true }),
     callback = function()
         vim.api.nvim_set_hl(0, "BlinkCmpMenu", { link = "NormalFloat" })
+        vim.api.nvim_set_hl(0, "BlinkCmpSource", { link = "NormalFloat" })
         vim.api.nvim_set_hl(0, "BlinkCmpMenuBorder", { link = "FloatBorder" })
         vim.api.nvim_set_hl(0, "BlinkCmpDoc", { link = "NormalFloat" })
         vim.api.nvim_set_hl(0, "BlinkCmpDocBorder", { link = "FloatBorder" })
