@@ -19,7 +19,6 @@ map("n", "]d", function() vim.diagnostic.jump({ count = 1, float = true }) end, 
 map("n", "[d", function() vim.diagnostic.jump({ count = -1, float = true }) end, { desc = "Previous diagnostic" })
 map("n", "<leader>dd", vim.diagnostic.open_float, { desc = "Opens float with all diags in buffer" })
 map('v', 'J', 'j', { remap = true, desc = 'Remapped J to j to stop merging line under on accident' })
-map('x', "p", "\"_dP", { desc = "Paste without copying whats pasted over" })
 
 map('n', '<leader>kp', function()
     local path = vim.fn.expand('%:p')
