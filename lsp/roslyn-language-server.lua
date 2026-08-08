@@ -34,14 +34,25 @@ end
 return {
     icon = '\u{e648}',
     name = 'roslyn',
-    cmd = { 'roslyn-language-server', '--stdio' },
-    cmd_env = {
-        DOTNET_ROOT = vim.fn.fnamemodify(vim.fn.resolve(vim.fn.exepath("dotnet")), ":h"),
-        DOTNET_ROOT_ARM64 = vim.fn.fnamemodify(vim.fn.resolve(vim.fn.exepath("dotnet")), ":h"),
-        DOTNET_gcServer = "0",
-        DOTNET_GCConserveMemory = "9",
-        DOTNET_GCHeapHardLimit = "0x140000000",
-    },
+    cmd = function(dispatchers, config)
+        init_handle[config.root_dir] = fidget.handle.create({
+            title = "Roslyn initializing",
+            message = "In progress...",
+            lsp_client = {
+                name = "Roslyn"
+            }
+        })
+        return vim.lsp.rpc.start({ 'roslyn-language-server', '--stdio' }, dispatchers,
+            {
+                env = {
+                    DOTNET_ROOT = vim.fn.fnamemodify(vim.fn.resolve(vim.fn.exepath("dotnet")), ":h"),
+                    DOTNET_ROOT_ARM64 = vim.fn.fnamemodify(vim.fn.resolve(vim.fn.exepath("dotnet")), ":h"),
+                    DOTNET_gcServer = "0",
+                    DOTNET_GCConserveMemory = "9",
+                    DOTNET_GCHeapHardLimit = "0x140000000",
+                }
+            })
+    end,
     filetypes = { 'cs' },
     root_dir = function(bufnr, on_root)
         local bufname = vim.api.nvim_buf_get_name(bufnr)
@@ -79,14 +90,6 @@ return {
     end,
     on_init = {
         function(client)
-            init_handle[client.id] = fidget.handle.create({
-                title = "Roslyn initializing",
-                message = "In progress...",
-                lsp_client = {
-                    name = "Roslyn"
-                }
-            })
-
             local root_dir = client.config.root_dir
 
             -- try load first solution we find
@@ -116,7 +119,7 @@ return {
             local client = assert(vim.lsp.get_client_by_id(ctx.client_id))
             reload_attached_buffers(client)
 
-            local handle = init_handle[client.id]
+            local handle = init_handle[client.config.root_dir]
             if handle then
                 handle.message = "Completed"
                 handle:finish()
