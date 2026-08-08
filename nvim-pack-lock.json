@@ -34,7 +34,7 @@
       "src": "https://github.com/nvim-mini/mini.ai"
     },
     "mini.files": {
-      "rev": "f6d1367483b6c0695b5084c04f7cd83bf2353a3e",
+      "rev": "a249438d15fa6f64085ba83a9d1794d726aaf5ad",
       "src": "https://github.com/nvim-mini/mini.files"
     },
     "mini.icons": {
@@ -42,7 +42,7 @@
       "src": "https://github.com/nvim-mini/mini.icons"
     },
     "nvim-treesitter": {
-      "rev": "7b6cc8949f9999c5ed91436cbe24aa5f99c42025",
+      "rev": "c9f9ed6c1892f629ea399f4ee7905f2686fa13f2",
       "src": "https://github.com/nvim-treesitter/nvim-treesitter",
       "version": "'main'"
     },
