@@ -64,5 +64,6 @@ return {
     s("field", fmt("private readonly {} _{};", { i(1, "type"), field_name(1) })),
     s("debug", fmt('Console.WriteLine($"LOCAL_DEBUG: {}");', { i(1, 'string') })),
     s("record", fmt("public record {}\n{{\n\t{}}}", { i(1, "RecordName"), d(2, generate_props) })),
-    s("class", fmt("public class {}\n{{\n\t{}\n}}", { i(1, "ClassName"), i(0) }))
+    s("class", fmt("public class {}\n{{\n\t{}\n}}", { i(1, "ClassName"), i(0) })),
+    s("method", fmt("public {} {}({})\n{{\n\t{}\n}}{}", { i(1, "Type"), i(2, "Name"), i(3), i(4), i(0) }))
 }
