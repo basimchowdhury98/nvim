@@ -1,12 +1,3 @@
-local function close_any_floats()
-    for _, win in pairs(vim.api.nvim_list_wins()) do
-        local config = vim.api.nvim_win_get_config(win)
-        if config.relative ~= '' then -- floating window
-            vim.api.nvim_win_close(win, false)
-        end
-    end
-end
-
 local map = vim.keymap.set
 
 map("x", "D", ":m '>+1<CR>gv=gv", { desc = "Move selected line down" })
@@ -27,11 +18,7 @@ map('n', '<leader>kp', function()
 end, { desc = "Copy current buffer path" })
 
 
-map({ 'n', 't' }, '<Esc><Esc>', close_any_floats, { desc = 'Close floating windows' })
-
-map("i", "<C-l>", "<Esc>la", { desc = "Move one char left in insert mode" })
-map("i", "<S-CR>", "<Esc>$o", { desc = "From anywhere in line enter into a new line in insert mode" })
-
+map({ 'n', 't' }, '<Esc><Esc>', function() vim.cmd('fclose!') end, { desc = 'Close floating windows' })
 
 -- Buffer
 map({ "n" }, "<leader>a", "ggVG", { desc = "[A]ll select" })
